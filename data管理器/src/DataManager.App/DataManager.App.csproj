@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <AssemblyName>data管理器</AssemblyName>
+    <RootNamespace>DataManager.App</RootNamespace>
+    <ApplicationIcon>Assets\About\Doro-white.ico</ApplicationIcon>
+    <Version>1.2026.1022.4</Version>
+    <InformationalVersion>1.2026.1022.4</InformationalVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Content Include="..\..\..\形象管理器\docs\第三方组件许可-ImageSharp.txt" Link="第三方组件许可-ImageSharp.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <EmbeddedResource Include="Assets\About\Doro-white.ico"
+                      LogicalName="DataManager.App.Assets.About.Doro-white.ico" />
+    <ProjectReference Include="..\DataManager.Core\DataManager.Core.csproj" />
+    <ProjectReference Include="..\DataManager.Images\DataManager.Images.csproj" />
+  </ItemGroup>
+</Project>

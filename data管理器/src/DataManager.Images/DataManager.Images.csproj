@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>DataManager.Images</AssemblyName>
+    <RootNamespace>DataManager.Images</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\..\形象管理器\docs\一体化管理器使用说明.md" LogicalName="Ccz.ImageEditor.BuiltInHelp.md" />
+    <ProjectReference Include="..\DataManager.Core\DataManager.Core.csproj" />
+    <ProjectReference Include="..\..\..\形象管理器\src\ImageManager.Core\ImageManager.Core.csproj" />
+    <Compile Include="..\..\..\形象管理器\src\ImageManager.App\*.cs" Exclude="..\..\..\形象管理器\src\ImageManager.App\Program.cs;..\..\..\形象管理器\src\ImageManager.App\MainForm.cs;..\..\..\形象管理器\src\ImageManager.App\DataAssignmentPage.cs;..\..\..\形象管理器\src\ImageManager.App\StrategyPage.cs" Link="ResourceUi\%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

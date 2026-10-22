@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="DocumentFormat.OpenXml" Version="3.3.0" />
+    <Compile Include="..\..\..\形象管理器\src\Shared\SImageNumberingRules.cs" Link="Shared\SImageNumberingRules.cs" />
+    <EmbeddedResource Include="..\..\config\profiles\*.json" Link="Profiles\%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

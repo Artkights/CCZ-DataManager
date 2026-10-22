@@ -1,0 +1,35 @@
+[PASS] E5 解析与增删替换
+[PASS] R 无清单参考图 40 帧归一化
+[PASS] S 单转无清单参考图语义布局
+[PASS] S 三转无清单参考图尺寸分区
+[PASS] R/S 原生动作条与当前套像素参考图
+[PASS] 实际 1254 AI 图分区配准与面积卷积
+[PASS] 1024/1536 黑底缩放与缺帧阻断
+[PASS] 实际 AI 图三档写入、复读与撤回前进
+[PASS] 多文件事务、撤回与前进
+[PASS] 资源过期候选、历史失败恢复与目录改名历史
+[PASS] 批量改名冲突预检
+[PASS] Data 职业与 S 物理图号映射
+[PASS] S 资源页逻辑编号映射
+[PASS] 6.6 人物指定表只改目标字段
+[PASS] 六个本地 6.6 Profile 指定表
+[PASS] 策略动画偏移与记录播放顺序
+[PASS] Mcall 格式探针与只读降级
+[PASS] Mcall 单平面及文件创建删除事务
+[PASS] Pmap/Weather/DT 专用格式预览
+[PASS] 缩略图 LRU 有界逐出
+[PASS] 无分页画廊滚动与完整选择
+[PASS] R 非首帧写回保持其他帧
+[PASS] 6.5 实际样本只读验收
+[PASS] 真实 R 调色板索引参考图往返
+[PASS] 真实 S001 三转参考图往返
+[PASS] 6.5 DLL RT_BITMAP 副本写入
+[PASS] 宝物大图透明卷积派生小图
+[PASS] 6.6 宝物大图同步写入大小图
+[PASS] Face/Tou 双文件副本事务
+[PASS] 战场 JPG/Hexzmap 成对事务
+[PASS] 6.6 实际样本只读验收
+[PASS] WinForms 主界面离屏烟测
+[PASS] 编辑与播放窗口高 DPI 布局
+
+结果：通过 33，失败 0。

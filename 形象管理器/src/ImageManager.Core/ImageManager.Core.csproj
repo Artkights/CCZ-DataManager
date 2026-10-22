@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>ImageManager.Core</AssemblyName>
+    <RootNamespace>ImageManager.Core</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\Shared\SImageNumberingRules.cs" Link="Shared\SImageNumberingRules.cs" />
+    <EmbeddedResource Include="Assets\Palettes\tsb" LogicalName="ImageManager.Core.Palettes.tsb" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
+  </ItemGroup>
+</Project>

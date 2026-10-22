@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>ImageManager.Tests</AssemblyName>
+    <RootNamespace>ImageManager.Tests</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ImageManager.Core\ImageManager.Core.csproj" />
+    <ProjectReference Include="..\ImageManager.App\ImageManager.App.csproj" />
+  </ItemGroup>
+</Project>

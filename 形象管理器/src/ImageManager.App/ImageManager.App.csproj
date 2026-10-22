@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <AssemblyName>形象管理器</AssemblyName>
+    <RootNamespace>ImageManager.App</RootNamespace>
+    <Version>1.2026.1021.2</Version>
+    <InformationalVersion>1.2026.1021.2</InformationalVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\docs\一体化管理器使用说明.md" LogicalName="Ccz.ImageEditor.BuiltInHelp.md" />
+    <ProjectReference Include="..\ImageManager.Core\ImageManager.Core.csproj" />
+    <Content Include="..\..\docs\**\*">
+      <Link>docs\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+</Project>

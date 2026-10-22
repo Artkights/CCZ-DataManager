@@ -1,0 +1,30 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ImageManager.Core", "src\ImageManager.Core\ImageManager.Core.csproj", "{CA749A67-12D7-4C16-91EC-124D3975F362}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ImageManager.App", "src\ImageManager.App\ImageManager.App.csproj", "{D93C4947-3A38-4D83-9C91-900B11D0D9AA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ImageManager.Tests", "src\ImageManager.Tests\ImageManager.Tests.csproj", "{BE8170C4-760A-4F0D-99AA-07997F6BA5D9}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{CA749A67-12D7-4C16-91EC-124D3975F362}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CA749A67-12D7-4C16-91EC-124D3975F362}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CA749A67-12D7-4C16-91EC-124D3975F362}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CA749A67-12D7-4C16-91EC-124D3975F362}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D93C4947-3A38-4D83-9C91-900B11D0D9AA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D93C4947-3A38-4D83-9C91-900B11D0D9AA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D93C4947-3A38-4D83-9C91-900B11D0D9AA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D93C4947-3A38-4D83-9C91-900B11D0D9AA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BE8170C4-760A-4F0D-99AA-07997F6BA5D9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BE8170C4-760A-4F0D-99AA-07997F6BA5D9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BE8170C4-760A-4F0D-99AA-07997F6BA5D9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BE8170C4-760A-4F0D-99AA-07997F6BA5D9}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

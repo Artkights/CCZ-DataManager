@@ -1,0 +1,5 @@
+**/bin/
+**/obj/
+.data管理器历史/
+*.user
+*.suo

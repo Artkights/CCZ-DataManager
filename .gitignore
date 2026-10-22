@@ -1,0 +1,10 @@
+**/bin/
+**/obj/
+**/.vs/
+*.user
+*.suo
+*.pdb
+**/*_历史记录/
+**/.data管理器历史/
+**/.data管理器形象历史/
+**/.image-manager-history/
