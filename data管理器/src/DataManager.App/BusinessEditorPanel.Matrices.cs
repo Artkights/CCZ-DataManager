@@ -67,7 +67,8 @@ public sealed partial class BusinessEditorPanel
                 NumericUpDown numeric => MatrixNumericWidth(numeric, font),
                 SearchableIdComboBox combo => combo.Options.Select(option => MatrixTextWidth(option.Display, font))
                     .DefaultIfEmpty(MatrixTextWidth("255", font)).Max() + Math.Max(SystemInformation.VerticalScrollBarWidth, 18 * table.DeviceDpi / 96) + 8,
-                ByteTextEditor => MatrixTextWidth("三个字余99B", font) + 8,
+                ByteTextEditor => TextRenderer.MeasureText("夏侯惇", font).Width +
+                    TextRenderer.MeasureText("剩余 999 字节", font).Width + 16,
                 _ => 80 * table.DeviceDpi / 96
             }).DefaultIfEmpty(0).Max()).ToArray();
     }
@@ -250,20 +251,29 @@ public sealed partial class BusinessEditorPanel
                 var headerHeight = table.Font.Height + Math.Max(4, 4 * table.DeviceDpi / 96);
                 table.RowStyles[0].Height = headerHeight;
                 var rowsHeight = Math.Max(0, viewport.ClientSize.Height - headerHeight);
+                for (var row = 0; row < entries.Length; row++)
+                    for (var column = 1; column < headers.Length; column++)
+                        entries[row][column].Width = widths[column];
+                var minimumHeights = Enumerable.Range(0, rowsPerColumn).Select(row => row < entries.Length
+                    ? entries[row].OfType<ByteTextEditor>().Select(editor => editor.MinimumSize.Height).DefaultIfEmpty(0).Max() : 0).ToArray();
+                var evenHeight = rowsHeight / rowsPerColumn;
+                while (evenHeight > 0 && minimumHeights.Sum(minimum => Math.Max(minimum, evenHeight)) > rowsHeight) evenHeight--;
+                var rowHeights = minimumHeights.Select(minimum => Math.Max(minimum, evenHeight)).ToArray();
+                var spareHeight = Math.Max(0, rowsHeight - rowHeights.Sum());
+                for (var row = 0; row < spareHeight; row++) rowHeights[row % rowsPerColumn]++;
                 for (var row = 0; row < rowsPerColumn; row++)
                 {
                     // Explicit pixel distribution keeps the last row within
                     // one pixel of the others at every viewport height.
                     table.RowStyles[row + 1].SizeType = SizeType.Absolute;
-                    table.RowStyles[row + 1].Height = rowsHeight / rowsPerColumn + (row < rowsHeight % rowsPerColumn ? 1 : 0);
+                    table.RowStyles[row + 1].Height = rowHeights[row];
                 }
                 table.SetBounds((available - width) / 2, 0, width, viewport.ClientSize.Height);
                 for (var row = 0; row < entries.Length; row++)
                     for (var column = 1; column < headers.Length; column++)
                     {
                         var editor = entries[row][column];
-                        editor.Width = widths[column];
-                        var rowHeight = rowsHeight / rowsPerColumn + (row < rowsHeight % rowsPerColumn ? 1 : 0);
+                        var rowHeight = rowHeights[row];
                         // Native numeric editors enforce their own height after
                         // inheriting a font. Top anchoring plus an explicit inset
                         // avoids TableLayoutPanel centering from an old specified

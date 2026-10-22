@@ -136,8 +136,12 @@ internal static class UiFullPageLayoutTests
     private static void CheckFullHeightRows(TableLayoutPanel table, TabPage page, string caption)
     {
         var heights = table.GetRowHeights().Skip(1).ToArray();
-        TestSupport.Assert(heights.Length > 0 && heights.Max() - heights.Min() <= 1,
+        var textEditors = table.Controls.OfType<ByteTextEditor>().ToArray();
+        TestSupport.Assert(heights.Length > 0 && (textEditors.Length > 0 || heights.Max() - heights.Min() <= 1),
             $"{caption}行距没有等分：{string.Join(',', heights)}。");
+        foreach (var editor in textEditors)
+            TestSupport.Assert(heights[table.GetRow(editor) - 1] >= editor.MinimumSize.Height,
+                $"{caption}名称和字节说明没有完整放入本行：{editor.MinimumSize}/{string.Join(',', heights)}。");
         TestSupport.Assert(Math.Abs(table.Bottom - table.Parent!.ClientSize.Height) <= 2 && table.Top <= 2,
             $"{caption}矩阵没有填满所属列：{table.Bounds}/{table.Parent.ClientSize}。");
         foreach (var control in table.Controls.Cast<Control>().Where(control => control is NumericUpDown or ComboBox))

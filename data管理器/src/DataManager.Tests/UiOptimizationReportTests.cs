@@ -245,8 +245,9 @@ internal static class UiOptimizationReportTests
             }
         foreach (var label in controls.OfType<Label>().Where(label => label.Text.Length > 0))
         {
-            var required = TextRenderer.MeasureText(label.Text, label.Font, Size.Empty,
-                TextFormatFlags.SingleLine | TextFormatFlags.NoPadding);
+            var wraps = label.Parent is ByteTextEditor;
+            var required = TextRenderer.MeasureText(label.Text, label.Font, wraps ? new Size(label.ClientSize.Width, int.MaxValue) : Size.Empty,
+                wraps ? TextFormatFlags.WordBreak : TextFormatFlags.SingleLine | TextFormatFlags.NoPadding);
             TestSupport.Assert(label.ClientSize.Width >= required.Width && label.ClientSize.Height >= required.Height,
                 $"兵种系文字被裁剪：{label.Text}，实际={label.ClientSize}，所需={required}，AutoEllipsis={label.AutoEllipsis}。");
             AssertInsideAncestors(label, page, "兵种系文字：" + label.Text);

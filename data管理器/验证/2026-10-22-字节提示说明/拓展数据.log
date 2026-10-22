@@ -1,0 +1,22 @@
+RESOURCE_PREVIEW_CARD_TESTS_OK
+EXTEND_UI_STAGE fixture C:\Users\Arknights\AppData\Local\Temp\DataManagerProfileSmoke_091d4a54b0d2477e9f598e6783f13bf8
+EXTEND_UI_STAGE shown
+EXTEND_UI_STAGE loaded
+EXTEND_UI_STAGE selected
+EXTEND_UI_STAGE opened
+EXTEND_UI_STAGE invalid-start
+EXTEND_UI_STAGE invalid-flush
+EXTEND_UI_STAGE invalid-bind
+EXTEND_UI_STAGE invalid-page
+EXTEND_UI_STAGE invalid-complete
+EXTEND_UI_STAGE legal-text
+EXTEND_UI_STAGE legal-flush
+EXTEND_UI_STAGE legal-undo
+EXTEND_UI_STAGE effect-undo
+EXTEND_UI_STAGE effect-complete
+EXTEND_UI_STAGE growth-complete
+EXTEND_UI_STAGE strategy-complete
+EXTEND_UI_STAGE forge-complete
+EXTEND_DATA_UI_TESTS_OK
+EXTEND_UI_STAGE cleanup
+EXTEND_DATA_UI_TESTS_OK

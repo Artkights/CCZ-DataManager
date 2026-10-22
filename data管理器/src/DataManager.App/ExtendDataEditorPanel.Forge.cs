@@ -9,7 +9,8 @@ public sealed partial class ExtendDataEditorPanel
     private void BuildForge(TableLayoutPanel body)
     {
         var metadata = SlotGrid([100, 0, 95, 0]);
-        var nameHost = new ByteTextEditor { Dock = DockStyle.Fill, Height = 48, Margin = new Padding(4, 5, 14, 5), Name = "ExtendForgeNameEditor" };
+        var nameHost = new ByteTextEditor { Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Height = 48, Margin = new Padding(4, 5, 14, 5), Name = "ExtendForgeNameEditor" };
         var name = nameHost.Editor;
         name.Name = "ExtendForgeName";
         void LoadName()

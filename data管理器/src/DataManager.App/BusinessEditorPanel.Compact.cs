@@ -217,6 +217,23 @@ public sealed partial class BusinessEditorPanel
         return Arrange;
     }
 
+    private static int[] FieldRowMinimums(TableLayoutPanel table) => Enumerable.Range(0, table.RowCount)
+        .Select(row => Math.Max(Math.Max(table.Font.Height + 14, 30 * table.DeviceDpi / 96),
+            table.Controls.Cast<Control>().Where(control => table.GetRow(control) == row)
+                .Select(control => control.MinimumSize.Height + control.Margin.Vertical).DefaultIfEmpty(0).Max())).ToArray();
+
+    private static void FitFieldRows(TableLayoutPanel table)
+    {
+        var minimums = FieldRowMinimums(table);
+        var spare = Math.Max(0, table.ClientSize.Height - minimums.Sum());
+        while (table.RowStyles.Count < minimums.Length) table.RowStyles.Add(new RowStyle());
+        for (var row = 0; row < minimums.Length; row++)
+        {
+            table.RowStyles[row].SizeType = SizeType.Absolute;
+            table.RowStyles[row].Height = minimums[row] + spare / minimums.Length + (row < spare % minimums.Length ? 1 : 0);
+        }
+    }
+
     private Control FieldsBlock(string title, IEnumerable<FieldBinding> source, int columns = 2, int labelWidth = 88, int textHeight = 64)
     {
         var group = SectionContainer(title);
@@ -237,8 +254,13 @@ public sealed partial class BusinessEditorPanel
             form.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             var editorFitters = new List<Action>();
             (Font Font, int Dpi)? measuredFor = null;
+            var fitting = false;
             void FitLabelColumn()
             {
+                if (fitting) return;
+                fitting = true;
+                try
+                {
                 // Controls are built before inheriting the MainForm font/DPI.
                 // Measure again after parenting so HP/MP and four-character
                 // captions do not wrap into a second line at 120/144 DPI.
@@ -253,9 +275,13 @@ public sealed partial class BusinessEditorPanel
                 foreach (var fit in editorFitters) fit();
                 var editorMinimum = TextRenderer.MeasureText("255：空物品槽", form.Font, Size.Empty, TextFormatFlags.SingleLine | TextFormatFlags.NoPadding).Width + SystemInformation.VerticalScrollBarWidth + 12;
                 columnMinimums[columnIndex] = new Size((int)form.ColumnStyles[0].Width + editorMinimum + form.Margin.Horizontal + 8,
-                    perColumn * Math.Max(form.Font.Height + 14, 30 * form.DeviceDpi / 96));
+                    FieldRowMinimums(form).Sum());
+                FitFieldRows(form);
                 arrange();
+                }
+                finally { fitting = false; }
             }
+            form.SizeChanged += (_, _) => FitLabelColumn();
             form.FontChanged += (_, _) => FitLabelColumn();
             form.HandleCreated += (_, _) => FitLabelColumn();
             form.VisibleChanged += (_, _) => { if (form.Visible) FitLabelColumn(); };
@@ -296,6 +322,7 @@ public sealed partial class BusinessEditorPanel
                     AutoSize = false, Margin = new Padding(0, 0, 5, 0) };
                 editor.Margin = new Padding(0, 3, 3, 3);
                 form.Controls.Add(label, 0, index); form.Controls.Add(editor, 1, index);
+                if (editor is ByteTextEditor) editor.SizeChanged += (_, _) => FitLabelColumn();
                 if (!binding.Document.Definition.IsWriteSupported)
                     _diagnosticTips.SetToolTip(editor, "只读：" + binding.Document.Definition.CapabilityEvidence);
             }
@@ -327,9 +354,10 @@ public sealed partial class BusinessEditorPanel
         body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         for (var row = 0; row < Math.Max(1, rows.Count); row++)
             body.RowStyles.Add(new RowStyle(SizeType.Percent, 100f / Math.Max(1, rows.Count)));
-        AttachScrollableContent(group, body, () => new Size((int)(body.ColumnStyles[0].Width + body.ColumnStyles[2].Width) +
+        var arrangeRows = AttachScrollableContent(group, body, () => new Size((int)(body.ColumnStyles[0].Width + body.ColumnStyles[2].Width) +
             2 * (TextRenderer.MeasureText("255：九宫", body.Font, Size.Empty, TextFormatFlags.SingleLine | TextFormatFlags.NoPadding).Width + SystemInformation.VerticalScrollBarWidth + 12),
-            Math.Max(1, rows.Count) * Math.Max(body.Font.Height + 14, 30 * body.DeviceDpi / 96)));
+            FieldRowMinimums(body).Sum()));
+        body.SizeChanged += (_, _) => FitFieldRows(body);
 
         var leftLabels = rows.Select(row => row.Left == null ? string.Empty : row.Left.Label ??
             ItemFieldLabel(row.Left.Document, row.Left.RowIndex, row.Left.Field.Name) ??
@@ -348,6 +376,7 @@ public sealed partial class BusinessEditorPanel
                 .DefaultIfEmpty(labelWidth).Max();
             body.ColumnStyles[0].Width = Math.Max(labelWidth * body.DeviceDpi / 96f, leftWidth);
             body.ColumnStyles[2].Width = Math.Max(labelWidth * body.DeviceDpi / 96f, rightWidth);
+            FitFieldRows(body);
         }
 
         void AddField(FieldBinding? binding, string labelText, int labelColumn, int editorColumn, int row)
@@ -381,6 +410,7 @@ public sealed partial class BusinessEditorPanel
             };
             body.Controls.Add(label, labelColumn, row);
             body.Controls.Add(editor, editorColumn, row);
+            if (editor is ByteTextEditor) editor.SizeChanged += (_, _) => { FitFieldRows(body); arrangeRows(); };
             if (!binding.Document.Definition.IsWriteSupported)
                 _diagnosticTips.SetToolTip(editor, "只读：" + binding.Document.Definition.CapabilityEvidence);
         }
@@ -403,6 +433,7 @@ public sealed partial class BusinessEditorPanel
             }
         }
         body.FontChanged += (_, _) => FitLabels();
+        FitFieldRows(body);
         body.HandleCreated += (_, _) => FitLabels();
         body.VisibleChanged += (_, _) => { if (body.Visible) FitLabels(); };
         FitLabels();

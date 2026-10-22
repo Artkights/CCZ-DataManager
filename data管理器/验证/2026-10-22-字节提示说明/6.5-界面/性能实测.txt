@@ -1,0 +1,3 @@
+Source=F:\从0开始的AI制作曹操传MOD\曹操传加强版6.5（未加密）\基底\加强版6.5未加密版; 按原始字节复制，未恢复历史快照。
+DPI=144; Win32DPI=144; Font=Microsoft YaHei UI/9; AutoScaleMode=Inherit; 单位 ms；P95 使用 nearest-rank；读取与写回均使用临时副本。
+人物: n=60, P50=482.12, P95=1051.20, max=1384.44, GDI=115->115 (delta=0)

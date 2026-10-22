@@ -274,9 +274,12 @@ public sealed class ByteLimitedTextBox : TextBox
 /// <summary>A regular textbox with an always-visible byte budget beneath it.</summary>
 public sealed class ByteTextEditor : UserControl
 {
-    private readonly Label _budget = new() { Dock = DockStyle.Bottom, Height = 20, AutoEllipsis = true, TextAlign = ContentAlignment.MiddleLeft };
+    public const string EncodingHint = "1个汉字2字节，1个字母/数字1字节";
+    private readonly Label _budget = new() { Dock = DockStyle.Bottom, Height = 20, TextAlign = ContentAlignment.MiddleLeft };
+    private readonly Label _encodingHint = new() { Dock = DockStyle.Bottom, Text = EncodingHint, ForeColor = Color.DimGray, TextAlign = ContentAlignment.MiddleLeft };
     private readonly ToolTip _tips = new() { AutoPopDelay = 20000 };
     private bool _compactBudget;
+    private bool _arrangingBudget;
     private string _evidence = string.Empty;
     public ByteLimitedTextBox Editor { get; } = new() { Dock = DockStyle.Fill };
     public bool CompactBudget
@@ -286,16 +289,15 @@ public sealed class ByteTextEditor : UserControl
         {
             _compactBudget = value;
             _budget.Dock = value ? DockStyle.Right : DockStyle.Bottom;
-            _budget.Width = TextRenderer.MeasureText("余999B", Font).Width + 4;
-            Height = value ? Editor.PreferredHeight : Editor.PreferredHeight + _budget.Height;
+            _budget.Width = TextRenderer.MeasureText("剩余 999 字节", Font).Width + 4;
             PerformLayout(); RefreshBudget();
         }
     }
     public ByteTextEditor()
     {
-        Controls.Add(Editor); Controls.Add(_budget); Height = 48; Margin = Padding.Empty;
+        Controls.Add(Editor); Controls.Add(_budget); Controls.Add(_encodingHint); Height = 48; Margin = Padding.Empty;
         Editor.InputGuard.StateChanged += (_, _) => RefreshBudget();
-        FontChanged += (_, _) => { _budget.Height = Font.Height + 4; if (_compactBudget) CompactBudget = true; };
+        FontChanged += (_, _) => { if (_compactBudget) CompactBudget = true; else PerformLayout(); };
     }
     public void Bind(TextFieldConstraint constraint, string? text) { _evidence = constraint.Evidence; Editor.SetBoundText(constraint, text); RefreshBudget(); }
     private void RefreshBudget()
@@ -305,7 +307,7 @@ public sealed class ByteTextEditor : UserControl
         var count = validation.ByteCount?.ToString() ?? "?";
         var fullBudget = $"已用 {count} / {validation.Capacity} 字节 · 剩余 {validation.RemainingBytes} 字节";
         var preservedOriginal = !validation.CanEncode && !Editor.InputGuard.HasPendingChanges;
-        _budget.Text = _compactBudget ? validation.CanEncode ? $"余{validation.RemainingBytes}B" : preservedOriginal ? "原文异常" : "不可保存"
+        _budget.Text = _compactBudget ? validation.CanEncode ? $"剩余 {validation.RemainingBytes} 字节" : preservedOriginal ? "原文异常" : "不可保存"
             : validation.CanEncode ? fullBudget
             : preservedOriginal ? $"原文 {count} / {validation.Capacity} 字节 · 未修改会保留，编辑时请修复"
             : $"无法保存：{validation.Error}";
@@ -313,9 +315,38 @@ public sealed class ByteTextEditor : UserControl
         if (!_compactBudget && validation.CanEncode && Editor.InputGuard.RejectionMessage != null) _budget.Text += " · 本次输入已拒绝";
         _budget.ForeColor = !validation.CanEncode ? Color.Firebrick
             : validation.RemainingBytes <= Math.Max(2, validation.Capacity / 10) ? Color.DarkOrange : Color.DimGray;
-        var detail = string.Join(Environment.NewLine, new[] { fullBudget, Editor.InputGuard.RejectionMessage, validation.Error, validation.Warning,
+        var detail = string.Join(Environment.NewLine, new[] { fullBudget, EncodingHint, Editor.InputGuard.RejectionMessage, validation.Error, validation.Warning,
             preservedOriginal ? "原始文本存在长度或编码异常；未修改会保留原始字节，编辑时须修复。" : null, _evidence }.Where(text => !string.IsNullOrWhiteSpace(text)));
-        _tips.SetToolTip(_budget, detail); _tips.SetToolTip(Editor, detail);
+        _tips.SetToolTip(_budget, detail); _tips.SetToolTip(_encodingHint, detail); _tips.SetToolTip(Editor, detail);
+        PerformLayout();
+    }
+    protected override void OnLayout(LayoutEventArgs e)
+    {
+        if (!_arrangingBudget)
+        {
+            _arrangingBudget = true;
+            try
+            {
+                var width = Math.Max(1, ClientSize.Width);
+                int WrappedHeight(Label label) => Math.Max(Font.Height + 4,
+                    TextRenderer.MeasureText(label.Text, Font, new Size(width, int.MaxValue), TextFormatFlags.WordBreak).Height + 4);
+                _encodingHint.Height = WrappedHeight(_encodingHint);
+                _budget.Height = _compactBudget ? Editor.PreferredHeight : WrappedHeight(_budget);
+                MinimumSize = new Size(_compactBudget ? TextRenderer.MeasureText("夏侯惇", Font).Width + _budget.Width + 12 : 0,
+                    Editor.PreferredHeight + _encodingHint.Height + (_compactBudget ? 0 : _budget.Height));
+                if (_compactBudget && Dock == DockStyle.None) Height = MinimumSize.Height;
+            }
+            finally { _arrangingBudget = false; }
+        }
+        base.OnLayout(e);
+    }
+    public override Size GetPreferredSize(Size proposedSize)
+    {
+        var width = Math.Max(1, proposedSize.Width is > 0 and < int.MaxValue ? proposedSize.Width : Width);
+        int WrappedHeight(Label label) => Math.Max(Font.Height + 4,
+            TextRenderer.MeasureText(label.Text, Font, new Size(width, int.MaxValue), TextFormatFlags.WordBreak).Height + 4);
+        return new Size(Math.Max(MinimumSize.Width, width), Editor.PreferredHeight + WrappedHeight(_encodingHint) +
+            (_compactBudget ? 0 : WrappedHeight(_budget)));
     }
     protected override void Dispose(bool disposing) { if (disposing) _tips.Dispose(); base.Dispose(disposing); }
 }

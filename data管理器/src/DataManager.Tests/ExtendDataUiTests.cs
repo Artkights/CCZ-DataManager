@@ -261,6 +261,15 @@ internal static class ExtendDataUiTests
                 var scroll = Find<Panel>(editor, "ExtendDataScroll");
                 TestSupport.Assert(scroll.AutoScroll && scroll.ClientSize.Width > 100 && scroll.ClientSize.Height > 100, "小窗口/大字体未保留可滚动编辑区域");
                 var body = Find<TableLayoutPanel>(editor, "ExtendDataBody");
+                foreach (var textEditor in Descendants(editor.DetailTabs.SelectedTab!).OfType<ByteTextEditor>())
+                {
+                    var preferred = textEditor.GetPreferredSize(new Size(textEditor.Width, 0));
+                    TestSupport.Assert(textEditor.Height <= preferred.Height + 2,
+                        $"字节说明被自动布局推到输入框远处：{textEditor.Size}/{preferred}");
+                    var hint = Descendants(textEditor).OfType<Label>().Single(label => label.Text == ByteTextEditor.EncodingHint);
+                    TestSupport.Assert(hint.Top >= textEditor.Editor.Bottom && hint.Bottom <= textEditor.ClientSize.Height,
+                        "字节换算说明遮住输入框或超出编辑区域");
+                }
                 TestSupport.Assert(body.Width <= scroll.ClientSize.Width, $"编辑内容超出可见宽度：{body.Width}/{scroll.ClientSize.Width}");
                 foreach (var grid in body.Controls.OfType<TableLayoutPanel>())
                     TestSupport.Assert(grid.Right <= body.ClientSize.Width, $"编辑表格超出主体右侧：{grid.Right}/{body.ClientSize.Width}");

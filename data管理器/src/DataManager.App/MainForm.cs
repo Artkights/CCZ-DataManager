@@ -66,7 +66,7 @@ public sealed partial class MainForm : Form
     private readonly Dictionary<string, UnifiedHistoryEntry> _historyEntries = new(StringComparer.Ordinal);
     private ByteTextInputGuard? _gridTextGuard;
     private TextBoxBase? _guardedGridEditor;
-    private readonly Label _gridBudget = new() { Dock = DockStyle.Bottom, Height = 26, AutoEllipsis = true, Visible = false, TextAlign = ContentAlignment.MiddleLeft };
+    private readonly Label _gridBudget = new() { Dock = DockStyle.Bottom, Height = 26, Visible = false, TextAlign = ContentAlignment.MiddleLeft };
     private bool HasPendingChanges => _workspace.IsDirty || _businessEditors.Values.Any(editor => editor.HasPendingChanges) || _grid.IsCurrentCellDirty || (_gridTextGuard?.HasPendingChanges == true && _grid.IsCurrentCellInEditMode);
 
     public MainForm(bool openDefaultProject = true)
@@ -250,6 +250,7 @@ public sealed partial class MainForm : Form
         editor.Controls.Add(_imageEditor);
         editor.Controls.Add(_diagnosticBox);
         editor.Controls.Add(_gridBudget);
+        _gridBudget.SizeChanged += (_, _) => RefreshGridBudget();
         editor.Controls.Add(rightHeader);
 
         var split = new SplitContainer { Size = new Size(Width - 24, Height - 180), Dock = DockStyle.Fill, FixedPanel = FixedPanel.Panel1, IsSplitterFixed = true };
@@ -1134,7 +1135,7 @@ public sealed partial class MainForm : Form
             constraint = constraint.ForOriginalSlot(_currentDocument.OriginalFileBytes.AsSpan(offset, field.Size));
         }
         _gridTextGuard.Bind(constraint, box.Text);
-        _shellTips.SetToolTip(_gridBudget, $"物理槽 {constraint.StorageBytes} 字节；{constraint.Evidence}");
+        _shellTips.SetToolTip(_gridBudget, $"{ByteTextEditor.EncodingHint}\r\n物理槽 {constraint.StorageBytes} 字节；{constraint.Evidence}");
         RefreshGridBudget();
     }
 
@@ -1143,8 +1144,10 @@ public sealed partial class MainForm : Form
         if (_gridTextGuard?.Validation is not { } result) return;
         _gridBudget.Visible = _grid.Visible && _grid.IsCurrentCellInEditMode;
         _gridBudget.Text = (result.CanEncode
-            ? $"已用 {result.ByteCount} / {result.Capacity} 字节 · 还可输入 {result.RemainingBytes} 字节"
-            : result.Error) + (_gridTextGuard.RejectionMessage != null ? " · 本次输入已整次拒绝" : string.Empty);
+            ? $"已用 {result.ByteCount} / {result.Capacity} 字节 · 剩余 {result.RemainingBytes} 字节"
+            : result.Error) + $" · {ByteTextEditor.EncodingHint}" + (_gridTextGuard.RejectionMessage != null ? " · 本次输入已整次拒绝" : string.Empty);
+        _gridBudget.Height = TextRenderer.MeasureText(_gridBudget.Text, _gridBudget.Font,
+            new Size(Math.Max(1, _gridBudget.ClientSize.Width), int.MaxValue), TextFormatFlags.WordBreak).Height + 8;
         _gridBudget.ForeColor = !result.CanEncode || _gridTextGuard.RejectionMessage != null ? Color.Firebrick
             : result.RemainingBytes <= result.Capacity / 10 ? Color.DarkOrange : Color.DimGray;
     }
