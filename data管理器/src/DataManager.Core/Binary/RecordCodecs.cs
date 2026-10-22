@@ -75,8 +75,6 @@ public sealed class RecordCodecRegistry
     {
         ["fixed-record-v1"] = new FixedRecordCodec(),
         ["item-65-17-v1"] = new FixedRecordCodec(),
-        ["effect-65-8-v1"] = new FixedRecordCodec(),
-        ["effect-66-16-v1"] = new FixedRecordCodec(),
         ["item-66-15-v1"] = new Item66RecordCodec()
     };
 

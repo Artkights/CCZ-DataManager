@@ -1,0 +1,29 @@
+{
+  "Entry": "--history-location",
+  "StartedAt": "2026-10-22T13:17:53.5383520+08:00",
+  "CompletedAt": "2026-10-22T13:17:57.9134879+08:00",
+  "ExitCode": 0,
+  "Success": true,
+  "Checks": [
+    "默认 exe 同级项目名目录、只读不创建目录和 Unicode 路径",
+    "同名不同路径项目的数据与形象历史隔离",
+    "大小写与末尾分隔符身份一致且形象内部 hash 一致",
+    "旧数据历史只读回退、首次保存保留原始行及损坏行",
+    "旧形象历史迁移快照，删去旧目录后撤回和重做",
+    "复制旧形象目录不取得原项目资源及外部改名恢复权限",
+    "外部素材目录的批量改名历史兼容",
+    "旧/新快照路径逃逸和绝对 TargetPath 越界拒绝",
+    "迁移提交完成阶段故障恢复文件和新 manifest",
+    "迁移备份默认新路径且无 staging 历史残留"
+  ],
+  "SourceSha256": {
+    "src/DataManager.Core/History/ProjectHistoryPaths.cs": "202AF4C2E6DCB20DD81E4EDF4D586DC34A9D3428DE8CF8173688CADEB81AF491",
+    "src/DataManager.Core/History/HistoryStore.cs": "413EDEC413C8C1FDAE02788FBB8F9128C4925DE1C320549B71FBE40B8429817C",
+    "src/DataManager.Core/Migration/MigrationCommitCoordinator.cs": "6142A9641AE53720B5F33586759CBB3CB77BD14DF391B98B98BF213EA58E14A3",
+    "src/DataManager.Images/ProjectImageHistory.cs": "964C8ADCE32CEB9A5A60D6C513E0A795FA40B97D80D9EB8ED9BD20C2099A12A1",
+    "src/DataManager.Images/ResourceHistoryAdapter.cs": "98A666B3371B4A82790E074FF58512AE48ED9D92FE2CCA59FEB2D10CB556DD3A",
+    "src/DataManager.Images/ResourceCatalogAdapter.cs": "35DBA0859F2B42C1FB1B6BA86CDC861AB68F95C01C0A1AAA1FAFCD16B33D70C8",
+    "src/DataManager.Images/IntegratedResourcePanel.cs": "D6D1FD4FC1B167556FFC37EA646CCE55847D6FE0FE210013763155DECA76A76E",
+    "src/DataManager.Tests/HistoryLocationTests.cs": "746FB48CE04F6BCE14A372D280BCA6108A0E0227D531BE4A6E80DD3383062BDD"
+  }
+}

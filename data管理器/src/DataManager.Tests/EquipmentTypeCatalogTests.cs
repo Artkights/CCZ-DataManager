@@ -63,34 +63,8 @@ internal static class EquipmentTypeCatalogTests
             var reopened = new ProjectWorkspace(); reopened.Open(root, profile, variant);
             TestSupport.Assert(catalog.Read(reopened)[0].Name == "测器" && catalog.Read(reopened)[0].DisplayValue == nextDisplay,
                 "保存重开后装备类型目录或布局写入能力丢失。");
-            CheckSetFiltering(reopened);
         }
         finally { Directory.Delete(root, true); }
-    }
-
-    private static void CheckSetFiltering(ProjectWorkspace workspace)
-    {
-        foreach (var (field, category, wrongCategory) in new[]
-        {
-            ("装备3-1", ItemCategory.Weapon, ItemCategory.Armor),
-            ("装备3-2", ItemCategory.Armor, ItemCategory.Weapon),
-            ("装备3-3", ItemCategory.Accessory, ItemCategory.Consumable),
-            ("装备4-1", ItemCategory.Weapon, ItemCategory.Accessory),
-            ("装备4-2", ItemCategory.Armor, ItemCategory.Accessory),
-            ("装备4-3", ItemCategory.Accessory, ItemCategory.Weapon)
-        })
-        {
-            var valid = SetEquipmentValidator.GetAllowedIds(workspace, category);
-            TestSupport.Assert(valid.Count > 0 && valid.All(id => id is >= 0 and < 255), "套装候选没有限制为 UInt8 可装备物品。");
-            SetEquipmentValidator.Validate(workspace, "personal-effects", field, valid[0]);
-            SetEquipmentValidator.Validate(workspace, "personal-effects", field, 255);
-            var wrong = SetEquipmentValidator.GetAllowedIds(workspace, wrongCategory);
-            if (wrong.Count > 0)
-                ExpectFailure(() => SetEquipmentValidator.Validate(workspace, "personal-effects", field, wrong[0]), "套装错类物品被接受。");
-            ExpectFailure(() => SetEquipmentValidator.Validate(workspace, "personal-effects", field, 256), "扩展物品被写入单字节套装槽。");
-        }
-        TestSupport.Assert(SetEquipmentValidator.CategoryForField("personal-effects", "装备1") == null,
-            "单件人物专属被误套三件套槽约束。");
     }
 
     private static void ExpectFailure(Action action, string message)

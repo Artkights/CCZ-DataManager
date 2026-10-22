@@ -28,8 +28,6 @@ internal static class ProfileTests
         TestSupport.Assert(profile65.Tables.Single(table => table.Key == "items-low").RecordCodecKey == "item-65-17-v1", "6.5 物品 codec 错误");
         TestSupport.Assert(standard66.Tables.Single(table => table.Key == "items-low").RecordCodecKey == "item-66-15-v1", "标准 6.6 物品 codec 错误");
         TestSupport.Assert(legacy66.Tables.Single(table => table.Key == "items-low").Fields.Single(field => field.Name == "名称").Size == 17, "兼容 6.6 应保留 17 字节物品名");
-        TestSupport.Assert(standard66.Tables.Single(table => table.Key == "class-effects").RowSize == 16, "标准 6.6 特效分配应为 16 字节");
-        TestSupport.Assert(legacy66.Tables.Single(table => table.Key == "class-effects").RowSize == 8, "兼容 6.6 特效分配应为 8 字节");
         var terrain65 = profile65.Tables.Single(table => table.Key == "strategy-terrain-availability");
         TestSupport.Assert(terrain65.DataOffset == 0x1FECC && terrain65.RowCount == 30 && terrain65.RowSize == 1 && terrain65.IsWriteSupported,
             "6.5 策略施展地形必须使用人工确认的 30 项可写表");
@@ -54,7 +52,6 @@ internal static class ProfileTests
                 TestSupport.Assert(variant.Tables.Single(table => table.Key == key).Capability == Core.Models.TableCapability.Unavailable,
                     "6.6 不得读取继承的 6.5 变长名称池偏移");
         }
-        TestSupport.Assert(standard66.Tables.Single(table => table.Key == "personal-effects").VerificationLevel == Core.Models.VerificationLevel.InheritedUnverified, "6.6 7-3 验证等级必须明确为继承未验证");
         TestSupport.Assert(profile65.LayoutRevision != standard66.LayoutRevision && standard66.LayoutRevision != legacy66.LayoutRevision, "不同布局必须具有不同 LayoutRevision");
     }
 }

@@ -5,13 +5,14 @@ using DataManager.Core.Models;
 namespace DataManager.Core.Profiles;
 
 /// <summary>
-/// Explicit, one-way upgrade from the shipped ExtendData v1 manifests. A revision
+/// Explicit, one-way upgrade from the shipped extension and pre-simplification manifests. A revision
 /// is accepted only after reproducing it from the frozen schema and this project's
 /// current physical geometry; unknown hashes and other schema changes stay blocked.
 /// </summary>
 public static class LayoutRevisionCompatibility
 {
     private static readonly Lazy<ProfileRegistry> Current = new(() => new ProfileRegistry());
+    private static readonly Lazy<ProfileRegistry> BeforeSimplification = new(() => new ProfileRegistry(useLegacyExtensionManifest: false, usePreSimplificationManifest: true));
     private static readonly Lazy<ProfileRegistry> Legacy = new(() => new ProfileRegistry(useLegacyExtensionManifest: true));
 
     public static bool IsCompatible(string projectRoot, string profileId, string variantId,
@@ -23,12 +24,10 @@ public static class LayoutRevisionCompatibility
         try
         {
             var currentBase = Current.Value.Resolve(profileId, variantId);
-            var oldBase = Legacy.Value.Resolve(profileId, variantId);
             var current = new ProfileAugmentationService().Apply(projectRoot, currentBase);
             if (!current.LayoutRevision.Equals(expectedRevision, StringComparison.OrdinalIgnoreCase)) return false;
-            if (GetPreviousAugmentationRevisions(currentBase, current).Contains(actualRevision, StringComparer.OrdinalIgnoreCase)) return true;
-            return IsRegisteredUpgrade(oldBase, currentBase) &&
-                GetLegacyRevisions(oldBase, current).Contains(actualRevision, StringComparer.OrdinalIgnoreCase);
+            return GetRecognizedRevisions(projectRoot, profileId, variantId, currentBase, current)
+                .Contains(actualRevision, StringComparer.OrdinalIgnoreCase);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or KeyNotFoundException)
         {
@@ -36,15 +35,41 @@ public static class LayoutRevisionCompatibility
         }
     }
 
-    /// <summary>Known v1 identities for this exact project, for migration diagnostics and verification.</summary>
+    /// <summary>Known shipped identities for this exact project, for migration diagnostics and verification.</summary>
     public static IReadOnlyList<string> GetLegacyRevisions(string projectRoot, string profileId, string variantId)
     {
         var currentBase = Current.Value.Resolve(profileId, variantId);
-        var oldBase = Legacy.Value.Resolve(profileId, variantId);
         var current = new ProfileAugmentationService().Apply(projectRoot, currentBase);
+        return GetRecognizedRevisions(projectRoot, profileId, variantId, currentBase, current);
+    }
+
+    private static IReadOnlyList<string> GetRecognizedRevisions(string projectRoot, string profileId, string variantId,
+        ResolvedProfile currentBase, ResolvedProfile current)
+    {
+        // Frozen manifests only reproduce identities of shipped layouts. They never
+        // supply active UI modules or restore the retired editing capabilities.
+        var precedingBase = BeforeSimplification.Value.Resolve(profileId, variantId);
+        if (!IsRegisteredSimplification(precedingBase, currentBase))
+            return GetPreviousAugmentationRevisions(currentBase, current);
+        var oldBase = Legacy.Value.Resolve(profileId, variantId);
+        var preceding = new ProfileAugmentationService().Apply(projectRoot, precedingBase);
         return GetPreviousAugmentationRevisions(currentBase, current)
-            .Concat(IsRegisteredUpgrade(oldBase, currentBase) ? GetLegacyRevisions(oldBase, current) : [])
+            .Append(preceding.LayoutRevision)
+            .Concat(GetPreviousAugmentationRevisions(precedingBase, current))
+            .Concat(IsRegisteredUpgrade(oldBase, precedingBase) ? GetLegacyRevisions(oldBase, current) : [])
+            .Where(revision => !revision.Equals(current.LayoutRevision, StringComparison.OrdinalIgnoreCase))
             .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    private static bool IsRegisteredSimplification(ResolvedProfile preceding, ResolvedProfile current)
+    {
+        // Recognize this exact removal and the shared lookup's read-only policy.
+        // Any unrelated schema change must have its own explicit compatibility rule.
+        var simplified = preceding.Tables
+            .Where(table => table.Key is not ("class-effects" or "personal-effects" or "effect-descriptions"))
+            .Select(table => table.Key == "effect-names" ? table with { Capability = TableCapability.ReadOnly } : table);
+        return ProfileRegistry.ComputeLayoutRevision(current.ProfileId, current.VariantId, simplified)
+            .Equals(current.LayoutRevision, StringComparison.Ordinal);
     }
 
     // The equipment editor and native effect-name probe add only runtime tables/capabilities.

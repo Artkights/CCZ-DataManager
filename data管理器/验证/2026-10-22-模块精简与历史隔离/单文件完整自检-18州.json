@@ -1,0 +1,839 @@
+{
+  "Schema": "ccz.bundle-verification.v1",
+  "Timestamp": "2026-10-22T13:20:03.5403465+08:00",
+  "BuildVersion": "1.2026.1022.5+15a8984bf59bef82ec466f80e3e2be2386b55572",
+  "ReadOnly": true,
+  "Scope": "FullBundle",
+  "Runtime": {
+    "Framework": ".NET 8.0.8",
+    "Version": "8.0.8",
+    "OS": "Microsoft Windows 10.0.22621",
+    "ProcessArchitecture": "X64",
+    "Executable": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\data管理器\\验证\\2026-10-22-模块精简与历史隔离\\单文件隔离\\data管理器.exe",
+    "BaseDirectory": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\data管理器\\验证\\2026-10-22-模块精简与历史隔离\\单文件隔离\\",
+    "WorkingDirectory": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\data管理器\\验证\\2026-10-22-模块精简与历史隔离\\不同启动目录",
+    "DotnetRoot": null,
+    "MultilevelLookup": null
+  },
+  "NativeRuntimeModules": [
+    {
+      "ModuleName": "hostpolicy.dll",
+      "FileName": "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\8.0.8\\hostpolicy.dll"
+    },
+    {
+      "ModuleName": "coreclr.dll",
+      "FileName": "C:\\Program Files\\dotnet\\shared\\Microsoft.NETCore.App\\8.0.8\\coreclr.dll"
+    }
+  ],
+  "SelectedProjectRoot": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\基底\\18州\\十八州演义0.2版本",
+  "Checks": [
+    {
+      "Name": "嵌入 Profile",
+      "Success": true,
+      "ElapsedMs": 84,
+      "Result": {
+        "EmbeddedFiles": [
+          {
+            "Name": "DataManager.Core.Profiles.ccz-6.5.json",
+            "Bytes": 37460,
+            "Sha256": "8FD880D538BC021D231AA8E8FD601CC3266962CDE59A585C73C07B73F644CD09"
+          },
+          {
+            "Name": "DataManager.Core.Profiles.ccz-6.6.json",
+            "Bytes": 20715,
+            "Sha256": "6AABB1BE5A4657A6933E403CFA187D7D7F68178F80BDC667F6202DDB0B92A1E5"
+          }
+        ],
+        "Profiles": [
+          {
+            "Id": "ccz-6.5",
+            "Variants": [
+              {
+                "Id": "65-standard-v1",
+                "Tables": 47
+              }
+            ]
+          },
+          {
+            "Id": "ccz-6.6",
+            "Variants": [
+              {
+                "Id": "66-standard-v1",
+                "Tables": 48
+              },
+              {
+                "Id": "66-legacy-data-v1",
+                "Tables": 48
+              },
+              {
+                "Id": "66-shanzhai-legacy",
+                "Tables": 48
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "Name": "嵌入使用说明",
+      "Success": true,
+      "ElapsedMs": 1,
+      "Result": {
+        "Characters": 6282,
+        "Sha256": "792C7660C379DF088BF8508B1570903A4C9D3B2CA1AF042D339F300BFDC3CDED"
+      }
+    },
+    {
+      "Name": "嵌入旧版调色板",
+      "Success": true,
+      "ElapsedMs": 0,
+      "Result": {
+        "Name": "ImageManager.Core.Palettes.tsb",
+        "Bytes": 1024,
+        "Sha256": "2B3DE857DB6E4A07C553F33034F80553D2A47A8440BE42D825EF7E39ADEC3682"
+      }
+    },
+    {
+      "Name": "项目物理表只读打开",
+      "Success": true,
+      "ElapsedMs": 528,
+      "Result": {
+        "ProfileId": "ccz-6.5",
+        "VariantId": "65-standard-v1",
+        "LayoutRevision": "30EF5D3F998E532E",
+        "Tables": 50,
+        "ReadableTables": 47,
+        "IsDirty": false
+      }
+    },
+    {
+      "Name": "精简模块与程序侧历史目录",
+      "Success": true,
+      "ElapsedMs": 297,
+      "Result": {
+        "Modules": [
+          "人物",
+          "兵种系",
+          "兵种",
+          "策略",
+          "宝物",
+          "商店",
+          "拓展数据"
+        ],
+        "ProjectName": "十八州演义0.2版本",
+        "HistoryRoot": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\data管理器\\验证\\2026-10-22-模块精简与历史隔离\\单文件隔离\\十八州演义0.2版本_历史记录\\A225C6851A970E3A4535403B0499D55E3F4D3EFBFA2C9BD4A21C7071F00ABB34",
+        "DataHistory": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\data管理器\\验证\\2026-10-22-模块精简与历史隔离\\单文件隔离\\十八州演义0.2版本_历史记录\\A225C6851A970E3A4535403B0499D55E3F4D3EFBFA2C9BD4A21C7071F00ABB34\\数据",
+        "ImageHistory": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\data管理器\\验证\\2026-10-22-模块精简与历史隔离\\单文件隔离\\十八州演义0.2版本_历史记录\\A225C6851A970E3A4535403B0499D55E3F4D3EFBFA2C9BD4A21C7071F00ABB34\\形象",
+        "MigrationBackups": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\data管理器\\验证\\2026-10-22-模块精简与历史隔离\\单文件隔离\\十八州演义0.2版本_历史记录\\A225C6851A970E3A4535403B0499D55E3F4D3EFBFA2C9BD4A21C7071F00ABB34\\迁移备份",
+        "BaseDirectory": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\data管理器\\验证\\2026-10-22-模块精简与历史隔离\\单文件隔离\\",
+        "WorkingDirectory": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\data管理器\\验证\\2026-10-22-模块精简与历史隔离\\不同启动目录"
+      }
+    },
+    {
+      "Name": "业务工作簿依赖与只读往返",
+      "Success": true,
+      "ElapsedMs": 1610,
+      "Result": {
+        "Workbooks": [
+          {
+            "Page": "Persons",
+            "Path": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\data管理器\\验证\\2026-10-22-模块精简与历史隔离\\单文件完整自检-18州-Persons.xlsx",
+            "Bytes": 307083,
+            "ChangedCells": 0,
+            "Sha256": "0DCAFC15015AF2F349B61FCDBBADD8A641C2D14AEF1227374FF4D01857BFB95E"
+          },
+          {
+            "Page": "Items",
+            "Path": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\data管理器\\验证\\2026-10-22-模块精简与历史隔离\\单文件完整自检-18州-Items.xlsx",
+            "Bytes": 117320,
+            "ChangedCells": 0,
+            "Sha256": "2D43023394D53780530ADE8C6DA91558584FC79472B39D9DB6D4637D2C071701"
+          }
+        ],
+        "IsDirty": false
+      }
+    },
+    {
+      "Name": "图片资源目录",
+      "Success": true,
+      "ElapsedMs": 158,
+      "Result": {
+        "Version": "Ccz65",
+        "Resources": 32,
+        "PreviewableResources": 31,
+        "Kinds": {
+          "RComposite": 1,
+          "SComposite": 1,
+          "FaceComposite": 1,
+          "DllBitmap": 3,
+          "E5Indexed": 11,
+          "PmapSpecial": 1,
+          "WeatherSpecial": 1,
+          "MapPair": 1,
+          "McallAnimation": 11,
+          "MarkRaw": 1
+        }
+      }
+    },
+    {
+      "Name": "S 图库物理图号、人物紧凑编号与三阵营第0帧",
+      "Success": true,
+      "ElapsedMs": 310,
+      "Result": {
+        "ArchivePhysicalCounts": {
+          "Unit_mov.e5": 615,
+          "Unit_atk.e5": 616,
+          "Unit_spc.e5": 616
+        },
+        "CommonPhysicalCount": 615,
+        "UnpairedTailSlots": {
+          "Unit_mov.e5": 0,
+          "Unit_atk.e5": 1,
+          "Unit_spc.e5": 1
+        },
+        "JobImageSlots": 240,
+        "CharacterImages": 375,
+        "CharacterPickerOptions": 312,
+        "CheckedJobMappings": 80,
+        "Boundaries": [
+          {
+            "ImageNumber": 1,
+            "LogicalId": 1,
+            "Mode": "Job",
+            "Frames": 28,
+            "FirstFrameSha256": {
+              "mov": "1BE7700BDE692895464B5B08C940E070036CAA3BD3DF62F527E2859937AA981F",
+              "atk": "EA00DE0F737E621483A5B9294403974119F8AEDDB1D3A95638506C7124091FD8",
+              "spc": "DF99CADD889D3183C9ED44481E9EDAF063A0AF118E19CB30F9019C5FAC9E0B96"
+            }
+          },
+          {
+            "ImageNumber": 2,
+            "LogicalId": 2,
+            "Mode": "Job",
+            "Frames": 28,
+            "FirstFrameSha256": {
+              "mov": "928EAC88DA451380B3D48CD1D13F6DF521B8DE7CD8C269293415ED62E52AC6CD",
+              "atk": "C553285897464FF00A0CCE2A9D8636881F356FE6142207AC1AFDA2B556C377D8",
+              "spc": "2EF95417D187B439B74BB9F4934846E5C8C5DC4F6C1FA03DD30298D29BD25F13"
+            }
+          },
+          {
+            "ImageNumber": 3,
+            "LogicalId": 3,
+            "Mode": "Job",
+            "Frames": 28,
+            "FirstFrameSha256": {
+              "mov": "ADAB9E9916997D277D073EAF145DB57FC9E3FBB7D349FB9A6AE9B86B3B11C9B1",
+              "atk": "B0D9C223ACC30F56A847B045E220411BEA30AFC62CC0461D967A36345A1DD31F",
+              "spc": "C99D20582FE93A5FC27DA138A76D52A4DAF7E2F088B0882C3F28424D45B1CFC2"
+            }
+          },
+          {
+            "ImageNumber": 4,
+            "LogicalId": 4,
+            "Mode": "Job",
+            "Frames": 28,
+            "FirstFrameSha256": {
+              "mov": "F83478D1E14EB41B95E9D5B04558904EAE989DF5D1065395C4496D2B16FDDB6D",
+              "atk": "EA00DE0F737E621483A5B9294403974119F8AEDDB1D3A95638506C7124091FD8",
+              "spc": "B1EB97ED63D2F0CD870E255D1CAB8A9DCC7E42A841AA65C18F17077E0295F289"
+            }
+          },
+          {
+            "ImageNumber": 7,
+            "LogicalId": 7,
+            "Mode": "Job",
+            "Frames": 28,
+            "FirstFrameSha256": {
+              "mov": "F83478D1E14EB41B95E9D5B04558904EAE989DF5D1065395C4496D2B16FDDB6D",
+              "atk": "EA00DE0F737E621483A5B9294403974119F8AEDDB1D3A95638506C7124091FD8",
+              "spc": "B1EB97ED63D2F0CD870E255D1CAB8A9DCC7E42A841AA65C18F17077E0295F289"
+            }
+          },
+          {
+            "ImageNumber": 10,
+            "LogicalId": 10,
+            "Mode": "Job",
+            "Frames": 28,
+            "FirstFrameSha256": {
+              "mov": "A5B50B60A06B3381780AA1FB126514EE63C2451B1DE022966BC9ED084B3E61C8",
+              "atk": "1810B54FEDE938B66393A08BA8324E1F6B5394E47E9DF65726CDF0081393ECAF",
+              "spc": "049E334345264499D41662D20FF0C4F8C7721271AEFFC9FA38B678FBAB2EC96E"
+            }
+          },
+          {
+            "ImageNumber": 178,
+            "LogicalId": 178,
+            "Mode": "Job",
+            "Frames": 28,
+            "FirstFrameSha256": {
+              "mov": "9487F8AD7D00FD0CD614CF71F64C08F7297D56C2A4CED566B28D9C5FFEB0186A",
+              "atk": "2559806D11649A41B16409FE1569F3D5C9220D0DDF295E9027E47B19EEE1D27D",
+              "spc": "D0F2D7BAA6B8D12D0BF15E46C2842D6C2C1CC94D8A9ABCC1C6F9FEBA6A0DDE85"
+            }
+          },
+          {
+            "ImageNumber": 180,
+            "LogicalId": 180,
+            "Mode": "Job",
+            "Frames": 28,
+            "FirstFrameSha256": {
+              "mov": "45DBD812C1656F43C2B20AFB8301657DB3C807C2834CA868A8BB913F0D80B63B",
+              "atk": "9D40A0CF016461D026B6291A1F6B43F82E0E7FD2C857FBF6D908150FA112EA11",
+              "spc": "7DFA60FFAC98AE447C3F5045AEE34CEBC66DA37B803C371A4BE2FFAB30836094"
+            }
+          },
+          {
+            "ImageNumber": 181,
+            "LogicalId": 181,
+            "Mode": "Job",
+            "Frames": 28,
+            "FirstFrameSha256": {
+              "mov": "7FB49EF10AAB6FD5FBDE0E581FD4D1702DF0DF03F07CC295D32A9A0E3F958980",
+              "atk": "4831FB3F988A61AA2F124A9112209D3B6F412638742904209A8F7E8C73C04920",
+              "spc": "65201BFE52468457BB7273180BBEBC75BFD72FEB36DC893477EE299810B86B41"
+            }
+          },
+          {
+            "ImageNumber": 183,
+            "LogicalId": 183,
+            "Mode": "Job",
+            "Frames": 28,
+            "FirstFrameSha256": {
+              "mov": "E1A172EA37537B20958475A5F59489B75E248C3D75A46A3494C802E658817257",
+              "atk": "F0C3034F352B575BA42A1E5341B2F3AA604AFF9F18572E36BD02C8514B8A7984",
+              "spc": "21FA5705B6D9151BAFEA4E6138C7960979498E80F5FB943BF25073DBA452F083"
+            }
+          },
+          {
+            "ImageNumber": 238,
+            "LogicalId": 238,
+            "Mode": "Job",
+            "Frames": 28,
+            "FirstFrameSha256": {
+              "mov": "064BBA6E034C473B2C18386D0A753604FF5D57D9D9E85E8BDAC1882762476592",
+              "atk": "8B8B98AD59AF6659C5CF6F75F85D6834877046AA653CBDF02FB8A4BE72928F8D",
+              "spc": "B3C5661A44333C37FFC38FFD9AA303B7313AEBFCAA611070B30353E7EA7E4C9D"
+            }
+          },
+          {
+            "ImageNumber": 240,
+            "LogicalId": 240,
+            "Mode": "Job",
+            "Frames": 28,
+            "FirstFrameSha256": {
+              "mov": "064BBA6E034C473B2C18386D0A753604FF5D57D9D9E85E8BDAC1882762476592",
+              "atk": "8B8B98AD59AF6659C5CF6F75F85D6834877046AA653CBDF02FB8A4BE72928F8D",
+              "spc": "B3C5661A44333C37FFC38FFD9AA303B7313AEBFCAA611070B30353E7EA7E4C9D"
+            }
+          },
+          {
+            "ImageNumber": 241,
+            "LogicalId": 241,
+            "Mode": "Person",
+            "Frames": 28,
+            "FirstFrameSha256": {
+              "mov": "B93F83F2C96886B993C1A9F1DFE0623FED2A068BFFEC61B4ED2169EA9ED10317",
+              "atk": "E56ECA4FEFB93AA6C9B50A60278097354E986AE98F3F1BE73F4B462525131CDD",
+              "spc": "C97ACC841BFD3D8A1BF70BD2DAC426BF428A76141B23061B7CD2B3954621319B"
+            }
+          },
+          {
+            "ImageNumber": 242,
+            "LogicalId": 242,
+            "Mode": "Person",
+            "Frames": 28,
+            "FirstFrameSha256": {
+              "mov": "B93F83F2C96886B993C1A9F1DFE0623FED2A068BFFEC61B4ED2169EA9ED10317",
+              "atk": "E56ECA4FEFB93AA6C9B50A60278097354E986AE98F3F1BE73F4B462525131CDD",
+              "spc": "C97ACC841BFD3D8A1BF70BD2DAC426BF428A76141B23061B7CD2B3954621319B"
+            }
+          },
+          {
+            "ImageNumber": 243,
+            "LogicalId": 243,
+            "Mode": "Person",
+            "Frames": 28,
+            "FirstFrameSha256": {
+              "mov": "B93F83F2C96886B993C1A9F1DFE0623FED2A068BFFEC61B4ED2169EA9ED10317",
+              "atk": "E56ECA4FEFB93AA6C9B50A60278097354E986AE98F3F1BE73F4B462525131CDD",
+              "spc": "C97ACC841BFD3D8A1BF70BD2DAC426BF428A76141B23061B7CD2B3954621319B"
+            }
+          },
+          {
+            "ImageNumber": 615,
+            "LogicalId": 615,
+            "Mode": "Person",
+            "Frames": 28,
+            "FirstFrameSha256": {
+              "mov": "665AD671ED8518B4A3DDD31C69B692DC7AF077A322FF1A33DEDE8BF5AB944998",
+              "atk": "28766D868ECA2DD4BF36E4F7E8F3DAECEE23992F0A2161AA149D3E07E7054634",
+              "spc": "BB55683005678D97BADE7D2500AE50C7643386D2A98F590A25F321CE52F93D87"
+            }
+          }
+        ],
+        "CharacterFirstFrames": [
+          {
+            "SId": 1,
+            "ImageNumber": 241,
+            "FirstFrameSha256": "B93F83F2C96886B993C1A9F1DFE0623FED2A068BFFEC61B4ED2169EA9ED10317"
+          },
+          {
+            "SId": 2,
+            "ImageNumber": 244,
+            "FirstFrameSha256": "1BA42E84FE5463CA8AF11C5744E6B48D98C9F468E6B31976262C06370774C690"
+          },
+          {
+            "SId": 32,
+            "ImageNumber": 334,
+            "FirstFrameSha256": "EAC4EE93AE3D5DDEA7944BB6D5C748ADFE34C8F87460AB4177174F8FA0DCCBEE"
+          },
+          {
+            "SId": 33,
+            "ImageNumber": 337,
+            "FirstFrameSha256": "CF421BF304A305E9C45557FA44ADB0491470A45FB818111B34F224E73446A0AA"
+          }
+        ],
+        "JobFirstFrames": [
+          {
+            "JobId": 0,
+            "FactionIndex": 0,
+            "ImageNumber": 1,
+            "FirstFrameSha256": "1BE7700BDE692895464B5B08C940E070036CAA3BD3DF62F527E2859937AA981F"
+          },
+          {
+            "JobId": 0,
+            "FactionIndex": 1,
+            "ImageNumber": 2,
+            "FirstFrameSha256": "928EAC88DA451380B3D48CD1D13F6DF521B8DE7CD8C269293415ED62E52AC6CD"
+          },
+          {
+            "JobId": 0,
+            "FactionIndex": 2,
+            "ImageNumber": 3,
+            "FirstFrameSha256": "ADAB9E9916997D277D073EAF145DB57FC9E3FBB7D349FB9A6AE9B86B3B11C9B1"
+          },
+          {
+            "JobId": 1,
+            "FactionIndex": 0,
+            "ImageNumber": 4,
+            "FirstFrameSha256": "F83478D1E14EB41B95E9D5B04558904EAE989DF5D1065395C4496D2B16FDDB6D"
+          },
+          {
+            "JobId": 1,
+            "FactionIndex": 1,
+            "ImageNumber": 5,
+            "FirstFrameSha256": "928EAC88DA451380B3D48CD1D13F6DF521B8DE7CD8C269293415ED62E52AC6CD"
+          },
+          {
+            "JobId": 1,
+            "FactionIndex": 2,
+            "ImageNumber": 6,
+            "FirstFrameSha256": "ADAB9E9916997D277D073EAF145DB57FC9E3FBB7D349FB9A6AE9B86B3B11C9B1"
+          },
+          {
+            "JobId": 2,
+            "FactionIndex": 0,
+            "ImageNumber": 7,
+            "FirstFrameSha256": "F83478D1E14EB41B95E9D5B04558904EAE989DF5D1065395C4496D2B16FDDB6D"
+          },
+          {
+            "JobId": 2,
+            "FactionIndex": 1,
+            "ImageNumber": 8,
+            "FirstFrameSha256": "928EAC88DA451380B3D48CD1D13F6DF521B8DE7CD8C269293415ED62E52AC6CD"
+          },
+          {
+            "JobId": 2,
+            "FactionIndex": 2,
+            "ImageNumber": 9,
+            "FirstFrameSha256": "ADAB9E9916997D277D073EAF145DB57FC9E3FBB7D349FB9A6AE9B86B3B11C9B1"
+          },
+          {
+            "JobId": 3,
+            "FactionIndex": 0,
+            "ImageNumber": 10,
+            "FirstFrameSha256": "A5B50B60A06B3381780AA1FB126514EE63C2451B1DE022966BC9ED084B3E61C8"
+          },
+          {
+            "JobId": 3,
+            "FactionIndex": 1,
+            "ImageNumber": 11,
+            "FirstFrameSha256": "4F4E41170A2C5E9D83198422EADB22A5CC6EE42062A81D4EA290AF1CE36D1A34"
+          },
+          {
+            "JobId": 3,
+            "FactionIndex": 2,
+            "ImageNumber": 12,
+            "FirstFrameSha256": "D6B7F66A35DEE43D31B4E039C7B8E3C8FF4776DA1408D19BE11C0C039CA64717"
+          },
+          {
+            "JobId": 59,
+            "FactionIndex": 0,
+            "ImageNumber": 178,
+            "FirstFrameSha256": "9487F8AD7D00FD0CD614CF71F64C08F7297D56C2A4CED566B28D9C5FFEB0186A"
+          },
+          {
+            "JobId": 59,
+            "FactionIndex": 1,
+            "ImageNumber": 179,
+            "FirstFrameSha256": "2EA88C254EF1D3284092E102CE1601ADADA0ACC093C4FC908DC07CD27662D180"
+          },
+          {
+            "JobId": 59,
+            "FactionIndex": 2,
+            "ImageNumber": 180,
+            "FirstFrameSha256": "45DBD812C1656F43C2B20AFB8301657DB3C807C2834CA868A8BB913F0D80B63B"
+          },
+          {
+            "JobId": 60,
+            "FactionIndex": 0,
+            "ImageNumber": 181,
+            "FirstFrameSha256": "7FB49EF10AAB6FD5FBDE0E581FD4D1702DF0DF03F07CC295D32A9A0E3F958980"
+          },
+          {
+            "JobId": 60,
+            "FactionIndex": 1,
+            "ImageNumber": 182,
+            "FirstFrameSha256": "EA2B7138945B5D05B6A294D2A4A27DB21328A990B1BAB1E9D4C55CCC902FDD3C"
+          },
+          {
+            "JobId": 60,
+            "FactionIndex": 2,
+            "ImageNumber": 183,
+            "FirstFrameSha256": "E1A172EA37537B20958475A5F59489B75E248C3D75A46A3494C802E658817257"
+          },
+          {
+            "JobId": 79,
+            "FactionIndex": 0,
+            "ImageNumber": 238,
+            "FirstFrameSha256": "064BBA6E034C473B2C18386D0A753604FF5D57D9D9E85E8BDAC1882762476592"
+          },
+          {
+            "JobId": 79,
+            "FactionIndex": 1,
+            "ImageNumber": 239,
+            "FirstFrameSha256": "064BBA6E034C473B2C18386D0A753604FF5D57D9D9E85E8BDAC1882762476592"
+          },
+          {
+            "JobId": 79,
+            "FactionIndex": 2,
+            "ImageNumber": 240,
+            "FirstFrameSha256": "064BBA6E034C473B2C18386D0A753604FF5D57D9D9E85E8BDAC1882762476592"
+          }
+        ]
+      }
+    },
+    {
+      "Name": "兵种S标题按详细兵种ID与名称匹配",
+      "Success": true,
+      "ElapsedMs": 305,
+      "Result": {
+        "Jobs": 80,
+        "PhysicalEntries": 240,
+        "FirstLabels": [
+          "0：诸侯 我军",
+          "0：诸侯 友军",
+          "0：诸侯 敌军",
+          "1：国君 我军",
+          "1：国君 友军",
+          "1：国君 敌军"
+        ],
+        "LastLabel": "79：元戎 敌军"
+      }
+    },
+    {
+      "Name": "图片导入候选与物理242隔离（不提交）",
+      "Success": true,
+      "ElapsedMs": 378,
+      "Result": {
+        "PhysicalNumber": 242,
+        "Action": "mov",
+        "UnselectedEntriesUnchanged": true,
+        "SourceFormat": "PNG / 32 位",
+        "OriginalFormat": "RAW8",
+        "OutputFormat": "RAW8",
+        "Notes": "调色板：F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\基底\\18州\\十八州演义0.2版本\\Spalet.e5；288 个像素采用最近色，无抖动。；透明及 R≥248/G≤8/B≥248 洋红写索引0；RAW8 不保存半透明，其余非零 alpha 按 RGB 实色量化。",
+        "CandidateFiles": 1,
+        "CandidateFrameSha256": "E3A17A7D1713C03C573F9A3F7DB5661D3F8F1538B5530012C156E07D14D02950",
+        "Committed": false,
+        "Protocol": "raster-file-v1"
+      }
+    },
+    {
+      "Name": "攻击与效果范围逐图解码",
+      "Success": true,
+      "ElapsedMs": 236,
+      "Result": [
+        {
+          "Resource": "Hitarea.e5",
+          "Skipped": false,
+          "Entries": 33,
+          "DecodedEntries": 33,
+          "Boundaries": [
+            {
+              "FieldValue": 0,
+              "PhysicalImageNumber": 1,
+              "Width": 64,
+              "Height": 64,
+              "FirstFrameSha256": "7471D48BEE4E5ED1E2F3370E32F171C598F104A2DE104B4FD5DD02269648B2B8"
+            },
+            {
+              "FieldValue": 32,
+              "PhysicalImageNumber": 33,
+              "Width": 64,
+              "Height": 64,
+              "FirstFrameSha256": "960FA6AD1BAC70A29D0BB5AFF26910E3A6A43908E518051CA089E728121D0781"
+            }
+          ]
+        },
+        {
+          "Resource": "Effarea.e5",
+          "Skipped": false,
+          "Entries": 10,
+          "DecodedEntries": 10,
+          "Boundaries": [
+            {
+              "FieldValue": 0,
+              "PhysicalImageNumber": 1,
+              "Width": 64,
+              "Height": 64,
+              "FirstFrameSha256": "70AD68CAFDD537E03FD0431DB192C7CF3782E86BBFE89E898002FC9A14A8E0D8"
+            },
+            {
+              "FieldValue": 9,
+              "PhysicalImageNumber": 10,
+              "Width": 64,
+              "Height": 64,
+              "FirstFrameSha256": "87DB5C89F335279BF370CDB26704B82F1B2381E5B9A49E8E3F009F49FBF567AD"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Name": "Weather 四帧纵向动画",
+      "Success": true,
+      "ElapsedMs": 4,
+      "Result": {
+        "Key": "Weather.e5",
+        "Path": "E5\\Weather.e5",
+        "Frames": 4,
+        "FrameSizes": [
+          "216×50",
+          "216×50",
+          "216×50",
+          "216×50"
+        ],
+        "FirstFrameSha256": "2120081C58712305F253E8785AB21AEBA5B489C2EEEF49E45EC4F13D2970F219"
+      }
+    },
+    {
+      "Name": "Mcall 内嵌真彩 BMP 动画",
+      "Success": true,
+      "ElapsedMs": 1323,
+      "Result": {
+        "Key": "Mcall:09",
+        "Path": "E5\\Mcall09.e5",
+        "PayloadFormat": "BMP",
+        "Frames": 29,
+        "Planes": 29,
+        "IntervalMs": 100,
+        "Width": 300,
+        "Height": 300,
+        "Diagnostics": "BMP；记录 30；播放步 29；主/辅助平面 29/0；实际平面 29；300×300；间隔 100ms；保留尾部 0 字节",
+        "FirstFrameSha256": "94466E46FD32F81A0F0098B6AE9CD20E059DA568FB913F1A66585B2452283C97"
+      }
+    },
+    {
+      "Name": "主窗口 1280×720 与 1920×1080",
+      "Success": true,
+      "ElapsedMs": 1418,
+      "Result": {
+        "Screenshots": [
+          {
+            "Path": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\data管理器\\验证\\2026-10-22-模块精简与历史隔离\\单文件完整自检-18州-1280x720.png",
+            "WindowWidth": 1280,
+            "WindowHeight": 720,
+            "ClientWidth": 1258,
+            "ClientHeight": 664,
+            "Sha256": "C8ECDB3087DA8D743FE768C33C46B7846C5C64CE0EF46B6534AB58B94388FDFD"
+          },
+          {
+            "Path": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\data管理器\\验证\\2026-10-22-模块精简与历史隔离\\单文件完整自检-18州-1920x1080.png",
+            "WindowWidth": 1920,
+            "WindowHeight": 1080,
+            "ClientWidth": 1898,
+            "ClientHeight": 1024,
+            "Sha256": "3ED7EAF8F1AF3476BAFC0D12B49D519E12A128912B71F887C65A53508D58AB76"
+          }
+        ],
+        "IsDirty": false,
+        "Font": "Microsoft YaHei UI",
+        "FontPoints": 9,
+        "DeviceDpi": 144,
+        "AutoScaleMode": "Inherit"
+      }
+    },
+    {
+      "Name": "样本文件 SHA 保持不变",
+      "Success": true,
+      "ElapsedMs": 321,
+      "Result": {
+        "Files": [
+          {
+            "Path": "Data.e5",
+            "Sha256": "AFAB4753EC2FD0D1BD6E4D32A1956924E446EAE356DFC565E777CCC1208377EA"
+          },
+          {
+            "Path": "Star.e5",
+            "Sha256": "201E3741091943803FD2AFA8143C69B1930637A95612034305B77609D158CFB7"
+          },
+          {
+            "Path": "Imsg.e5",
+            "Sha256": "62977A88871D61DE2E778E909F7C8B7E9093554722B7237056BB739BEE1780B8"
+          },
+          {
+            "Path": "Ekd5.exe",
+            "Sha256": "215C6EF3DE2EB21E29CE99ED0543F7FBEE3728AC450242DDD670531CB7D0F3EB"
+          },
+          {
+            "Path": "Pmapobj.e5",
+            "Sha256": "3EA2DC0C3A8877A58580CC0BE71625E493169E90E58027050D92116B6383EE37"
+          },
+          {
+            "Path": "Unit_mov.e5",
+            "Sha256": "F717D0846E517D8DE077824EBC7C2C28BC9BAACEC0742C7FF50BDF5D7A269426"
+          },
+          {
+            "Path": "Unit_atk.e5",
+            "Sha256": "86BAB641F5A824DD824E8DC149495AEFE7E4958EE9FCA5203C5C7424E8326DB2"
+          },
+          {
+            "Path": "Unit_spc.e5",
+            "Sha256": "0F368061273DB126FEB571656F57FBDD7207A1012119EDC83FCE6B604577B2A0"
+          },
+          {
+            "Path": "E5\\Face.e5",
+            "Sha256": "53B0CFD1909870480C61A7705A2FDC5E4470347429715F80E82456F7557BAE06"
+          },
+          {
+            "Path": "Itemicon.dll",
+            "Sha256": "858D37BFB628BAF5D68A7188812D9D6D98423D99CF14F70DB3F7AF0867D51581"
+          },
+          {
+            "Path": "Mgcicon.dll",
+            "Sha256": "AFEC97FEC498B113F7652EDD35497DB79F4D01CC55A1665580FD951A87FE4C20"
+          },
+          {
+            "Path": "Cmdicon.dll",
+            "Sha256": "813F6C5D1C0EFFC0C790F9786F14D88E4EC80B3F1281580C85186CBB5B56B44A"
+          },
+          {
+            "Path": "E5\\Logo.e5",
+            "Sha256": "D93194EAAEEFF2404A2F195B8EF1FB683C54576AA7B32BE57861EBBE6215D33C"
+          },
+          {
+            "Path": "E5\\Mmap.e5",
+            "Sha256": "DDC16FA9E3D2EEF355794228E93D2E343B11012CCA34297221943BDA7E83570F"
+          },
+          {
+            "Path": "E5\\Gate.e5",
+            "Sha256": "1DF4B974A7615E9D13F19ACB9A418E12D8283D006BECA79C2286807434243027"
+          },
+          {
+            "Path": "E5\\Pmap.e5",
+            "Sha256": "BE01807BF070169185C28811C8434167D62131A76091317B7D27658C8DB0FD20"
+          },
+          {
+            "Path": "E5\\Hitarea.e5",
+            "Sha256": "8E65B24037A9F99C5BE62B03DDF1C188B957A495ED2C66F7AD8F8588BABEDF97"
+          },
+          {
+            "Path": "E5\\Effarea.e5",
+            "Sha256": "BF12D0AD47261E022B220EAFFCB801CBAABF9A69EB3B565CC8579F849E23FE1E"
+          },
+          {
+            "Path": "E5\\U_select.e5",
+            "Sha256": "CBFA5744231165134FB6A51FC2B3412C1B50BF7C22C0F9871376A3B21BC88F6D"
+          },
+          {
+            "Path": "E5\\Weather.e5",
+            "Sha256": "3FFB15D87C68525412EE92B8261A7A18382078EE178473B4EA286A4415E604D5"
+          },
+          {
+            "Path": "Meff.e5",
+            "Sha256": "E7E6DB63A567053F5A5DF8AD16D09CE42F9818A2CE148AA6F3B4C54E66F85357"
+          },
+          {
+            "Path": "Spalet.e5",
+            "Sha256": "C03C7950DAD7F09115FB86E0B6B0107D2AC0662344E4D24D3D9D47E72F891336"
+          },
+          {
+            "Path": "E5\\Pmpalet.e5",
+            "Sha256": "78E9B1C7E8BEDAA9B43ADACA619C0AE6DAEE347F63C42BF3B4DB91F79B2B6F66"
+          },
+          {
+            "Path": "E5\\Mark.e5",
+            "Sha256": "7321BEEC9201654B12498A5F03D0C253C4606D6CEC2CF5860990C79DE642F9B5"
+          },
+          {
+            "Path": "Hexzmap.e5",
+            "Sha256": "E0192862E5A20D74A5666C8FA060788FCB958C34A4E98D9D00DA7CFE950539E9"
+          },
+          {
+            "Path": "E5\\Mcall00.e5",
+            "Sha256": "3F080C72AED2B70238601470C178CDD18451CDD1EF176FE4D472BBB9D7AF2F94"
+          },
+          {
+            "Path": "E5\\Mcall01.e5",
+            "Sha256": "EAA32F40EB03E53FD199BEB799DA583D922212FA63383D86EFD423A72169A3F5"
+          },
+          {
+            "Path": "E5\\Mcall02.e5",
+            "Sha256": "2E096B551E0B20ABB21D5712242A78A8052B21B1246893CE9DC6D0DC9A6F758C"
+          },
+          {
+            "Path": "E5\\Mcall03.e5",
+            "Sha256": "944667FDDAAA329636F222470B77E5378D627531CC1FFC21E8022CC2442CB848"
+          },
+          {
+            "Path": "E5\\Mcall04.e5",
+            "Sha256": "95DA2A5234ECA9CF4416F7255B65800DD49229CE348288C20A76E16E519D6830"
+          },
+          {
+            "Path": "E5\\Mcall05.e5",
+            "Sha256": "FE86B9B67F0672CD5812E755E579B5EB49228EEF31702AA0C06606FCC3FB8ADA"
+          },
+          {
+            "Path": "E5\\Mcall06.e5",
+            "Sha256": "C8CF41D36A98FA4E22E3726709A20DA40C3256CA08F8EA8F076EE19ED91E814D"
+          },
+          {
+            "Path": "E5\\Mcall07.e5",
+            "Sha256": "685BDAD491A8FFCC24C1999820EA5E391743F6D1BE184974394BAF82E45ED803"
+          },
+          {
+            "Path": "E5\\Mcall08.e5",
+            "Sha256": "2C7DE17D0D07633CB57BF1780986235D1020E0A5EC59E5401C5B5B228AE4BCC0"
+          },
+          {
+            "Path": "E5\\Mcall09.e5",
+            "Sha256": "687DCB56BB82B0A59F65249A0D2C56F731F7695473F9C152E1C7C89D08979493"
+          },
+          {
+            "Path": "E5\\Mcall10.e5",
+            "Sha256": "0B634731AA8F05B9BECBCC8C3607B6A2042685E91FBF695313D8F75CE9913382"
+          }
+        ],
+        "Unchanged": true
+      }
+    }
+  ],
+  "ProjectRoot": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\基底\\18州\\十八州演义0.2版本",
+  "SourceFileCount": 36,
+  "Success": true,
+  "Failures": 0,
+  "ElapsedMs": 7401
+}

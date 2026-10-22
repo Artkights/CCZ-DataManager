@@ -14,7 +14,6 @@ internal static class AdvancedFeatureTests
         TestMigrationRejectsStalePlan(basePath);
         MigrationResourceTests.Run(basePath);
         WorkspaceBinaryTransactionTests.Run(basePath);
-        ClassEffectMigrationTests.Run(basePath);
         MigrationIsolationTests.Run(basePath);
         MigrationSelectionContractTests.Run(basePath);
     }

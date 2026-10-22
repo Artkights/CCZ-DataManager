@@ -171,11 +171,6 @@ public sealed partial class BusinessEditorPanel : UserControl
             if (kind == BusinessPageKind.Strategies) AddTerrainTab();
             if (kind is BusinessPageKind.Persons or BusinessPageKind.DetailedJobs or BusinessPageKind.Items or BusinessPageKind.Strategies) AddPreviewTab();
             if (_tabs.TabPages.Count == 0) AddNoticeTab("数据", "当前实体没有可读取的数据。请查看扫描诊断中的表能力与文件状态。");
-            if (kind == BusinessPageKind.Effects)
-            {
-                _compactLayoutKind = kind;
-                _compactLayoutSignature = CompactLayoutSignature(kind, id);
-            }
         }
         finally { _binding = false; _tabs.RefreshHeader(); _tabs.ResumeLayout(true); ResumeLayout(true); }
     }
@@ -410,9 +405,7 @@ public sealed partial class BusinessEditorPanel : UserControl
             }
             var number = Convert.ToInt32(current ?? 0, CultureInfo.InvariantCulture);
             var selected = options.FirstOrDefault(item => item.Id == number);
-            var emptyEffectToken = document.Definition.Key is "class-effects" or "personal-effects" &&
-                ((field.ReferenceTable == "persons" && number >= 1024) || (field.ReferenceTable == "detailed-jobs" && number >= 255));
-            combo.SetBoundValue(emptyEffectToken ? $"{number}：空/不限" : selected?.Display ?? $"{number}：未确认");
+            combo.SetBoundValue(selected?.Display ?? $"{number}：未确认");
             RefreshRangeLoader();
             if (ResourceKindForField(document.Definition.Key, field.Name) != null) _resourcePickerRefreshers.Add(RefreshRangeLoader);
             bool SaveCombo()
@@ -441,9 +434,7 @@ public sealed partial class BusinessEditorPanel : UserControl
                 // only this combo's thumbnails so its next draw uses the new file.
                 number = Convert.ToInt32(current ?? 0, CultureInfo.InvariantCulture);
                 selected = options.FirstOrDefault(item => item.Id == number);
-                var empty = document.Definition.Key is "class-effects" or "personal-effects" &&
-                    ((field.ReferenceTable == "persons" && number >= 1024) || (field.ReferenceTable == "detailed-jobs" && number >= 255));
-                combo.SetBoundValue(empty ? $"{number}：空/不限" : selected?.Display ?? $"{number}：未确认");
+                combo.SetBoundValue(selected?.Display ?? $"{number}：未确认");
                 RefreshRangeLoader();
                 rangePicker?.RefreshPreview();
             });
@@ -914,16 +905,6 @@ public sealed partial class BusinessEditorPanel : UserControl
         if (!string.IsNullOrWhiteSpace(field.ReferenceTable))
         {
             var options = OptionsFor(field.ReferenceTable);
-            if (SetEquipmentValidator.CategoryForField(tableKey, field.Name) is { } setCategory)
-            {
-                var allowed = SetEquipmentValidator.GetAllowedIds(_workspace, setCategory).ToHashSet();
-                return options.Where(option => allowed.Contains(option.Id) || option.Id == 255).ToArray();
-            }
-            if (tableKey is "class-effects" or "personal-effects")
-            {
-                if (field.ReferenceTable == "persons") return options.Where(item => item.Id < 1024).Concat([new IdNameOption(1024, "空/不限"), new IdNameOption(65535, "空/不限")]).ToArray();
-                if (field.ReferenceTable == "detailed-jobs") return options.Concat([new IdNameOption(255, "空/不限")]).ToArray();
-            }
             return options;
         }
         if (field.Name == "策略类型") return StrategyTypes.Select((name, id) => new IdNameOption(id, name)).ToArray();

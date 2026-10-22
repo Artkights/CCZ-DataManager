@@ -19,7 +19,7 @@ internal static class WorkbookPerformanceTests
         workspace.Open(source);
         var service = new PageWorkbookService(workspace);
         var results = new List<object>();
-        foreach (var page in new[] { BusinessPageKind.Persons, BusinessPageKind.DetailedJobs, BusinessPageKind.Effects })
+        foreach (var page in new[] { BusinessPageKind.Persons, BusinessPageKind.DetailedJobs, BusinessPageKind.ExtendData })
         {
             var path = Path.Combine(output, page + ".xlsx");
             // Warm the codecs, JIT and file-system cache; compare steady-state algorithms separately from project opening.

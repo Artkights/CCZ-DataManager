@@ -20,7 +20,7 @@ internal static class UiFontScaleTests
             {
                 form.Font = scaledFont; form.Show(); form.LoadProjectForSmokeTest(root);
                 SetWindowPos(form.Handle, IntPtr.Zero, -32000, -32000, 1920, 1080, 0x0010 | 0x0004 | 0x0400);
-                foreach (var module in new[] { "人物", "兵种系", "兵种", "宝物", "人物/套装特效" })
+                foreach (var module in new[] { "人物", "兵种系", "兵种", "宝物" })
                 {
                     var tab = form.ModuleTabsForSmokeTest.TabPages.Cast<TabPage>().Single(page => page.Text == module);
                     form.SelectModuleForSmokeTest((string)tab.Tag!); Application.DoEvents();

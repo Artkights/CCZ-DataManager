@@ -5,15 +5,15 @@ namespace DataManager.Core.Domain;
 /// <summary>Logical pages exposed by the domain layer.</summary>
 public enum BusinessPageKind
 {
-    Persons,
-    JobSeries,
-    DetailedJobs,
-    Items,
-    Effects,
-    Shop,
-    Strategies,
-    ExtendData,
-    PhysicalTables
+    Persons = 0,
+    JobSeries = 1,
+    DetailedJobs = 2,
+    Items = 3,
+    // Value 4 belonged to the retired effects page. Keep later identities stable.
+    Shop = 5,
+    Strategies = 6,
+    ExtendData = 7,
+    PhysicalTables = 8
 }
 
 public sealed record IdNameOption(int Id, string Name)

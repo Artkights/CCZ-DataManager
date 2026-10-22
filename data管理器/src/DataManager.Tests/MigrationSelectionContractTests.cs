@@ -135,7 +135,7 @@ internal static class MigrationSelectionContractTests
             AssertOnlyAllowedBytesChanged(targetBefore, target, new Dictionary<string, HashSet<int>>());
             AssertHashes(target, resourceBefore, "混合提交失败后资源没有恢复");
             AssertHashes(source, sourceBefore, "混合提交失败修改了源文件");
-            TestSupport.Assert(!File.Exists(Path.Combine(target, ".data管理器历史", "manifest.jsonl")), "混合提交失败遗留了目标保存历史");
+            TestSupport.Assert(!File.Exists(Path.Combine(DataManager.Core.History.ProjectHistoryPaths.GetDataRoot(target), "manifest.jsonl")), "混合提交失败遗留了目标保存历史");
             TestSupport.Assert(!Directory.EnumerateFiles(target, "*.tmp", SearchOption.AllDirectories).Any(), "混合提交失败遗留临时文件");
         });
     }

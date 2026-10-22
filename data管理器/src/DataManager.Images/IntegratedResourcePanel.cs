@@ -183,7 +183,7 @@ public sealed class IntegratedResourcePanel : UserControl
             _diagnostic.Text = cached.Diagnostic;
             return;
         }
-        var history = new HistoryService(Path.Combine(_project.RootPath, ".data管理器形象历史"));
+        var history = ProjectImageHistory.Create(_project);
         IReadOnlySet<int>? usedIds = null;
         var referenceDiagnostic = string.Empty;
         if (category is "R" or "S")
@@ -210,7 +210,7 @@ public sealed class IntegratedResourcePanel : UserControl
                     (category == "Other" ? "其他图片" : category == "Animation" ? "策略动画" : "图片资源");
         _page = new ImageGridPage(title, _catalog,
             new LiveImageMutationService(_adapter, history), new ReferenceAtlasService(), new RsImportService(),
-            new BatchRenameService(history), _previews, capabilities);
+            new ProjectBatchRenameService(_project), _previews, capabilities);
         _page.FileImports = new LiveImageImportPreparationService();
         _page.SAssignmentReferencesProvider = () => _sAssignmentReferencesProvider?.Invoke();
         _page.ProjectStructureChanged += () =>
@@ -370,8 +370,18 @@ public sealed class IntegratedResourcePanel : UserControl
                 if (File.Exists(Path.Combine(live.RootPath, name)) && File.Exists(Path.Combine(live.RootPath, "E5", name)))
                     throw new InvalidOperationException("根目录与 E5 目录存在同名资源，请先确认目标：" + name);
             }
-            try { return _inner.Commit(live, plan); }
+            try { return ProjectImageHistory.Commit(live, plan); }
             finally { adapter.Invalidate(project.RootPath); }
         }
+    }
+
+    private sealed class ProjectBatchRenameService(ProjectProfile project) : IBatchRenameService
+    {
+        public RenamePlan Preview(string rootPath, RenameRule rule)
+            => new BatchRenameService(ProjectImageHistory.Create(project)).Preview(rootPath, rule);
+
+        public MutationResult Apply(ProjectProfile profile, RenamePlan plan)
+            => new BatchRenameService(ProjectImageHistory.PrepareForWrite(profile))
+                .Apply(ProjectImageHistory.Canonicalize(profile), plan);
     }
 }

@@ -2,17 +2,16 @@ using ImageManager.Core;
 
 namespace DataManager.Images;
 
-/// <summary>Projects resource history into the main editor without moving or rewriting its journal.</summary>
+/// <summary>Projects executable-owned resource journals into the main editor.</summary>
 public sealed class ResourceHistoryAdapter(ResourceCatalogAdapter? resources = null)
 {
     public IReadOnlyList<ResourceHistoryEntry> List(string rootPath)
     {
         var profile = new ProjectProfileService().Detect(rootPath);
-        var history = Create(profile);
-        return history.List(profile).Select(record =>
+        return ProjectImageHistory.List(profile).Select(record =>
         {
             var transition = record.Kind is MutationKind.Undo or MutationKind.Redo;
-            var recoverable = record.Targets.Count > 0 || record.RenameTargets.Count > 0;
+            var recoverable = (record.Targets.Count > 0 || record.RenameTargets.Count > 0) && ProjectImageHistory.CanRestore(profile, record);
             return new ResourceHistoryEntry(record.Id, new DateTimeOffset(record.CreatedAt), OperationName(record.Kind),
                 record.Summary, StatusName(record.Status), record.Targets.Select(target => target.TargetPath)
                     .Concat(record.RenameTargets.Select(target => target.SourcePath + " → " + target.TargetPath)).ToArray(),
@@ -32,23 +31,22 @@ public sealed class ResourceHistoryAdapter(ResourceCatalogAdapter? resources = n
         {
             var profile = new ProjectProfileService().Detect(rootPath);
             if (profile.IsReadOnly) return new(false, "项目版本未确认，无法修改资源历史。");
-            var service = Create(profile);
+            var service = ProjectImageHistory.PrepareForWrite(profile);
+            profile = ProjectImageHistory.Canonicalize(profile);
             var selected = service.List(profile).LastOrDefault(record => record.Id == operationId);
             if (selected == null) return new(false, "找不到资源历史记录。");
             if (selected.Kind is MutationKind.Undo or MutationKind.Redo || selected.Targets.Count == 0 && selected.RenameTargets.Count == 0)
                 return new(false, "该记录是历史操作或没有文件快照，请选择原始资源修改记录。");
+            ProjectImageHistory.ValidateRestore(profile, selected);
             var result = redo ? service.Redo(profile, operationId) : service.Undo(profile, operationId);
             if (result.Success) resources?.Invalidate(profile.RootPath);
             return new(result.Success, result.Success ? result.Summary : string.Join(Environment.NewLine, new[] { result.Summary }.Concat(result.Diagnostics)));
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)
         {
             return new(false, "资源历史操作失败：" + ex.Message);
         }
     }
-
-    private static HistoryService Create(ProjectProfile profile)
-        => new(Path.Combine(profile.RootPath, ".data管理器形象历史"));
 
     private static string OperationName(MutationKind kind) => kind switch
     {

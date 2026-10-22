@@ -21,7 +21,7 @@ internal static class Known65FixtureSnapshot
     public static Recovery Recover(string source, IReadOnlyDictionary<string, byte[]> original)
     {
         if (MatchesKnown(original)) return new(original, true, "四个核心文件已匹配嵌入的完整 6.5 SHA-256 指纹。");
-        var path = Path.Combine(source, ".data管理器历史", "manifest.jsonl");
+        var path = DataManager.Core.History.ProjectHistoryPaths.GetDataManifestForRead(source);
         if (!File.Exists(path)) return new(original, false, "源项目没有可回放的保存历史。");
         List<HistoryEntry> entries;
         try

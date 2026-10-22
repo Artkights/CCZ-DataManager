@@ -75,16 +75,6 @@
       ]
     },
     {
-      "key": "人物/套装特效",
-      "displayName": "人物/套装特效",
-      "tableKeys": [
-        "class-effects",
-        "effect-names",
-        "effect-descriptions",
-        "personal-effects"
-      ]
-    },
-    {
       "key": "商店",
       "displayName": "商店",
       "tableKeys": [
@@ -909,145 +899,6 @@
       ]
     },
     {
-      "key": "class-effects",
-      "displayName": "兵种特效分配",
-      "file": "Ekd5.exe",
-      "offset": 888832,
-      "rows": 255,
-      "rowSize": 8,
-      "beginId": 0,
-      "module": "人物/套装特效",
-      "recordCodecKey": "effect-65-8-v1",
-      "fields": [
-        {
-          "name": "一号武将",
-          "offset": 0,
-          "size": 2,
-          "kind": "UInt16",
-          "maximum": 65535,
-          "referenceTable": "persons"
-        },
-        {
-          "name": "二号武将",
-          "offset": 2,
-          "size": 2,
-          "kind": "UInt16",
-          "maximum": 65535,
-          "referenceTable": "persons"
-        },
-        {
-          "name": "三号武将",
-          "offset": 4,
-          "size": 2,
-          "kind": "UInt16",
-          "maximum": 65535,
-          "referenceTable": "persons"
-        },
-        {
-          "name": "兵种",
-          "offset": 6,
-          "size": 1,
-          "kind": "UInt8",
-          "maximum": 255,
-          "referenceTable": "detailed-jobs"
-        },
-        {
-          "name": "特效值",
-          "offset": 7,
-          "size": 1,
-          "kind": "UInt8"
-        }
-      ]
-    },
-    {
-      "key": "personal-effects",
-      "displayName": "人物专属、套装专属",
-      "file": "Ekd5.exe",
-      "offset": 915456,
-      "rows": 255,
-      "rowSize": 16,
-      "beginId": 0,
-      "module": "人物/套装特效",
-      "fields": [
-        {
-          "name": "武将1",
-          "offset": 0,
-          "size": 2,
-          "kind": "UInt16",
-          "maximum": 65535,
-          "referenceTable": "persons"
-        },
-        {
-          "name": "装备1",
-          "offset": 2,
-          "size": 1,
-          "kind": "UInt8",
-          "referenceTable": "items"
-        },
-        {
-          "name": "特效值1",
-          "offset": 3,
-          "size": 1,
-          "kind": "UInt8"
-        },
-        {
-          "name": "武将2",
-          "offset": 4,
-          "size": 2,
-          "kind": "UInt16",
-          "maximum": 65535,
-          "referenceTable": "persons"
-        },
-        {
-          "name": "装备2",
-          "offset": 6,
-          "size": 1,
-          "kind": "UInt8",
-          "referenceTable": "items"
-        },
-        {
-          "name": "特效值2",
-          "offset": 7,
-          "size": 1,
-          "kind": "UInt8"
-        },
-        {
-          "names": [
-            "装备3-1",
-            "装备3-2",
-            "装备3-3"
-          ],
-          "offset": 8,
-          "size": 1,
-          "kind": "UInt8",
-          "referenceTable": "items"
-        },
-        {
-          "name": "特效值3",
-          "offset": 11,
-          "size": 1,
-          "kind": "UInt8"
-        },
-        {
-          "names": [
-            "装备4-1",
-            "装备4-2",
-            "装备4-3"
-          ],
-          "offset": 12,
-          "size": 1,
-          "kind": "UInt8",
-          "referenceTable": "items"
-        },
-        {
-          "name": "特效值4",
-          "offset": 15,
-          "size": 1,
-          "kind": "UInt8"
-        }
-      ]
-    },
-    {
       "key": "person-critical-quotes",
       "displayName": "人物暴击台词",
       "file": "Imsg.e5",
@@ -1193,7 +1044,7 @@
       "rows": 255,
       "rowSize": 16,
       "beginId": 0,
-      "module": "人物/套装特效",
+      "module": "拓展数据",
       "fields": [
         {
           "name": "名称",
@@ -1205,24 +1056,6 @@
       "capability": "ReadOnly",
       "capabilityEvidence": "6.5 兵种特效名称原始名称区，行尾可能含额外参数；使用专用名称池解析，物理表只读。",
       "verificationLevel": "SourceReviewed"
-    },
-    {
-      "key": "effect-descriptions",
-      "displayName": "兵种特效说明",
-      "file": "Imsg.e5",
-      "offset": 86000,
-      "rows": 255,
-      "rowSize": 200,
-      "beginId": 0,
-      "module": "人物/套装特效",
-      "fields": [
-        {
-          "name": "说明",
-          "offset": 0,
-          "size": 200,
-          "kind": "FixedString"
-        }
-      ]
     },
     {
       "key": "effect-archive",

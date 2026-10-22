@@ -7,8 +7,15 @@ internal static class Program
     {
         DataManager.App.ApplicationBootstrap.Initialize();
         Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException);
+        var testHistoryRoot = Path.Combine(Path.GetTempPath(), "DataManagerHistoryTests_" + Guid.NewGuid().ToString("N"));
+        using var historyScope = DataManager.Core.History.ProjectHistoryPaths.UseBaseDirectory(testHistoryRoot);
         try
         {
+            if (args.FirstOrDefault() == "--effects-removal")
+            {
+                EffectsRemovalTests.Run(Path.GetFullPath(args[1]));
+                return 0;
+            }
             if (args.FirstOrDefault() == "--core-algorithm-performance")
             {
                 CoreAlgorithmPerformanceTests.Run(Path.GetFullPath(args[1]), args.Length > 2 ? args[2] : "after");
@@ -27,12 +34,6 @@ internal static class Program
             if (args.FirstOrDefault() == "--workbook-native")
             {
                 WorkbookNativeTests.Run(args.Length > 1 ? Path.GetFullPath(args[1]) : Path.Combine(Directory.GetCurrentDirectory(), "基底", "加强版6.5未加密版"));
-                return 0;
-            }
-            if (args.FirstOrDefault() == "--scenario-effects")
-            {
-                ScenarioEffectAssignmentTests.Run(args.Length > 1 ? Path.GetFullPath(args[1]) : Path.Combine(Directory.GetCurrentDirectory(), "基底", "加强版6.5未加密版"));
-                Console.WriteLine("SCENARIO_EFFECT_ASSIGNMENT_TESTS_OK");
                 return 0;
             }
             if (args.FirstOrDefault() == "--page-workbook")
@@ -257,6 +258,12 @@ internal static class Program
                 Console.WriteLine("RESOURCE_BINDING_MAPPING_TESTS_OK");
                 return 0;
             }
+            if (args.FirstOrDefault() == "--history-location")
+            {
+                HistoryLocationTests.Run(args.Length > 1 ? Path.GetFullPath(args[1]) : basePath);
+                Console.WriteLine("HISTORY_LOCATION_TESTS_OK");
+                return 0;
+            }
             if (args.FirstOrDefault() == "--unified-history")
             {
                 UnifiedHistoryTests.Run(args.Length > 1 ? Path.GetFullPath(args[1]) : basePath);
@@ -345,6 +352,10 @@ internal static class Program
         {
             Console.Error.WriteLine(ex);
             return 1;
+        }
+        finally
+        {
+            if (Directory.Exists(testHistoryRoot)) Directory.Delete(testHistoryRoot, true);
         }
     }
 }

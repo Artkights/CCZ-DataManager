@@ -57,7 +57,6 @@ public sealed partial class MainForm
         "兵种" => BusinessPageKind.DetailedJobs,
         "宝物" => BusinessPageKind.Items,
         "策略" => BusinessPageKind.Strategies,
-        "人物/套装特效" => BusinessPageKind.Effects,
         "商店" => BusinessPageKind.Shop,
         "拓展数据" => BusinessPageKind.ExtendData,
         _ => null

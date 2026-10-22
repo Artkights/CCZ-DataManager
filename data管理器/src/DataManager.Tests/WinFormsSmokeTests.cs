@@ -92,7 +92,7 @@ internal static class WinFormsSmokeTests
             {
                 ("人物", BusinessPageKind.Persons), ("兵种系", BusinessPageKind.JobSeries), ("兵种", BusinessPageKind.DetailedJobs),
                 ("宝物", BusinessPageKind.Items), ("策略", BusinessPageKind.Strategies),
-                ("人物/套装特效", BusinessPageKind.Effects), ("商店", BusinessPageKind.Shop), ("拓展数据", BusinessPageKind.ExtendData)
+                ("商店", BusinessPageKind.Shop), ("拓展数据", BusinessPageKind.ExtendData)
             })
             {
                 form.SelectModuleForSmokeTest(key);

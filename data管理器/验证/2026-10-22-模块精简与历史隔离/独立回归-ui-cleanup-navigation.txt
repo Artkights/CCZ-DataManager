@@ -1,0 +1,1 @@
+UI_CLEANUP_NAVIGATION_TESTS_OK single-tab/terrain/equipment/cached-navigation/frame-isolation

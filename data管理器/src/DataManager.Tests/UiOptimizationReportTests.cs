@@ -39,10 +39,9 @@ internal static class UiOptimizationReportTests
             if (!personOnly) CheckWorkbookUi(form, root);
             var timings = new List<string> { $"Source={Path.GetFullPath(source)}; 按原始字节复制，未恢复历史快照。", $"DPI={form.DeviceDpi}; Win32DPI={GetDpiForWindow(form.Handle)}; Font={form.Font.Name}/{form.Font.SizeInPoints}; AutoScaleMode={form.AutoScaleMode}; 单位 ms；P95 使用 nearest-rank；读取与写回均使用临时副本。" };
             foreach (var header in timings) Console.WriteLine(header);
-            foreach (var module in personOnly ? new[] { "人物" } : new[] { "人物", "兵种系", "兵种", "宝物", "人物/套装特效" })
+            foreach (var module in personOnly ? new[] { "人物" } : new[] { "人物", "兵种系", "兵种", "宝物" })
             {
                 var tab = form.ModuleTabsForSmokeTest.TabPages.Cast<TabPage>().FirstOrDefault(page => Equals(page.Tag, module) || page.Text == module);
-                if (tab == null && module == "人物/套装特效") tab = form.ModuleTabsForSmokeTest.TabPages.Cast<TabPage>().First(page => page.Text.Contains("特效", StringComparison.Ordinal));
                 TestSupport.Assert(tab != null, "没有找到页面：" + module);
                 form.SelectModuleForSmokeTest((string)tab!.Tag!); Pump(200);
                 WaitForPictures(form.BusinessEditorForSmokeTest);
@@ -57,20 +56,12 @@ internal static class UiOptimizationReportTests
                             .Select(control => $"{control.GetType().Name}/{control.Name}: Bounds={control.Bounds}, Client={control.ClientSize}, Min={control.MinimumSize}, Font={control.Font.SizeInPoints}, DPI={control.DeviceDpi}" +
                                 (control is ScrollableControl scroll ? $", ScrollMin={scroll.AutoScrollMinSize}, Display={scroll.DisplayRectangle}, H={scroll.HorizontalScroll.Visible}, V={scroll.VerticalScroll.Visible}" : string.Empty)));
                     var tabs = form.BusinessEditorForSmokeTest.DetailTabs;
-                    for (var pageIndex = 0; pageIndex < (module == "人物/套装特效" ? tabs.TabCount : 1); pageIndex++)
+                    for (var pageIndex = 0; pageIndex < 1; pageIndex++)
                     {
                         tabs.SelectedIndex = pageIndex; Pump(80);
-                        if (tabs.SelectedTab!.Text == "剧本分配")
-                        {
-                            var scan = Descendants(tabs.SelectedTab).OfType<Button>().Single(button => button.Text == "扫描剧本");
-                            var watch = Stopwatch.StartNew();
-                            while (!scan.Enabled && watch.Elapsed < TimeSpan.FromSeconds(20)) { Application.DoEvents(); Thread.Sleep(10); }
-                            Descendants(tabs.SelectedTab).OfType<CheckBox>().Single(check => check.Text == "全部特效").Checked = true;
-                            Pump(100);
-                        }
                         using var bitmap = new Bitmap(form.Width, form.Height);
                         form.DrawToBitmap(bitmap, new Rectangle(Point.Empty, form.Size));
-                        var name = module.Replace('/', '_') + (module == "人物/套装特效" ? "-" + tabs.TabPages[pageIndex].Text : "");
+                        var name = module.Replace('/', '_');
                         bitmap.Save(Path.Combine(output, $"{name}-{size.Width}x{size.Height}.png"), ImageFormat.Png);
                     }
                     if (module == "人物")

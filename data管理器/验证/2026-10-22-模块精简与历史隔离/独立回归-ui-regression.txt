@@ -1,0 +1,5 @@
+UI_PERSON_SWITCH_20 total=1024ms p95=83ms
+UI_JOB_ATTRIBUTES ids=0,7,8,20,39 fields=8 reused=true isolatedWrites=8 saveReadback=False
+PERSON_EDIT_PREVIEW_REFRESH_OK 65-standard-v1: 头像/R形象编号/S形象编号; 6.6头像同步半身像；未切换人物、未保存
+PERSON_EDIT_PREVIEW_REFRESH_OK 66-standard-v1: 头像/R形象编号/S形象编号; 6.6头像同步半身像；未切换人物、未保存
+UI_INTEGRATION_TESTS_OK

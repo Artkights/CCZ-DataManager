@@ -59,7 +59,7 @@ internal static class SaveBulkPerformanceTests
                 "密集逻辑迁移丢失字段/保留字节或修改未选核心文件");
             var workspace = new ProjectWorkspace(); workspace.Open(target);
             var history = workspace.GetHistory().Single();
-            var historyBytes = new FileInfo(Path.Combine(target, ".data管理器历史", "manifest.jsonl")).Length;
+            var historyBytes = new FileInfo(Path.Combine(DataManager.Core.History.ProjectHistoryPaths.GetDataRoot(target), "manifest.jsonl")).Length;
             var journalBytes = AssertJournalChoices(result, plan, choices);
             TestSupport.Assert(history.Tables.Count == 0 && history.Files.Count == 1 && history.Files[0].Chunks.Count == 1 &&
                 history.Files[0].Chunks[0].Length == before.Length && historyBytes < 4 * 1024 * 1024,
@@ -209,7 +209,7 @@ internal static class SaveBulkPerformanceTests
             TestSupport.Assert(history.Tables.Count == cells && history.Files.Count == 1 &&
                 history.Files[0].Chunks.Sum(chunk => chunk.Length) == cells,
                 "密集保存历史缺字段或重复写入字节");
-            var historyBytes = new FileInfo(Path.Combine(root, ".data管理器历史", "manifest.jsonl")).Length;
+            var historyBytes = new FileInfo(Path.Combine(DataManager.Core.History.ProjectHistoryPaths.GetDataRoot(root), "manifest.jsonl")).Length;
             Console.WriteLine($"SAVE_DENSE fields={cells} elapsedMs={watch.Elapsed.TotalMilliseconds:F1} changedBytes={result.ChangedBytes} historyBytes={historyBytes} chunks={history.Files[0].Chunks.Count}");
             var undo = workspace.UndoSaved();
             TestSupport.Assert(undo.Success && File.ReadAllBytes(path).SequenceEqual(before),

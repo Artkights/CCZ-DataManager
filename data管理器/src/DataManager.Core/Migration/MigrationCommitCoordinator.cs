@@ -19,6 +19,7 @@ internal static class MigrationCommitCoordinator
         IMigrationResourceVerifier? resourceVerifier = null)
     {
         string? stagingRoot = null;
+        IDisposable? stagingHistoryScope = null;
         string? backupRoot = null;
         bool? historyManifestExisted = null;
         var installed = new List<PreparedFile>();
@@ -46,11 +47,11 @@ internal static class MigrationCommitCoordinator
             // the unrelated Windows system temporary drive.
             stagingRoot = ResolveInside(plan.TargetRoot, Path.Combine(".data管理器迁移临时", Guid.NewGuid().ToString("N")));
             Directory.CreateDirectory(stagingRoot);
+            stagingHistoryScope = ProjectHistoryPaths.UseProjectStorage(stagingRoot, Path.Combine(stagingRoot, ".data管理器临时历史"));
             progress?.Report(new("创建临时项目", "目标原件尚未修改"));
             // Specialized codecs may verify an already customized name pool by
             // replaying checked target history. Carry that evidence into staging,
             // then append only entries created by this migration to the real target.
-            _ = ResolveInside(plan.TargetRoot, Path.Combine(".data管理器历史", "manifest.jsonl"));
             var existingHistory = new HistoryStore().Load(plan.TargetRoot);
             var existingHistoryIds = existingHistory.Select(entry => entry.OperationId).ToHashSet(StringComparer.Ordinal);
             if (existingHistory.Count > 0) new HistoryStore().Replace(stagingRoot, existingHistory);
@@ -149,8 +150,8 @@ internal static class MigrationCommitCoordinator
             cancellationToken.ThrowIfCancellationRequested();
             progress?.Report(new("备份目标", $"{prepared.Count} 个待提交文件"));
 
-            backupRoot = ResolveInside(plan.TargetRoot, Path.Combine(".data管理器迁移备份",
-                DateTime.Now.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N")));
+            backupRoot = ProjectHistoryPaths.ResolveInside(ProjectHistoryPaths.GetMigrationRoot(plan.TargetRoot),
+                DateTime.Now.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(backupRoot);
             foreach (var pair in plan.TargetCoreFileFingerprints.Where(pair => pair.Value.Length > 0))
             {
@@ -162,7 +163,7 @@ internal static class MigrationCommitCoordinator
                 cancellationToken.ThrowIfCancellationRequested();
                 Backup(item.RelativePath);
             }
-            var historyManifest = ResolveInside(plan.TargetRoot, Path.Combine(".data管理器历史", "manifest.jsonl"));
+            var historyManifest = Path.Combine(new HistoryStore().GetRoot(plan.TargetRoot), "manifest.jsonl");
             historyManifestExisted = File.Exists(historyManifest);
             if (historyManifestExisted.Value)
                 CopyFile(historyManifest, Path.Combine(backupRoot, "history-manifest.jsonl"));
@@ -280,7 +281,7 @@ internal static class MigrationCommitCoordinator
             {
                 try
                 {
-                    var historyManifest = ResolveInside(plan.TargetRoot, Path.Combine(".data管理器历史", "manifest.jsonl"));
+                    var historyManifest = Path.Combine(new HistoryStore().GetRoot(plan.TargetRoot), "manifest.jsonl");
                     if (historyManifestExisted.Value)
                         CopyFile(Path.Combine(backupRoot!, "history-manifest.jsonl"), historyManifest);
                     else if (File.Exists(historyManifest)) File.Delete(historyManifest);
@@ -301,6 +302,7 @@ internal static class MigrationCommitCoordinator
         }
         finally
         {
+            stagingHistoryScope?.Dispose();
             foreach (var path in temporaryPaths)
                 try { if (File.Exists(path)) { MakeWritable(path); File.Delete(path); } } catch { }
             if (stagingRoot != null)
@@ -434,6 +436,14 @@ internal static class MigrationCommitCoordinator
         var drive = new DriveInfo(Path.GetPathRoot(Path.GetFullPath(plan.TargetRoot))!);
         if (drive.IsReady && drive.AvailableFreeSpace < required)
             throw new IOException($"目标磁盘可用空间不足：迁移临时项目、备份和提交预计需 {required / 1048576:N0} MB，可用 {drive.AvailableFreeSpace / 1048576:N0} MB。目标尚未提交修改。");
+        var historyDrive = new DriveInfo(Path.GetPathRoot(ProjectHistoryPaths.GetMigrationRoot(plan.TargetRoot))!);
+        if (!historyDrive.Name.Equals(drive.Name, StringComparison.OrdinalIgnoreCase))
+        {
+            var manifest = ProjectHistoryPaths.GetDataManifestForRead(plan.TargetRoot);
+            var backupRequired = checked(physicalBytes + targetBytes + (File.Exists(manifest) ? new FileInfo(manifest).Length : 0) + 64L * 1024 * 1024);
+            if (historyDrive.IsReady && historyDrive.AvailableFreeSpace < backupRequired)
+                throw new IOException($"历史记录磁盘可用空间不足：迁移备份预计需 {backupRequired / 1048576:N0} MB，可用 {historyDrive.AvailableFreeSpace / 1048576:N0} MB。目标尚未提交修改。");
+        }
     }
 
     private sealed record PreparedFile(string RelativePath, string? BeforeSha256, string AfterSha256, FileAttributes? BeforeAttributes);

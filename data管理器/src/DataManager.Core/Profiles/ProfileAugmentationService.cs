@@ -43,7 +43,7 @@ public sealed class ProfileAugmentationService
             item = AugmentExtensionGeometry(root, item);
             if (item.Key == "effect-names")
                 return item with { DataOffset = personalEffectNames.Success ? personalEffectNames.FileOffset!.Value : item.DataOffset,
-                    Capability = personalEffectNames.Success ? TableCapability.Editable : TableCapability.ReadOnly,
+                    Capability = TableCapability.ReadOnly,
                     CapabilityEvidence = personalEffectNames.Message,
                     VerificationLevel = personalEffectNames.Success ? VerificationLevel.SourceReviewed : VerificationLevel.InheritedUnverified };
             if (is66 && (item.Key is "person-r-assign" or "person-s-assign"))

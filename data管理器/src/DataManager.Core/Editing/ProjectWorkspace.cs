@@ -1,4 +1,4 @@
-﻿using System.Data;
+using System.Data;
 using System.Globalization;
 using System.Text;
 using DataManager.Core.Binary;
@@ -191,9 +191,6 @@ public sealed class ProjectWorkspace
             _ = _codecs.Get(document.Definition.RecordCodecKey).EncodeChangedField(row, field, value);
             if (document.Definition.Key == "shops" && field.ReferenceTable == "items" && !ValuesEqual(document.GetOriginal(rowIndex, field.Name), value))
                 ShopValueValidator.ValidateItem(this, Convert.ToInt32(value, CultureInfo.InvariantCulture));
-            if (SetEquipmentValidator.CategoryForField(document.Definition.Key, field.Name) != null &&
-                !ValuesEqual(document.GetOriginal(rowIndex, field.Name), value))
-                SetEquipmentValidator.Validate(this, document.Definition.Key, field.Name, Convert.ToInt32(value, CultureInfo.InvariantCulture));
             if (document.Definition.Key == EquipmentTypeCatalogService.DisplayTableKey &&
                 !ValuesEqual(document.GetOriginal(rowIndex, field.Name), value) &&
                 Convert.ToInt32(value, CultureInfo.InvariantCulture) is var displayValue &&

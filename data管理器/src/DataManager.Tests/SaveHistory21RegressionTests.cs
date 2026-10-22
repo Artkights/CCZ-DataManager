@@ -41,7 +41,7 @@ internal static class SaveHistory21RegressionTests
             var nextPower = (originalPower + 1) % 256;
             workspace.ApplyCompositeTransaction("联合保存人物与剧本", [new("persons", 0, "武力", nextPower)]);
             var checks = 0;
-            var first = workspace.Save([], [new(relative, HashService.Sha256(original), expanded, "人物/套装特效", "变长剧本测试", bytes =>
+            var first = workspace.Save([], [new(relative, HashService.Sha256(original), expanded, "文件事务测试", "变长剧本测试", bytes =>
             {
                 checks++;
                 if (!bytes.AsSpan().SequenceEqual(expanded)) throw new InvalidDataException("剧本候选复读不一致。");
@@ -49,7 +49,7 @@ internal static class SaveHistory21RegressionTests
             TestSupport.Assert(first.Saved && first.History?.SchemaVersion == "2.1" && checks >= 2,
                 "变长候选和普通表未通过统一2.1保存及写前/写后验证：" + string.Join("；", first.Messages));
             var firstHistory = first.History!;
-            TestSupport.Assert(firstHistory.Files.Count == 2 && firstHistory.Modules.Contains("人物/套装特效") &&
+            TestSupport.Assert(firstHistory.Files.Count == 2 && firstHistory.Modules.Contains("文件事务测试") &&
                 firstHistory.Files.Single(file => file.RelativePath == relative) is { WholeFileReplacement: true } replacement &&
                 replacement.BeforeLength == original.Length && replacement.FileLength == expanded.Length,
                 "2.1历史未同时记录普通表和变长文件的完整前后快照。");
@@ -57,7 +57,7 @@ internal static class SaveHistory21RegressionTests
             TestSupport.Assert(!firstData.AsSpan().SequenceEqual(originalData) && File.ReadAllBytes(scriptPath).AsSpan().SequenceEqual(expanded) && !workspace.IsDirty,
                 "联合保存后磁盘或草稿状态不一致。");
             workspace.ApplyCompositeTransaction("第二次联合保存", [new("persons", 0, "武力", (nextPower + 1) % 256)]);
-            var second = workspace.Save([], [new(relative, HashService.Sha256(expanded), shortened, "人物/套装特效", "缩短剧本测试")]);
+            var second = workspace.Save([], [new(relative, HashService.Sha256(expanded), shortened, "文件事务测试", "缩短剧本测试")]);
             TestSupport.Assert(second.Saved && File.ReadAllBytes(scriptPath).AsSpan().SequenceEqual(shortened),
                 "缩短文件的联合保存失败：" + string.Join("；", second.Messages));
             var finalData = File.ReadAllBytes(dataPath);
@@ -101,7 +101,7 @@ internal static class SaveHistory21RegressionTests
             workspace.ApplyCompositeTransaction("保留未保存人物草稿", [new("persons", 0, "武力", value)]);
             var checks = 0;
             var draft = new TestFileDraft(new("RS/atomic-save.eex", HashService.Sha256(original), candidate,
-                "人物/套装特效", "原生草稿", _ =>
+                "文件事务测试", "原生草稿", _ =>
                 {
                     checks++;
                     if (checks == 2) throw new InvalidDataException("模拟写后语义复读失败。");
@@ -146,8 +146,8 @@ internal static class SaveHistory21RegressionTests
             var before = Encoding.ASCII.GetBytes("parameter=1\r\n");
             var after = Encoding.ASCII.GetBytes("parameter=1000000\r\n");
             foreach (var path in scripts) File.WriteAllBytes(path, before);
-            var first = new TestFileDraft(new("RS/accept-first.eex", HashService.Sha256(before), after, "人物/套装特效", "先接受的草稿"));
-            var second = new TestFileDraft(new("RS/accept-second.eex", HashService.Sha256(before), after, "人物/套装特效", "接受后故障的草稿")) { FailOnAccept = true };
+            var first = new TestFileDraft(new("RS/accept-first.eex", HashService.Sha256(before), after, "文件事务测试", "先接受的草稿"));
+            var second = new TestFileDraft(new("RS/accept-second.eex", HashService.Sha256(before), after, "文件事务测试", "接受后故障的草稿")) { FailOnAccept = true };
             workspace.RegisterDraftParticipant(first); workspace.RegisterDraftParticipant(second);
             var failed = workspace.Save();
             TestSupport.Assert(!failed.Saved && failed.History?.Status == HistoryStatus.Failed &&

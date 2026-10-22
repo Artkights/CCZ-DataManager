@@ -25,7 +25,7 @@ internal static class PageLoadingTests
             Console.WriteLine($"UI_COLD_LOAD {coldLoad.Elapsed.TotalMilliseconds:F2}ms dpi={form.DeviceDpi} font={form.Font.Name}/{form.Font.SizeInPoints} boundary=initial-person-controls background-images-not-awaited");
             var panels = new Dictionary<string, BusinessEditorPanel>();
             var pages = new Dictionary<string, TabPage>();
-            var modules = new[] { "人物", "兵种系", "兵种", "宝物", "策略", "商店", "人物/套装特效", "拓展数据" };
+            var modules = new[] { "人物", "兵种系", "兵种", "宝物", "策略", "商店", "拓展数据" };
             foreach (var key in modules)
             {
                 form.SelectModuleForSmokeTest(key);

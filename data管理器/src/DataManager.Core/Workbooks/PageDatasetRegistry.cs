@@ -13,7 +13,6 @@ namespace DataManager.Core.Workbooks;
 internal sealed partial class PageDatasetRegistry(ProjectWorkspace workspace)
 {
     internal const string AccessoryKey = "native-accessory-groups";
-    internal const string ScenarioKey = "native-scenario-effects";
     private readonly RecordCodecRegistry _codecs = new();
     internal IReadOnlyList<WorkbookDataset> Build(BusinessPageKind kind)
     {
@@ -52,22 +51,8 @@ internal sealed partial class PageDatasetRegistry(ProjectWorkspace workspace)
                     groups.Select((g, i) => new WorkbookRow(Text(i), [Text(i), string.Join(',', g)])).ToArray()));
             }
         }
-        if (kind == BusinessPageKind.Effects)
-        {
-            var rows = ScenarioEffectAssignmentService.For(workspace).Read();
-            var columns = new[] { new WorkbookColumn("ID", "记录标识"), new("Source", "来源（Scene / Section / Command）"),
-                new("Kind", "分配类型"), new("Remarks", "剧本备注"), new("Diagnostic", "诊断") }
-                .Concat(ScenarioFields.Select(p => new WorkbookColumn(p.Key, p.Value, true))).ToArray();
-            result.Add(new(ScenarioKey, "剧本分配", columns, rows.Select(r => new WorkbookRow(r.Key,
-                new[] { r.Key, r.SourceDisplay, r.Kind, r.Remarks, r.Diagnostic }.Concat(ScenarioFields.Keys.Select(k =>
-                    r.Parameters.GetValueOrDefault(k, k == "Value" && r.SubFunction == 5 && r.LayoutVerified && r.CharacterSlots == 4 ? "0" : ""))).ToArray())).ToArray()));
-        }
         return result;
     }
-
-    internal static readonly IReadOnlyDictionary<string, string> ScenarioFields = new Dictionary<string, string>
-    { ["EffectId"] = "特效编号", ["Slot"] = "槽位", ["TargetId"] = "对象编号", ["ItemId"] = "专属装备", ["WeaponId"] = "套装武器",
-        ["ArmorId"] = "套装防具", ["AccessoryId"] = "套装辅助", ["Value"] = "数值" };
 
     private static bool Allowed(BusinessPageKind page, string key, string field) => (page, key) switch
     {

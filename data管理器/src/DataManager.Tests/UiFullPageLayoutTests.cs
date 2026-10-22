@@ -33,7 +33,7 @@ internal static class UiFullPageLayoutTests
                 Pump(100);
                 TestSupport.Assert(form.Size == size, $"窗口没有达到截图尺寸：{form.Size}/{size}。");
                 NumericUpDown? referenceNumeric = null;
-                foreach (var module in new[] { "人物", "兵种系", "兵种", "宝物", "策略", "人物/套装特效", "商店", "拓展数据" })
+                foreach (var module in new[] { "人物", "兵种系", "兵种", "宝物", "策略", "商店", "拓展数据" })
                 {
                     Console.WriteLine($"FULL_PAGE_SWITCH {size.Width}x{size.Height}/{module}; dirty={form.WorkspaceForSmokeTest.IsDirty}; pending={form.BusinessEditorForSmokeTest.HasPendingChanges}");
                     form.SelectModuleForSmokeTest(module); Pump(80);

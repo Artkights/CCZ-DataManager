@@ -137,9 +137,9 @@ internal static class ResourceInfrastructureTests
             "历史转换记录不应当成为可撤回的原事务");
         TestSupport.Assert(history.Redo(root, result.HistoryId!).Success && HistoryService.HashFile(path) == after,
             "统一资源历史重做没有恢复写后文件");
-        var directory = Path.Combine(root, ".data管理器形象历史");
+        var directory = DataManager.Core.History.ProjectHistoryPaths.GetImageRoot(root);
         TestSupport.Assert(Directory.EnumerateFiles(directory, "history.jsonl", SearchOption.AllDirectories).Count() == 1,
-            "统一历史不应复制或迁移原资源 journal");
+            "资源历史在本项目程序侧目录中出现重复 journal");
         File.AppendAllText(path, "外部修改");
         TestSupport.Assert(!history.Undo(root, result.HistoryId!).Success, "资源历史没有检查外部文件 SHA 冲突");
     }

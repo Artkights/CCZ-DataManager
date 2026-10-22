@@ -1,0 +1,9 @@
+WORKBOOK_TEXT_ENCODING_OK controls/literals/adjacent/overlap/malformed/all-65536-code-units
+WORKBOOK_ROUNDTRIP_OK Persons 267623 bytes
+WORKBOOK_ROUNDTRIP_OK JobSeries 43356 bytes
+WORKBOOK_ROUNDTRIP_OK DetailedJobs 115712 bytes
+WORKBOOK_ROUNDTRIP_OK Items 80889 bytes
+WORKBOOK_ROUNDTRIP_OK Shop 36752 bytes
+WORKBOOK_ROUNDTRIP_OK Strategies 143839 bytes
+PAGE_WORKBOOK_TESTS_OK
+WORKBOOK_NATIVE_TESTS_OK auxiliary+physical/extend/undo/redo

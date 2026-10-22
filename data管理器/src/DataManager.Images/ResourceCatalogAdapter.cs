@@ -233,7 +233,7 @@ public sealed partial class ResourceCatalogAdapter : IDisposable
         var descriptor = FindDescriptor(profile, resourceKey);
         EnsureMutable(descriptor);
         var plan = CreateMutationService(profile).PlanAppend(profile, descriptor, sources);
-        try { return CreateMutationService(profile).Commit(profile, plan); }
+        try { return ProjectImageHistory.Commit(profile, plan); }
         finally { Invalidate(profile.RootPath); }
     }
 
@@ -248,7 +248,7 @@ public sealed partial class ResourceCatalogAdapter : IDisposable
             .ToArray();
         if (assets.Length != sources.Count) throw new InvalidOperationException("资源选择数量与素材数量不一致。");
         var service = CreateMutationService(profile);
-        try { return service.Commit(profile, service.PlanReplace(profile, assets, sources)); }
+        try { return ProjectImageHistory.Commit(profile, service.PlanReplace(profile, assets, sources)); }
         finally { Invalidate(profile.RootPath); }
     }
 
@@ -260,7 +260,7 @@ public sealed partial class ResourceCatalogAdapter : IDisposable
         var assets = _catalogService.ReadAssets(profile, descriptor)
             .Where(asset => logicalIds.Contains(asset.LogicalId)).ToArray();
         var service = CreateMutationService(profile);
-        try { return service.Commit(profile, service.PlanDelete(profile, assets)); }
+        try { return ProjectImageHistory.Commit(profile, service.PlanDelete(profile, assets)); }
         finally { Invalidate(profile.RootPath); }
     }
 
@@ -580,8 +580,7 @@ public sealed partial class ResourceCatalogAdapter : IDisposable
 
     private static ImageMutationService CreateMutationService(ProjectProfile profile)
     {
-        var historyRoot = Path.Combine(profile.RootPath, ".data管理器形象历史");
-        return new ImageMutationService(new HistoryService(historyRoot));
+        return new ImageMutationService(ProjectImageHistory.Create(profile));
     }
 }
 

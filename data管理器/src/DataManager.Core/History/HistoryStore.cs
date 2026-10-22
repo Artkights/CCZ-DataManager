@@ -14,11 +14,11 @@ public sealed class HistoryStore
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
-    public string GetRoot(string projectRoot) => Path.Combine(projectRoot, ".data管理器历史");
+    public string GetRoot(string projectRoot) => ProjectHistoryPaths.GetDataRoot(projectRoot);
 
     public IReadOnlyList<HistoryEntry> Load(string projectRoot)
     {
-        var path = Path.Combine(GetRoot(projectRoot), "manifest.jsonl");
+        var path = ProjectHistoryPaths.GetDataManifestForRead(projectRoot);
         if (!File.Exists(path)) return [];
         var entries = new List<HistoryEntry>();
         foreach (var line in File.ReadLines(path, Encoding.UTF8))
@@ -72,8 +72,9 @@ public sealed class HistoryStore
                 // Older records can contain large base64 snapshots. Preserve
                 // their lines instead of decoding every snapshot and then
                 // serializing the entire history for one new/status record.
-                if (File.Exists(path))
-                    foreach (var line in File.ReadLines(path, Encoding.UTF8))
+                var source = ProjectHistoryPaths.GetDataManifestForRead(projectRoot);
+                if (File.Exists(source))
+                    foreach (var line in File.ReadLines(source, Encoding.UTF8))
                     {
                         if (updateExisting && !replaced && HasOperationId(line, entry.OperationId))
                         { output.WriteLine(replacement); replaced = true; }
@@ -176,7 +177,7 @@ public sealed class HistoryStore
     {
         foreach (var file in files)
         {
-            var path = Path.Combine(projectRoot, file.RelativePath);
+            var path = ProjectHistoryPaths.ResolveInside(projectRoot, file.RelativePath);
             if (!File.Exists(path)) throw new IOException($"历史记录冲突：{file.RelativePath} 不存在。");
             var expected = useNewBytes ? file.BeforeHash : file.AfterHash;
             if (!string.Equals(HashService.Sha256(path), expected, StringComparison.OrdinalIgnoreCase))

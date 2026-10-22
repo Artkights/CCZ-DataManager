@@ -59,9 +59,10 @@ internal static class UnifiedHistoryTests
                 TestSupport.Assert(unified.Restore(unified.FindDefault(true)!, true).Success, "连续重做未按保存依赖顺序恢复");
             TestSupport.Assert(HashService.Sha256(dataPath) == savedData && HashService.Sha256(imagePath) == savedImage,
                 "统一历史重做没有恢复两类来源");
-            TestSupport.Assert(File.Exists(Path.Combine(root, ".data管理器历史", "manifest.jsonl")) &&
-                Directory.EnumerateFiles(Path.Combine(root, ".data管理器形象历史"), "history.jsonl", SearchOption.AllDirectories).Count() == 1,
-                "统一历史不应迁移或复制两套底层记录");
+            TestSupport.Assert(File.Exists(Path.Combine(DataManager.Core.History.ProjectHistoryPaths.GetDataRoot(root), "manifest.jsonl")) &&
+                Directory.EnumerateFiles(DataManager.Core.History.ProjectHistoryPaths.GetImageRoot(root), "history.jsonl", SearchOption.AllDirectories).Count() == 1 &&
+                !Directory.Exists(Path.Combine(root, ".data管理器历史")) && !Directory.Exists(Path.Combine(root, ".data管理器形象历史")),
+                "统一历史没有保存在程序侧的项目独立目录，或重复写入旧目录");
             File.AppendAllText(imagePath, "外部改动");
             TestSupport.Assert(!unified.Restore(unified.List().Single(entry => entry.Source == "形象" && entry.CanUndo), false).Success &&
                 HashService.Sha256(dataPath) == savedData, "统一历史绕过了资源 SHA 冲突检查");

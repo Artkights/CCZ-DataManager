@@ -89,7 +89,7 @@ internal static class FixtureSnapshotTests
         {
             var entry = Edit(source, ("Ekd5.exe", 100, (byte)1));
             new HistoryStore().Replace(source, [entry]);
-            File.AppendAllText(Path.Combine(source, ".data管理器历史", "manifest.jsonl"), "{malformed\n");
+            File.AppendAllText(ProjectHistoryPaths.GetDataManifestForRead(source), "{malformed\n");
             AssertRejected(source, "损坏JSON行不能被宽容跳过");
         });
         WithSource(known, source =>
@@ -174,12 +174,22 @@ internal static class FixtureSnapshotTests
         => Known65FixtureSnapshot.CoreNames.ToDictionary(name => name, name => File.ReadAllBytes(Path.Combine(root, name)), StringComparer.OrdinalIgnoreCase);
 
     private static Dictionary<string, string> Hashes(string root)
-        => Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories).ToDictionary(path => Path.GetRelativePath(root, path), HashService.Sha256, StringComparer.OrdinalIgnoreCase);
+    {
+        var hashes = Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+            .ToDictionary(path => Path.GetRelativePath(root, path), HashService.Sha256, StringComparer.OrdinalIgnoreCase);
+        var manifest = Path.Combine(ProjectHistoryPaths.GetDataRoot(root), "manifest.jsonl");
+        if (File.Exists(manifest)) hashes["__current-history__"] = HashService.Sha256(manifest);
+        return hashes;
+    }
 
     private static Dictionary<string, string> EvidenceHashes(string root)
-        => Known65FixtureSnapshot.CoreNames.Append(Path.Combine(".data管理器历史", "manifest.jsonl"))
-            .ToDictionary(name => name, name => File.Exists(Path.Combine(root, name)) ? HashService.Sha256(Path.Combine(root, name)) : string.Empty,
-                StringComparer.OrdinalIgnoreCase);
+    {
+        var paths = Known65FixtureSnapshot.CoreNames.ToDictionary(name => name, name => Path.Combine(root, name), StringComparer.OrdinalIgnoreCase);
+        paths["__legacy-history__"] = ProjectHistoryPaths.GetLegacyDataManifest(root);
+        paths["__current-history__"] = Path.Combine(ProjectHistoryPaths.GetDataRoot(root), "manifest.jsonl");
+        return paths.ToDictionary(pair => pair.Key,
+            pair => File.Exists(pair.Value) ? HashService.Sha256(pair.Value) : string.Empty, StringComparer.OrdinalIgnoreCase);
+    }
 
     private static void AssertHashes(string root, IReadOnlyDictionary<string, string> expected, string reason)
     {

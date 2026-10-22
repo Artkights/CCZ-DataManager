@@ -21,9 +21,9 @@ public sealed class ProfileRegistry
     {
     }
 
-    internal ProfileRegistry(bool useLegacyExtensionManifest)
+    internal ProfileRegistry(bool useLegacyExtensionManifest, bool usePreSimplificationManifest = false)
     {
-        _configs = LoadEmbeddedConfigs(useLegacyExtensionManifest);
+        _configs = LoadEmbeddedConfigs(useLegacyExtensionManifest, usePreSimplificationManifest);
         Profiles = _configs.Values
             .OrderBy(config => config.Version, StringComparer.Ordinal)
             .Select(ToProfile)
@@ -85,12 +85,12 @@ public sealed class ProfileRegistry
         };
     }
 
-    private Dictionary<string, ProfileConfig> LoadEmbeddedConfigs(bool useLegacyExtensionManifest)
+    private Dictionary<string, ProfileConfig> LoadEmbeddedConfigs(bool useLegacyExtensionManifest, bool usePreSimplificationManifest)
     {
         var result = new Dictionary<string, ProfileConfig>(StringComparer.OrdinalIgnoreCase);
         var assembly = typeof(ProfileRegistry).Assembly;
-        var suffix65 = useLegacyExtensionManifest ? "ccz-6.5.extenddata-v1.json" : "ccz-6.5.json";
-        var suffix66 = useLegacyExtensionManifest ? "ccz-6.6.extenddata-v1.json" : "ccz-6.6.json";
+        var suffix65 = usePreSimplificationManifest ? "ccz-6.5.before-simplification.json" : useLegacyExtensionManifest ? "ccz-6.5.extenddata-v1.json" : "ccz-6.5.json";
+        var suffix66 = usePreSimplificationManifest ? "ccz-6.6.before-simplification.json" : useLegacyExtensionManifest ? "ccz-6.6.extenddata-v1.json" : "ccz-6.6.json";
         var names = assembly.GetManifestResourceNames()
             .Where(name => name.EndsWith(suffix65, StringComparison.OrdinalIgnoreCase) || name.EndsWith(suffix66, StringComparison.OrdinalIgnoreCase))
             .OrderBy(name => name, StringComparer.Ordinal)

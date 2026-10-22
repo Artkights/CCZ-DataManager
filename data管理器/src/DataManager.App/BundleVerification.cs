@@ -9,6 +9,7 @@ using System.Text.Json;
 using DataManager.Core.Binary;
 using DataManager.Core.Domain;
 using DataManager.Core.Editing;
+using DataManager.Core.History;
 using DataManager.Core.Migration;
 using DataManager.Core.Profiles;
 using DataManager.Core.Workbooks;
@@ -133,6 +134,30 @@ internal static class BundleVerification
                         workspace.ActiveProfile.ProfileId, workspace.ActiveProfile.VariantId,
                         workspace.ActiveProfile.LayoutRevision, Tables = workspace.Definitions.Count,
                         ReadableTables = workspace.Documents.Count, workspace.IsDirty
+                    };
+                });
+                Check("精简模块与程序侧历史目录", () =>
+                {
+                    var workspace = new ProjectWorkspace();
+                    workspace.Open(root);
+                    if (workspace.ActiveProfile.Modules.Any(module => module.Key == "人物/套装特效") ||
+                        workspace.Definitions.Any(table => table.Key is "class-effects" or "personal-effects" or "effect-descriptions"))
+                        throw new InvalidDataException("发布程序仍包含已删除模块的入口或专用物理表。");
+                    var storage = ProjectHistoryPaths.GetProjectStorageRoot(root);
+                    var expectedParent = Path.Combine(AppContext.BaseDirectory,
+                        new DirectoryInfo(ProjectHistoryPaths.NormalizeProjectRoot(root)).Name + "_历史记录");
+                    if (!Path.GetDirectoryName(storage)!.Equals(Path.GetFullPath(expectedParent), StringComparison.OrdinalIgnoreCase))
+                        throw new InvalidDataException("历史目录没有使用 EXE 同级的项目名称目录。");
+                    return new
+                    {
+                        Modules = workspace.ActiveProfile.Modules.Select(module => module.Key).ToArray(),
+                        ProjectName = new DirectoryInfo(root).Name,
+                        HistoryRoot = storage,
+                        DataHistory = ProjectHistoryPaths.GetDataRoot(root),
+                        ImageHistory = ProjectHistoryPaths.GetImageRoot(root),
+                        MigrationBackups = ProjectHistoryPaths.GetMigrationRoot(root),
+                        BaseDirectory = AppContext.BaseDirectory,
+                        WorkingDirectory = Environment.CurrentDirectory
                     };
                 });
                 Check("业务工作簿依赖与只读往返", () =>

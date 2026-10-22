@@ -22,7 +22,6 @@ public sealed class BusinessDataService
             [BusinessPageKind.JobSeries] = ["job-series", "job-series-terrain", "job-series-move-cost", "job-series-counter", "job-series-attributes", "job-series-accessory-groups"],
             [BusinessPageKind.DetailedJobs] = ["detailed-jobs", "detailed-job-description", "detailed-job-growth", "detailed-job-penetration", "strategies"],
             [BusinessPageKind.Items] = ["items-low", "items-high", "items-extended", "item-description-low", "item-description-high", "item-description-extended", "item-effect-names-low", "item-effect-names-high", "item-effect-names-66", "detailed-job-growth", "equipment-type-names", "equipment-type-display"],
-            [BusinessPageKind.Effects] = ["class-effects", "personal-effects", "effect-names", "effect-descriptions"],
             [BusinessPageKind.Shop] = ["scenario-names", "shops"],
             [BusinessPageKind.Strategies] = ["strategies", "strategy-description", "strategy-extension", "strategy-damage-type", "strategy-damage-ratio", "strategy-hit-rate", "strategy-learning", "strategy-battle-ai", "strategy-training-ai", "strategy-terrain-availability", "strategy-big-animation", "strategy-small-animation"],
             [BusinessPageKind.ExtendData] = ["effect-archive", "effect-messages", "strategy-study-extended", "forge"],
@@ -40,7 +39,6 @@ public sealed class BusinessDataService
     public BusinessPage LoadJobSeries() => LoadPage(BusinessPageKind.JobSeries);
     public BusinessPage LoadDetailedJobs() => LoadPage(BusinessPageKind.DetailedJobs);
     public BusinessPage LoadItems() => LoadPage(BusinessPageKind.Items);
-    public BusinessPage LoadEffects() => LoadPage(BusinessPageKind.Effects);
     public BusinessPage LoadShop() => LoadPage(BusinessPageKind.Shop);
     public BusinessPage LoadStrategies() => LoadPage(BusinessPageKind.Strategies);
     public BusinessPage LoadExtendData() => LoadPage(BusinessPageKind.ExtendData);
@@ -200,7 +198,7 @@ public sealed class BusinessDataService
     private static bool IsPrimaryTable(string key)
         => key switch
         {
-            "persons" or "job-series" or "detailed-jobs" or "strategies" or "items-low" or "items-high" or "items-extended" or "shops" or "class-effects" or "effect-archive" or "forge" => true,
+            "persons" or "job-series" or "detailed-jobs" or "strategies" or "items-low" or "items-high" or "items-extended" or "shops" or "effect-archive" or "forge" => true,
             _ => false
         };
 
@@ -210,7 +208,6 @@ public sealed class BusinessDataService
         BusinessPageKind.JobSeries => key == "job-series",
         BusinessPageKind.DetailedJobs => key == "detailed-jobs",
         BusinessPageKind.Items => key is "items-low" or "items-high" or "items-extended",
-        BusinessPageKind.Effects => key == "class-effects",
         BusinessPageKind.Shop => key == "shops",
         BusinessPageKind.Strategies => key == "strategies",
         BusinessPageKind.ExtendData => key == "effect-archive",
@@ -226,7 +223,6 @@ public sealed class BusinessDataService
         BusinessPageKind.JobSeries => "兵种系",
         BusinessPageKind.DetailedJobs => "兵种",
         BusinessPageKind.Items => "宝物",
-        BusinessPageKind.Effects => "特效",
         BusinessPageKind.Shop => "商店",
         BusinessPageKind.Strategies => "策略",
         BusinessPageKind.ExtendData => "拓展数据",

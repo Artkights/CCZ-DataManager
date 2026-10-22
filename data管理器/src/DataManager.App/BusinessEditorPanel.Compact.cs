@@ -93,7 +93,6 @@ public sealed partial class BusinessEditorPanel
             BusinessPageKind.Items => ["items-low", "items-high", "items-extended"],
             BusinessPageKind.Strategies => ["strategies"],
             BusinessPageKind.Shop => ["scenario-names"],
-            BusinessPageKind.Effects => ["effect-names"],
             _ => Array.Empty<string>()
         };
         return keys.Where(_workspace.Documents.ContainsKey).SelectMany(key => _lookup.Options(_workspace.GetDocument(key)))
@@ -110,7 +109,6 @@ public sealed partial class BusinessEditorPanel
             case BusinessPageKind.Items: BuildItemPage(); return true;
             case BusinessPageKind.Strategies: BuildStrategyPage(); return true;
             case BusinessPageKind.Shop: BuildShopPage(); return true;
-            case BusinessPageKind.Effects: BuildEffectsPage(); return true;
             default: return false;
         }
     }

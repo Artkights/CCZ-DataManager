@@ -253,98 +253,6 @@
           ]
         },
         {
-          "key": "class-effects",
-          "rowSize": 16,
-          "recordCodecKey": "effect-66-16-v1",
-          "verificationLevel": "VariantVerified",
-          "fields": [
-            {
-              "name": "武将1",
-              "offset": 0,
-              "size": 2,
-              "kind": "UInt16",
-              "maximum": 65535,
-              "referenceTable": "persons"
-            },
-            {
-              "name": "武将1特效值",
-              "offset": 2,
-              "size": 1,
-              "kind": "UInt8"
-            },
-            {
-              "name": "武将2",
-              "offset": 3,
-              "size": 2,
-              "kind": "UInt16",
-              "maximum": 65535,
-              "referenceTable": "persons"
-            },
-            {
-              "name": "武将2特效值",
-              "offset": 5,
-              "size": 1,
-              "kind": "UInt8"
-            },
-            {
-              "name": "武将3",
-              "offset": 6,
-              "size": 2,
-              "kind": "UInt16",
-              "maximum": 65535,
-              "referenceTable": "persons"
-            },
-            {
-              "name": "武将3特效值",
-              "offset": 8,
-              "size": 1,
-              "kind": "UInt8"
-            },
-            {
-              "name": "武将4",
-              "offset": 9,
-              "size": 2,
-              "kind": "UInt16",
-              "maximum": 65535,
-              "referenceTable": "persons"
-            },
-            {
-              "name": "武将4特效值",
-              "offset": 11,
-              "size": 1,
-              "kind": "UInt8"
-            },
-            {
-              "name": "兵种1",
-              "offset": 12,
-              "size": 1,
-              "kind": "UInt8",
-              "maximum": 255,
-              "referenceTable": "detailed-jobs"
-            },
-            {
-              "name": "兵种1特效值",
-              "offset": 13,
-              "size": 1,
-              "kind": "UInt8"
-            },
-            {
-              "name": "兵种2",
-              "offset": 14,
-              "size": 1,
-              "kind": "UInt8",
-              "maximum": 255,
-              "referenceTable": "detailed-jobs"
-            },
-            {
-              "name": "兵种2特效值",
-              "offset": 15,
-              "size": 1,
-              "kind": "UInt8"
-            }
-          ]
-        },
-        {
           "key": "person-retreat-quotes",
           "offset": 491600,
           "verificationLevel": "VariantVerified"
@@ -399,12 +307,6 @@
         {
           "key": "items-high",
           "recordCodecKey": "item-65-17-v1",
-          "verificationLevel": "VariantVerified"
-        },
-        {
-          "key": "class-effects",
-          "rowSize": 8,
-          "recordCodecKey": "effect-65-8-v1",
           "verificationLevel": "VariantVerified"
         },
         {
@@ -596,98 +498,6 @@
           ]
         },
         {
-          "key": "class-effects",
-          "rowSize": 16,
-          "recordCodecKey": "effect-66-16-v1",
-          "verificationLevel": "SourceReviewed",
-          "fields": [
-            {
-              "name": "武将1",
-              "offset": 0,
-              "size": 2,
-              "kind": "UInt16",
-              "maximum": 65535,
-              "referenceTable": "persons"
-            },
-            {
-              "name": "武将1特效值",
-              "offset": 2,
-              "size": 1,
-              "kind": "UInt8"
-            },
-            {
-              "name": "武将2",
-              "offset": 3,
-              "size": 2,
-              "kind": "UInt16",
-              "maximum": 65535,
-              "referenceTable": "persons"
-            },
-            {
-              "name": "武将2特效值",
-              "offset": 5,
-              "size": 1,
-              "kind": "UInt8"
-            },
-            {
-              "name": "武将3",
-              "offset": 6,
-              "size": 2,
-              "kind": "UInt16",
-              "maximum": 65535,
-              "referenceTable": "persons"
-            },
-            {
-              "name": "武将3特效值",
-              "offset": 8,
-              "size": 1,
-              "kind": "UInt8"
-            },
-            {
-              "name": "武将4",
-              "offset": 9,
-              "size": 2,
-              "kind": "UInt16",
-              "maximum": 65535,
-              "referenceTable": "persons"
-            },
-            {
-              "name": "武将4特效值",
-              "offset": 11,
-              "size": 1,
-              "kind": "UInt8"
-            },
-            {
-              "name": "兵种1",
-              "offset": 12,
-              "size": 1,
-              "kind": "UInt8",
-              "maximum": 255,
-              "referenceTable": "detailed-jobs"
-            },
-            {
-              "name": "兵种1特效值",
-              "offset": 13,
-              "size": 1,
-              "kind": "UInt8"
-            },
-            {
-              "name": "兵种2",
-              "offset": 14,
-              "size": 1,
-              "kind": "UInt8",
-              "maximum": 255,
-              "referenceTable": "detailed-jobs"
-            },
-            {
-              "name": "兵种2特效值",
-              "offset": 15,
-              "size": 1,
-              "kind": "UInt8"
-            }
-          ]
-        },
-        {
           "key": "person-retreat-quotes",
           "offset": 491600,
           "verificationLevel": "VariantVerified"
@@ -809,14 +619,6 @@
     {
       "key": "strategy-training-ai",
       "verificationLevel": "VariantVerified"
-    },
-    {
-      "key": "class-effects",
-      "verificationLevel": "VariantVerified"
-    },
-    {
-      "key": "personal-effects",
-      "verificationLevel": "InheritedUnverified"
     },
     {
       "key": "item-effect-names-low",

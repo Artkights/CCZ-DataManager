@@ -16,9 +16,6 @@ internal static class WorkbookNativeTests
         var root = TestSupport.CreateCoreCopy(source);
         try
         {
-            Directory.CreateDirectory(Path.Combine(root, "RS"));
-            var scenario = Path.Combine(root, "RS", "系统分配.eex"); var originalBytes = Scenario();
-            File.WriteAllBytes(scenario, originalBytes);
             // Exercise optional native datasets on a profile with actual physical files.
             File.WriteAllBytes(Path.Combine(root, "Effect.e5"), Enumerable.Repeat((byte)255, 3 * 1024).ToArray());
             File.WriteAllBytes(Path.Combine(root, "Effectmsg.e5"), new byte[256 * 8]);
@@ -58,28 +55,7 @@ internal static class WorkbookNativeTests
             TestSupport.Assert(groups.HasPendingChanges && Convert.ToString(job.Data.Rows[0]["名称"]) == "测系", "原生分组不能整次重做");
             workspace.Commands.Undo();
 
-            var service = ScenarioEffectAssignmentService.For(workspace); var entry = service.Scan().Single();
-            workbook.Export(BusinessPageKind.Effects, path);
-            Modify(path, "native-scenario-effects", "TargetId", "*12345");
-            var descriptions = workspace.GetDocument("effect-descriptions"); var description = descriptions.Definition.Fields.First(f => f.Policy == DataManager.Core.Models.FieldPolicy.Editable).Name;
-            var oldDescription = Convert.ToString(descriptions.Data.Rows[0][description]);
-            Modify(path, "effect-descriptions", description, "工作簿特效说明");
-            preview = workbook.PreviewImport(BusinessPageKind.Effects, path);
-            TestSupport.Assert(preview.ChangedCells == 2 && !workspace.IsDirty, "剧本工作簿预检改变了草稿");
-            workbook.ApplyImport(preview);
-            TestSupport.Assert(service.HasPendingChanges && service.Read().Single().Parameters["TargetId"] == "*12345", "剧本工作簿参数未进入统一草稿");
-            workspace.Commands.Undo();
-            TestSupport.Assert(!service.HasPendingChanges && Convert.ToString(descriptions.Data.Rows[0][description]) == oldDescription && !workspace.IsDirty,
-                "RS与说明的工作簿导入不能一次撤回");
-            workspace.Commands.Redo();
-            var save = workspace.Save();
-            TestSupport.Assert(save.Saved && save.History?.SchemaVersion == "2.1" && !workspace.IsDirty, "工作簿RS草稿没有统一保存：" + string.Join(';', save.Messages));
-            TestSupport.Assert(service.Read().Single().Remarks == entry.Remarks && File.ReadAllBytes(scenario).Length > originalBytes.Length,
-                "RS工作簿变长写回改变备注或未插入变量");
-            var undo = workspace.UndoSaved();
-            TestSupport.Assert(undo.Success && File.ReadAllBytes(scenario).SequenceEqual(originalBytes), "工作簿变长RS历史不能逐字恢复");
-            TestSupport.Assert(workspace.RedoSaved().Success && service.Read().Single().Parameters["TargetId"] == "*12345", "工作簿变长RS历史不能重做");
-            Console.WriteLine("WORKBOOK_NATIVE_TESTS_OK auxiliary+physical/RS+description/extend/undo/redo/save/history");
+            Console.WriteLine("WORKBOOK_NATIVE_TESTS_OK auxiliary+physical/extend/undo/redo");
         }
         finally { Directory.Delete(root, true); }
     }
@@ -98,14 +74,5 @@ internal static class WorkbookNativeTests
         var column = new string(cell.CellReference!.Value!.TakeWhile(char.IsLetter).ToArray());
         cell = rows.Single(r => r.RowIndex?.Value == 3).Elements<Cell>().Single(c => c.CellReference == column + "3");
         cell.RemoveAllChildren(); cell.DataType = CellValues.InlineString; cell.InlineString = new InlineString(new Text(value)); sheet.Worksheet.Save();
-    }
-    private static byte[] Scenario()
-    {
-        static byte[] U16(int n) { var b = new byte[2]; BinaryPrimitives.WriteUInt16LittleEndian(b, (ushort)n); return b; }
-        static byte[] I32(int n) { var b = new byte[4]; BinaryPrimitives.WriteInt32LittleEndian(b, n); return b; }
-        static byte[] Concat(params byte[][] parts) => parts.SelectMany(p => p).ToArray();
-        var command = Concat(U16(0x72), U16(4), I32(5), U16(5), EncodingService.GameEncoding.GetBytes("1\r\n0\r\n1\r\n工作簿原始备注\r\n保留第二行"), [0]);
-        var body = Concat(U16(0), U16(command.Length), command);
-        return Concat([69, 69, 88, 0, 1, 2, 3, 4, 5, 6], I32(14), U16(1), U16(body.Length), body);
     }
 }

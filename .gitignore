@@ -8,3 +8,8 @@
 **/.data管理器历史/
 **/.data管理器形象历史/
 **/.image-manager-history/
+/publish/
+**/发布*/
+**/_publish*/
+**/验证/**/单文件隔离/
+**/验证/**/*.xlsx

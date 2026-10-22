@@ -187,8 +187,6 @@ public sealed class PageWorkbookService(ProjectWorkspace workspace)
         workspace.ApplyCompositeTransaction("导入工作簿物理字段", physical);
         var groups = GroupChanges(preview.Proposals);
         if (groups != null) AccessoryGroupDraftService.For(workspace).Apply(groups);
-        var updates = ScenarioChanges(preview.Proposals);
-        if (updates.Count > 0) ScenarioEffectAssignmentService.For(workspace).ApplyUpdates(updates);
         group.Complete();
         return preview.ChangedCells;
     }
@@ -207,8 +205,6 @@ public sealed class PageWorkbookService(ProjectWorkspace workspace)
             var preview = new AccessoryJobGroupService().Preview(workspace, groups);
             if (!preview.CanWrite) throw new InvalidDataException(string.Join(Environment.NewLine, preview.Diagnostics));
         }
-        var updates = ScenarioChanges(proposals);
-        if (updates.Count > 0) ScenarioEffectAssignmentService.For(workspace).ValidateUpdates(updates);
     }
     private IReadOnlyList<IReadOnlyList<int>>? GroupChanges(IReadOnlyList<WorkbookProposal> proposals)
     {
@@ -223,9 +219,6 @@ public sealed class PageWorkbookService(ProjectWorkspace workspace)
         }
         return groups;
     }
-    private static IReadOnlyList<ScenarioEffectUpdate> ScenarioChanges(IReadOnlyList<WorkbookProposal> proposals)
-        => proposals.Where(p => p.Dataset == PageDatasetRegistry.ScenarioKey).GroupBy(p => p.Id)
-            .Select(g => new ScenarioEffectUpdate(g.Key, g.ToDictionary(p => p.Field, p => p.After, StringComparer.Ordinal))).ToArray();
     private static bool Equal(string a, string b, bool numeric)
         => a == b || numeric && long.TryParse(a, out var x) && long.TryParse(b, out var y) && x == y;
 }

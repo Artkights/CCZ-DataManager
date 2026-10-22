@@ -30,15 +30,6 @@ internal static class ProfileWriteTests
             TestSupport.Assert(after[rowOffset + 0x14] == iconBefore, "6.5 物品图标字节被改写");
             TestSupport.Assert(Differences(before, after).All(index => index >= rowOffset && index < rowOffset + 17), "6.5 物品名称修改越过 17 字节范围");
 
-            var effects = workspace.GetDocument("class-effects");
-            var effectBefore = File.ReadAllBytes(effects.FilePath);
-            var effectOffset = checked((int)effects.Definition.DataOffset + 7);
-            var oldValue = Convert.ToInt32(effects.Data.Rows[0]["特效值"]);
-            effects.Data.Rows[0]["特效值"] = oldValue == 255 ? 254 : oldValue + 1;
-            TestSupport.Assert(workspace.Save().Saved, "6.5 8 字节特效分配写入失败");
-            var effectAfter = File.ReadAllBytes(effects.FilePath);
-            TestSupport.Assert(Differences(effectBefore, effectAfter).SequenceEqual([effectOffset]), "6.5 特效值没有只写 row+7");
-            RunJobSentinelWrite(workspace, "兵种", 6);
             RunAnimationWrite(workspace);
             RunIconWriteAndCsv(workspace, 0x14);
         }
@@ -82,18 +73,6 @@ internal static class ProfileWriteTests
             TestSupport.Assert(markerAfter[markerOffset + 0x11] != markerBefore[markerOffset + 0x11], "6.6 辅助/道具特效没有写入 row+0x11");
             TestSupport.Assert(markerAfter[markerOffset + 0x12] == markerBefore[markerOffset + 0x12], "6.6 辅助/道具类别标记被意外修改");
 
-            var effects = workspace.GetDocument("class-effects");
-            var effectBefore = File.ReadAllBytes(effects.FilePath);
-            var effectOffset = checked((int)effects.Definition.DataOffset);
-            var oldToken = Convert.ToInt32(effects.Data.Rows[0]["武将1"]);
-            var newToken = oldToken == 65535 ? 1025 : 65535;
-            effects.Data.Rows[0]["武将1"] = newToken;
-            TestSupport.Assert(workspace.Save().Saved, "6.6 16 字节特效分配写入失败");
-            var effectAfter = File.ReadAllBytes(effects.FilePath);
-            TestSupport.Assert(BitConverter.ToUInt16(effectAfter, effectOffset) == newToken, "6.6 UInt16 人物 token 写入错误");
-            TestSupport.Assert(Differences(effectBefore, effectAfter).All(index => index >= effectOffset && index < effectOffset + 2), "6.6 人物 token 写入越过 row+0..1");
-
-            RunJobSentinelWrite(workspace, "兵种1", 12);
             RunAnimationWrite(workspace);
             RunIconWriteAndCsv(workspace, 0x0F);
 
@@ -153,18 +132,6 @@ internal static class ProfileWriteTests
             TestSupport.Assert(workspace.ImportCsv(document, csv).ChangedCells == rows.Length, "导出的图标CSV不能恢复原始逻辑编号");
             TestSupport.Assert(workspace.Save().Saved && File.ReadAllBytes(document.FilePath).SequenceEqual(after), "图标CSV回导写入与首次保存不一致");
         }
-    }
-
-    private static void RunJobSentinelWrite(ProjectWorkspace workspace, string fieldName, int fieldOffset)
-    {
-        var document = workspace.GetDocument("class-effects");
-        var row = Enumerable.Range(0, document.Data.Rows.Count).First(index => Convert.ToInt32(document.Data.Rows[index][fieldName]) != 255);
-        var before = File.ReadAllBytes(document.FilePath);
-        var absolute = checked((int)(document.Definition.DataOffset + row * document.Definition.RowSize + fieldOffset));
-        document.Data.Rows[row][fieldName] = 255;
-        TestSupport.Assert(workspace.Save().Saved, "兵种特效的 255 空/不限哨兵必须能够写入");
-        var after = File.ReadAllBytes(document.FilePath);
-        TestSupport.Assert(after[absolute] == 255 && Differences(before, after).SequenceEqual([absolute]), "兵种特效哨兵写入越过目标字节");
     }
 
     private static IEnumerable<int> Differences(byte[] before, byte[] after)

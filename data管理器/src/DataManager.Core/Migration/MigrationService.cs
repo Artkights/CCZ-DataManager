@@ -95,7 +95,6 @@ public sealed class MigrationService
                     continue;
                 }
 
-                if (ClassEffectMigrationMapper.TryMap(target, sourceDocument, targetDocument, sourceRow, targetRow, changes)) continue;
                 if (AtomicItemMigrationMapper.TryMap(source, target, sourceDocument, targetDocument, sourceRow, targetRow, changes)) continue;
                 if (ItemMigrationMapper.Prepare(source, target, sourceDocument, targetDocument, sourceRow, targetRow, changes, out var mappedItemValues)) continue;
 
