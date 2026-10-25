@@ -2,6 +2,7 @@ using System.Data;
 using System.Globalization;
 using DataManager.Core.Binary;
 using DataManager.Core.Editing;
+using DataManager.Core.Domain;
 using DataManager.Core.Models;
 using DataManager.Core.Profiles;
 
@@ -128,7 +129,7 @@ public sealed class MigrationService
                     var targetRowIndex = targetDocument.Data.Rows.IndexOf(targetRow);
                     try
                     {
-                        target.ValidateCellValue(targetDocument, targetRowIndex, targetField.Name, sourceValue);
+                        target.ValidateCellValue(targetDocument, targetRowIndex, targetField.Name, sourceValue, validateEquipment: false);
                         if (key == "forge" && targetField.Name == "材料项数" && Convert.ToInt32(sourceValue, CultureInfo.InvariantCulture) > 8)
                             throw new InvalidDataException("材料项数必须在 0..8 范围内。");
                         var alias = MigrationFieldIsolation.FindConflict(target, targetDocument, targetRowIndex, targetField, sourceValue);
@@ -150,6 +151,28 @@ public sealed class MigrationService
             }
         }
 
+        // A selected item type and its person reference form one final draft.
+        // Preview with the compatible proposed item fields, then Apply checks
+        // again with only the user's actual selection before writing.
+        var pendingFields = changes.Where(change => change.Kind is MigrationChangeKind.Changed or MigrationChangeKind.Added)
+            .Where(change => targetDocuments.ContainsKey(change.TableKey))
+            .Select(change => new CompositeCellEdit(change.TableKey, change.Id - targetDocuments[change.TableKey].Definition.BeginId,
+                change.FieldName, change.SourceValue)).ToArray();
+        for (var index = 0; index < changes.Count; index++)
+        {
+            var change = changes[index];
+            if (change.TableKey != "persons" || change.Kind is not (MigrationChangeKind.Changed or MigrationChangeKind.Added) ||
+                !PersonEquipmentService.CategoryForField(change.FieldName).HasValue) continue;
+            try
+            {
+                var document = targetDocuments[change.TableKey];
+                target.ValidateCellValue(document, change.Id - document.Definition.BeginId, change.FieldName, change.SourceValue, pendingFields);
+            }
+            catch (Exception ex) when (ex is ArgumentException or InvalidDataException or FormatException or OverflowException or InvalidOperationException)
+            {
+                changes[index] = change with { Kind = MigrationChangeKind.Incompatible, Reason = "目标默认装备无法接受源值：" + ex.Message };
+            }
+        }
         SpecialStructureMigrationDiagnostics.Add(source, target, changes);
         ExtendedItemMigrationMapper.Add(source, target, changes);
 
@@ -298,7 +321,7 @@ public sealed class MigrationService
                         continue;
                     }
                 }
-                target.ValidateCellValue(document, rowIndex, change.FieldName, change.SourceValue);
+                target.ValidateCellValue(document, rowIndex, change.FieldName, change.SourceValue, validateEquipment: false);
                 var targetField = TableFieldIndex.Find(document.Definition, change.FieldName)
                     ?? throw new InvalidDataException($"目标字段不存在：{change.TableKey}/{change.FieldName}。");
                 var alias = MigrationFieldIsolation.FindConflict(target, document, rowIndex, targetField, change.SourceValue);

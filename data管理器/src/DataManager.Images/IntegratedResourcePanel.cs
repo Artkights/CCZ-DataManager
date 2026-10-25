@@ -160,7 +160,14 @@ public sealed class IntegratedResourcePanel : UserControl
     public void ShowCategory(string category)
     {
         // Old saved selections continue to open a useful resource page.
-        category = category switch { "History" => "R", _ => category };
+        if (category.Equals("Resource:Pmap.e5", StringComparison.OrdinalIgnoreCase) ||
+            category.Equals("Pmap.e5", StringComparison.OrdinalIgnoreCase)) category = "Resource:Mmap.e5";
+        category = category switch
+        {
+            "History" => "R",
+            "Resource:Pmap.e5" or "Pmap.e5" => "Resource:Mmap.e5",
+            _ => category
+        };
         if (_project == null) { _category = category; return; }
         if (_category == category && _page != null) { _page.ActivateGallery(); return; }
         if (_page != null)
@@ -200,6 +207,8 @@ public sealed class IntegratedResourcePanel : UserControl
             _ => ImagePageCapabilities.Standard
         };
         var resources = _resources.Where(resource => MatchesCategory(resource, category)).ToArray();
+        if (resources.Any(resource => resource.Key.Equals("Mmap.e5", StringComparison.OrdinalIgnoreCase)))
+            capabilities |= ImagePageCapabilities.SceneTerrainEdit;
         if (resources.Any(resource => resource.Kind is ResourceKind.WeatherSpecial or ResourceKind.DtAnimation)) capabilities |= ImagePageCapabilities.Play;
         if (category is "R" or "S" && usedIds == null)
         {
@@ -298,7 +307,8 @@ public sealed class IntegratedResourcePanel : UserControl
     private static bool IsOtherResource(ImageResourceDescriptor resource)
         => resource.Category is not (ImageCategory.CharacterR or ImageCategory.CharacterS or ImageCategory.Portrait or
             ImageCategory.ItemIcon or ImageCategory.StrategyIcon or ImageCategory.StrategyAnimation) &&
-           resource.Key is not ("Hitarea.e5" or "Effarea.e5");
+           resource.Key is not ("Hitarea.e5" or "Effarea.e5") &&
+           !resource.Key.Equals("Pmap.e5", StringComparison.OrdinalIgnoreCase);
 
     protected override void Dispose(bool disposing)
     {
@@ -329,7 +339,7 @@ public sealed class IntegratedResourcePanel : UserControl
             var live = await Task.Run(() => new ProjectProfileService().Detect(request.Project.RootPath), cancellationToken);
             if (live.IsReadOnly || live.Version != request.Project.Version)
                 throw new InvalidOperationException("项目版本或写入能力已变化，请重新打开项目。");
-            return await _inner.PrepareAsync(request with { Project = live }, cancellationToken);
+            return await IntegratedSceneMutationPolicy.PrepareAsync(_inner, request with { Project = live }, cancellationToken);
         }
     }
 
@@ -348,22 +358,38 @@ public sealed class IntegratedResourcePanel : UserControl
         {
             var live = Live(project);
             if (!resource.CanMutate) throw new InvalidOperationException("资源当前不可修改：" + resource.Status);
-            return _inner.PlanAppend(live, resource, sources);
+            return IntegratedSceneMutationPolicy.Append(live, resource.Key, () => _inner.PlanAppend(live, resource, sources));
         }
         public MutationPlan PlanReplace(ProjectProfile project, IReadOnlyList<LogicalImageAsset> assets, IReadOnlyList<string> sources)
-            => _inner.PlanReplace(Live(project), assets, sources);
+        {
+            foreach (var asset in assets) IntegratedSceneMutationPolicy.RequireImageResource(asset.ResourceKey);
+            return _inner.PlanReplace(Live(project), assets, sources);
+        }
         public MutationPlan PlanDelete(ProjectProfile project, IReadOnlyList<LogicalImageAsset> assets)
-            => _inner.PlanDelete(Live(project), assets);
+        {
+            var live = Live(project);
+            return IntegratedSceneMutationPolicy.Delete(live, assets, () => _inner.PlanDelete(live, assets));
+        }
         public MutationPlan PlanWholeFileReplace(ProjectProfile project, string targetPath, string sourcePath)
-            => _inner.PlanWholeFileReplace(Live(project), targetPath, sourcePath);
+        {
+            IntegratedSceneMutationPolicy.RequireImageResource(Path.GetFileName(targetPath));
+            return _inner.PlanWholeFileReplace(Live(project), targetPath, sourcePath);
+        }
         public MutationPlan PlanItemIconEdit(ProjectProfile project, LogicalImageAsset asset, Bitmap large, bool appendCopy)
             => _inner.PlanItemIconEdit(Live(project), asset, large, appendCopy);
         public MutationPlan PlanReplaceSingleFrame(ProjectProfile project, LogicalImageAsset asset,
             FrameDescriptor descriptor, Bitmap edited, bool appendCopy = false)
-            => _inner.PlanReplaceSingleFrame(Live(project), asset, descriptor, edited, appendCopy);
+        {
+            var live = Live(project);
+            IntegratedSceneMutationPolicy.RequireImageResource(asset.ResourceKey);
+            return appendCopy ? IntegratedSceneMutationPolicy.Append(live, asset.ResourceKey,
+                    () => _inner.PlanReplaceSingleFrame(live, asset, descriptor, edited, true), descriptor.ImageNumber)
+                : _inner.PlanReplaceSingleFrame(live, asset, descriptor, edited, false);
+        }
         public MutationResult Commit(ProjectProfile project, MutationPlan plan)
         {
             var live = Live(project);
+            IntegratedSceneMutationPolicy.ValidateCommit(live, plan);
             foreach (var file in plan.Files)
             {
                 var name = Path.GetFileName(file.TargetPath);

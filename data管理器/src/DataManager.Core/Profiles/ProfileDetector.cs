@@ -63,7 +63,7 @@ public sealed class ProfileDetector
             try
             {
                 privatePart = FileVersionInfo.GetVersionInfo(exePath).FilePrivatePart;
-                if (privatePart is 5 or 6) evidence.Add($"PE 版本资源 FilePrivatePart={privatePart}");
+                if (privatePart is 4 or 5 or 6) evidence.Add($"PE 版本资源 FilePrivatePart={privatePart}");
             }
             catch (Exception ex)
             {
@@ -71,14 +71,14 @@ public sealed class ProfileDetector
             }
         }
 
-        if (selected is { } hashCandidate && privatePart is 5 or 6 && !hashCandidate.Profile.Version.EndsWith(privatePart.ToString(), StringComparison.Ordinal))
+        if (selected is { } hashCandidate && privatePart is 4 or 5 or 6 && !hashCandidate.Profile.Version.EndsWith(privatePart.ToString(), StringComparison.Ordinal))
         {
             conflicts.Add($"EXE 指纹指向 {hashCandidate.Profile.DisplayName}，PE 版本资源指向 6.{privatePart}。按 EXE 指纹优先。");
         }
 
-        if (selected == null && privatePart is 5 or 6)
+        if (selected == null && privatePart is 4 or 5 or 6)
         {
-            var profileId = privatePart == 6 ? "ccz-6.6" : "ccz-6.5";
+            var profileId = $"ccz-6.{privatePart}";
             var profile = _registry.GetProfile(profileId);
             selected = new Candidate(profile, SelectVariantByLayoutEvidence(profile, exePath, lengths, evidence), new ProfileFingerprint { SampleId = "PE 版本资源" });
             selectionMethod = "PE 版本资源";
@@ -160,6 +160,8 @@ public sealed class ProfileDetector
 
     private ProfileVariant SelectVariantByLayoutEvidence(DataProfile profile, string exePath, IReadOnlyDictionary<string, long> lengths, List<string> evidence)
     {
+        if (profile.Id == "ccz-6.4")
+            evidence.Add("6.4 使用洗隋兼容布局；EXE 内嵌表仍须通过当前项目的独立消费者与边界校验，缺失区域不自动创建。");
         if (profile.Id != "ccz-6.6") return profile.Variants.Single(variant => variant.Id == profile.DefaultVariantId);
         var anchor = DetectItemAnchor(exePath);
         if (anchor != null)

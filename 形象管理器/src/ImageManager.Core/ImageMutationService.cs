@@ -499,6 +499,17 @@ public sealed class ImageMutationService : IImageMutationService
     }
 
     public MutationResult Commit(ProjectProfile project, MutationPlan plan)
+        => Commit(project, plan, null);
+
+    /// <summary>
+    /// A host can contribute already committed companion files to this operation's journal.
+    /// The callback must recover its own files if it throws before returning their snapshots.
+    /// Once returned, these targets share the normal history-failure rollback and undo/redo.
+    /// A host rollback preserves its own group locking and conflict checks; without one,
+    /// companions are restored only while every current file matches its before/after hash.
+    /// </summary>
+    public MutationResult Commit(ProjectProfile project, MutationPlan plan,
+        Func<string, IReadOnlyList<HistoryTarget>>? afterPrimaryWrite, Action? rollbackCompanions = null)
     {
         EnsureWritable(project);
         if (plan.Files.Count == 0) throw new InvalidOperationException("事务没有目标文件。");
@@ -510,6 +521,7 @@ public sealed class ImageMutationService : IImageMutationService
         var targets = new List<HistoryTarget>();
         var staged = new List<(MutationFile File, string? TempPath)>();
         var written = new List<HistoryTarget>();
+        IReadOnlyList<HistoryTarget> companions = [];
         try
         {
             if (plan.SourceSnapshots != null)
@@ -572,6 +584,18 @@ public sealed class ImageMutationService : IImageMutationService
                 if (target.AfterExists) ValidateFile(project, target.TargetPath);
             }
 
+            if (afterPrimaryWrite != null)
+            {
+                var additional = afterPrimaryWrite(snapshotDirectory);
+                companions = additional;
+                // Register every companion before verifying any one of them, so a late
+                // verification/history failure restores the entire successful contribution.
+                written.AddRange(additional);
+                targets.AddRange(additional);
+                foreach (var target in additional)
+                    ResourceFileRecovery.Verify(target.TargetPath, target.AfterExists, target.AfterLength, target.AfterSha256);
+            }
+
             // History persistence is part of the transaction. A locked/full journal
             // must restore the resources rather than report failure after changing them.
             var history = _history.Record(project, plan, targets);
@@ -580,7 +604,32 @@ public sealed class ImageMutationService : IImageMutationService
         }
         catch (Exception ex)
         {
-            var recoveryErrors = ResourceFileRecovery.RestoreAll(written, useAfter: false);
+            var recoveryErrors = new List<string>();
+            if (companions.Count > 0)
+            {
+                try
+                {
+                    if (rollbackCompanions != null) rollbackCompanions();
+                    else
+                    {
+                        // Check the whole contribution first, keeping correlated save and
+                        // sidecar files together if the game wrote a new version meanwhile.
+                        foreach (var target in companions)
+                        {
+                            var current = MutationSourceSnapshot.Capture(target.TargetPath);
+                            var isBefore = current.Exists == target.BeforeExists && (!current.Exists ||
+                                current.Length == target.BeforeLength && current.Sha256 == target.BeforeSha256);
+                            var isAfter = current.Exists == target.AfterExists && (!current.Exists ||
+                                current.Length == target.AfterLength && current.Sha256 == target.AfterSha256);
+                            if (!isBefore && !isAfter)
+                                throw new IOException("伴随文件恢复冲突，保留外部修改：" + target.TargetPath);
+                        }
+                        recoveryErrors.AddRange(ResourceFileRecovery.RestoreAll(companions, useAfter: false));
+                    }
+                }
+                catch (Exception restore) { recoveryErrors.Add("伴随文件恢复失败：" + restore.Message); }
+            }
+            recoveryErrors.AddRange(ResourceFileRecovery.RestoreAll(written.Except(companions), useAfter: false));
             return new MutationResult(plan.OperationId, false, plan.Summary, null,
                 recoveryErrors.Count == 0 ? Array.Empty<string>() : written.Select(target => target.TargetPath).ToArray(),
                 [ex.Message, .. recoveryErrors,

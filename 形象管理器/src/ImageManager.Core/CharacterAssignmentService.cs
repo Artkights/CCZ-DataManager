@@ -15,7 +15,13 @@ public sealed class CharacterAssignmentService : ICharacterAssignmentService
     static CharacterAssignmentService() => Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
     public CharacterAssignmentLayoutProfile GetLayout(ProjectProfile project)
-        => CharacterAssignmentLayoutProfile.For(project.Version);
+    {
+        if (project.Version != ProjectVersion.Ccz64) return CharacterAssignmentLayoutProfile.For(project.Version);
+        var path = project.TryGetResource("Ekd5.exe");
+        return path != null && File.Exists(path)
+            ? Ccz64AssignmentLayoutProbe.Inspect(File.ReadAllBytes(path))
+            : CharacterAssignmentLayoutProfile.For(project.Version) with { Evidence = "缺少当前项目 Ekd5.exe，禁止猜测 6.4 R/S 偏移。" };
+    }
 
     public IReadOnlyList<CharacterAssignment> Read(ProjectProfile project)
     {
@@ -25,6 +31,8 @@ public sealed class CharacterAssignmentService : ICharacterAssignmentService
         var executable = File.ReadAllBytes(exePath);
         if (data.Length < DataOffset + RowCount * DataRowSize) throw new InvalidDataException("Data.e5 人物表长度不足。");
         var layout = GetLayout(project);
+        if (project.Version == ProjectVersion.Ccz64 && !layout.CanWrite)
+            throw new InvalidDataException(layout.Evidence);
         if (executable.Length < layout.RequiredExecutableLength)
             throw new InvalidDataException($"Ekd5.exe 长度不足，指定表至少需要 {layout.RequiredExecutableLength} 字节。");
         var gbk = Encoding.GetEncoding(936);

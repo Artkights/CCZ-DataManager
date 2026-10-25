@@ -12,6 +12,10 @@ public sealed record FileByteChange(
     // Absent on 2.0 history entries, which always contain equal-length byte patches.
     public bool WholeFileReplacement { get; init; }
     public long? BeforeLength { get; init; }
+    // Older records always describe an existing file on both sides. Creation
+    // and deletion use a complete snapshot whose absent side is empty.
+    public bool BeforeExists { get; init; } = true;
+    public bool AfterExists { get; init; } = true;
 }
 
 public sealed record ByteChunk(long Offset, byte[] OldBytes, byte[] NewBytes)
@@ -25,7 +29,10 @@ public sealed record SaveResult(
     int ChangedFields,
     int ChangedBytes,
     HistoryEntry? History,
-    IReadOnlyList<string> Messages);
+    IReadOnlyList<string> Messages)
+{
+    public DataManager.Core.Appearance.AppearanceSyncReport? AppearanceSync { get; init; }
+}
 
 public sealed class WorkspaceStatus
 {

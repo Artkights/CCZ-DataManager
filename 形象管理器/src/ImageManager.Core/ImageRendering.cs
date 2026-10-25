@@ -56,7 +56,9 @@ public static class ImageRendering
     {
         if (showBackground) return new Bitmap(source);
         var output = new Bitmap(source.Width, source.Height, PixelFormat.Format32bppArgb);
-        var pixels = BmpPayloadService.ReadPixels(source);
+        // Avoid a GDI+ draw round trip for ARGB pixels: premultiplication can round RGB values.
+        var pixels = source.PixelFormat == PixelFormat.Format32bppArgb
+            ? ImageImportRasterNormalization.ReadArgbPixels(source) : BmpPayloadService.ReadPixels(source);
         for (var at = 0; at < pixels.Length; at += 4)
         {
             var key = dllBlue ? pixels[at + 2] == 0 && pixels[at + 1] == 0 && pixels[at] == 255 :

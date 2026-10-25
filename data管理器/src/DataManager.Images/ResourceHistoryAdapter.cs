@@ -60,6 +60,7 @@ public sealed class ResourceHistoryAdapter(ResourceCatalogAdapter? resources = n
         MutationKind.Undo => "撤回资源修改",
         MutationKind.Redo => "重做资源修改",
         MutationKind.WholeFileReplace => "替换资源文件",
+        MutationKind.TerrainEdit => "内场景地形编辑",
         _ => "资源修改"
     };
 

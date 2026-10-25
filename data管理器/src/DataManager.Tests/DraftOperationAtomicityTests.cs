@@ -10,9 +10,9 @@ internal static class DraftOperationAtomicityTests
 {
     public static void Run(string basePath)
     {
-        RejectBeforeMutation(basePath);
+        RejectInvalidFinalDraft(basePath);
         LateBundleFailureRestoresEveryDraft(basePath);
-        ConfigurationSnapshotSurvivesLateLock(basePath);
+        IrrelevantConfigurationSurvivesLateLock(basePath);
         FailedUndoRedoKeepsCommand(basePath);
         Console.WriteLine("DRAFT_OPERATION_ATOMICITY_TESTS_OK");
     }
@@ -33,7 +33,7 @@ internal static class DraftOperationAtomicityTests
         finally { Directory.Delete(root, true); }
     }
 
-    private static void RejectBeforeMutation(string source) => WithProject(source, (root, workspace) =>
+    private static void RejectInvalidFinalDraft(string source) => WithProject(source, (root, workspace) =>
     {
         var jobs = workspace.GetDocument("job-series");
         var csv = WriteCsv(root, "jobs.csv", "ID,名称\r\n0,B\r\n");
@@ -44,18 +44,37 @@ internal static class DraftOperationAtomicityTests
             () => workspace.ImportCsvBundle(new Dictionary<string, string> { ["persons"] = persons, ["job-series"] = csv }),
             () => workspace.ApplyBatchMultiple(jobs, [0, 1], ["名称"], "统一赋值", "B"),
             () => workspace.ApplyFindReplace(jobs, [0], "名称", "A", "B"),
-            () => workspace.ApplyCompositeTransaction("应拒绝", [new("persons", 0, "武力", 77), new("job-series", 0, "名称", "B")]),
-            () => { jobs.Data.Rows[0]["名称"] = "B"; workspace.RecordCellEdit(jobs, 0, "名称", "A", "B"); }
+            () => workspace.ApplyCompositeTransaction("应拒绝", [new("persons", 0, "武力", 77), new("job-series", 0, "名称", "B")])
         };
         var before = Capture(workspace); var undo = CommandCount(workspace, "_undo"); var redo = CommandCount(workspace, "_redo");
         var files = Directory.GetFiles(root).ToDictionary(path => path, File.ReadAllBytes);
         foreach (var operation in operations)
         {
-            using (var locked = new FileStream(Path.Combine(root, "System.ini"), FileMode.Open, FileAccess.Read, FileShare.None)) Reject(operation);
-            AssertEqual(workspace, before, "配置锁定时留下部分草稿或清掉原有草稿");
+            DataColumnChangeEventHandler rejectEdit = (_, args) =>
+            {
+                if (args.Column?.ColumnName == "名称" && Convert.ToString(args.Row["名称"]) == "B")
+                    throw new InvalidDataException("模拟草稿操作在变更后失败");
+            };
+            jobs.Data.ColumnChanged += rejectEdit;
+            try { Reject(operation); } finally { jobs.Data.ColumnChanged -= rejectEdit; }
+            AssertEqual(workspace, before, "草稿变更失败时留下部分草稿或清掉原有草稿");
             TestSupport.Assert(workspace.IsDirty && CommandCount(workspace, "_undo") == undo && CommandCount(workspace, "_redo") == redo,
                 "失败草稿操作增删了命令");
         }
+        // The grid has already assigned B when RecordCellEdit is entered.
+        // Inject the failure inside its protected operation, after that assignment.
+        jobs.Data.Rows[0]["名称"] = "B";
+        DataColumnChangeEventHandler rejectBoundEdit = (_, args) =>
+        {
+            if (args.Column?.ColumnName == "名称" && Convert.ToString(args.Row["名称"]) == "B")
+                throw new InvalidDataException("模拟已绑定单元格登记失败");
+        };
+        jobs.Data.ColumnChanged += rejectBoundEdit;
+        try { Reject(() => workspace.RecordCellEdit(jobs, 0, "名称", "A", "B")); }
+        finally { jobs.Data.ColumnChanged -= rejectBoundEdit; }
+        AssertEqual(workspace, before, "单元格登记失败未恢复编辑前草稿");
+        TestSupport.Assert(CommandCount(workspace, "_undo") == undo && CommandCount(workspace, "_redo") == redo,
+            "失败单元格登记增删了命令");
         TestSupport.Assert(files.All(pair => File.ReadAllBytes(pair.Key).SequenceEqual(pair.Value)), "草稿入口意外修改磁盘文件");
         TestSupport.Assert(workspace.Commands.Undo() == "保留原有草稿" && !workspace.IsDirty, "原有草稿命令在失败操作后不可撤回");
     });
@@ -84,7 +103,7 @@ internal static class DraftOperationAtomicityTests
         finally { jobs.Data.ColumnChanged -= lockAfterFirst; locked?.Dispose(); }
     });
 
-    private static void ConfigurationSnapshotSurvivesLateLock(string source) => WithProject(source, (root, workspace) =>
+    private static void IrrelevantConfigurationSurvivesLateLock(string source) => WithProject(source, (root, workspace) =>
     {
         var jobs = workspace.GetDocument("job-series"); FileStream? locked = null;
         var before = Capture(workspace); var undo = CommandCount(workspace, "_undo");
@@ -98,7 +117,7 @@ internal static class DraftOperationAtomicityTests
         {
             workspace.ApplyBatchMultiple(jobs, [0, 1], ["名称"], "统一赋值", "B");
             TestSupport.Assert(locked != null && Convert.ToString(jobs.Data.Rows[1]["名称"]) == "B" && CommandCount(workspace, "_undo") == undo + 1,
-                "变更后INI锁定时未复用配置快照或未登记完整批量命令");
+                "无关INI锁定仍影响按真实类型派生或未登记完整批量命令");
         }
         finally { jobs.Data.ColumnChanged -= lockAfterFirst; locked?.Dispose(); }
         workspace.Commands.Undo(); AssertEqual(workspace, before, "批量操作撤回未恢复原有草稿");
@@ -109,14 +128,26 @@ internal static class DraftOperationAtomicityTests
         var jobs = workspace.GetDocument("job-series");
         workspace.ApplyBatch(jobs, [0, 1], "名称", "统一赋值", "B");
         var after = Capture(workspace); var undo = CommandCount(workspace, "_undo");
-        using (var locked = new FileStream(Path.Combine(root, "System.ini"), FileMode.Open, FileAccess.Read, FileShare.None)) Reject(() => workspace.Commands.Undo());
+        DataColumnChangeEventHandler rejectUndo = (_, args) =>
+        {
+            if (args.Column?.ColumnName == "名称" && Convert.ToString(args.Row["名称"]) == "A")
+                throw new InvalidDataException("模拟撤回刷新失败");
+        };
+        jobs.Data.ColumnChanged += rejectUndo;
+        try { Reject(() => workspace.Commands.Undo()); } finally { jobs.Data.ColumnChanged -= rejectUndo; }
         AssertEqual(workspace, after, "撤回失败产生了部分草稿");
         TestSupport.Assert(CommandCount(workspace, "_undo") == undo && !workspace.Commands.CanRedo, "撤回失败丢失了命令");
         workspace.Commands.Undo(); var before = Capture(workspace); var redo = CommandCount(workspace, "_redo");
-        using (var locked = new FileStream(Path.Combine(root, "System.ini"), FileMode.Open, FileAccess.Read, FileShare.None)) Reject(() => workspace.Commands.Redo());
+        DataColumnChangeEventHandler rejectRedo = (_, args) =>
+        {
+            if (args.Column?.ColumnName == "名称" && Convert.ToString(args.Row["名称"]) == "B")
+                throw new InvalidDataException("模拟重做刷新失败");
+        };
+        jobs.Data.ColumnChanged += rejectRedo;
+        try { Reject(() => workspace.Commands.Redo()); } finally { jobs.Data.ColumnChanged -= rejectRedo; }
         AssertEqual(workspace, before, "前进失败产生了部分草稿");
         TestSupport.Assert(CommandCount(workspace, "_redo") == redo, "前进失败丢失了命令");
-        workspace.Commands.Redo(); AssertEqual(workspace, after, "解除配置锁后不能重做原命令");
+        workspace.Commands.Redo(); AssertEqual(workspace, after, "解除失败注入后不能重做原命令");
     });
 
     private static Dictionary<string, object?[][]> Capture(ProjectWorkspace workspace)

@@ -4,6 +4,7 @@ using DataManager.Core.Binary;
 using DataManager.Core.Editing;
 using DataManager.Core.History;
 using DataManager.Core.Models;
+using DataManager.Core.Appearance;
 
 namespace DataManager.Core.Migration;
 
@@ -24,6 +25,8 @@ internal static class MigrationCommitCoordinator
         bool? historyManifestExisted = null;
         var installed = new List<PreparedFile>();
         var temporaryPaths = new List<string>();
+        AppearanceSyncSession? appearanceSync = null;
+        var appearanceDiagnostics = new List<string>();
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -36,7 +39,7 @@ internal static class MigrationCommitCoordinator
             var selectedResources = selected.Where(item => IsResource(item.Change)).ToArray();
             if (selectedResources.Any(item => IsEvidenceConfiguration(TargetRelative(item.Change))) &&
                 selected.Any(item => !IsResource(item.Change) && item.Change.Kind != MigrationChangeKind.PhysicalFileAdded))
-                throw new InvalidOperationException("所选 System.ini 可能改变布局证据或 DefID/AssID 物品边界；请先单独迁移配置，再重新预览并选择数据，避免使用旧配置映射逻辑字段。");
+                throw new InvalidOperationException("所选 System.ini 可能改变布局证据；请先单独迁移配置，再重新预览并选择数据，避免使用旧配置映射逻辑字段。");
             ValidateSnapshot(plan);
             ValidateResources(plan, selectedResources.Select(item => item.Change));
             if (selected.Length == 0)
@@ -163,6 +166,28 @@ internal static class MigrationCommitCoordinator
                 cancellationToken.ThrowIfCancellationRequested();
                 Backup(item.RelativePath);
             }
+            // Staging contains no saves. Prepare against the real target using
+            // final staged assignments, without ever copying source save files.
+            var originalWorkspace = new ProjectWorkspace();
+            originalWorkspace.Open(plan.TargetRoot, plan.TargetProfileId, plan.TargetVariantId);
+            var appearanceUpdates = AppearanceSyncUpdates.CompareWorkspaces(originalWorkspace, stagedWorkspace).ToList();
+            if (resourceVerifier != null)
+            {
+                try
+                {
+                    appearanceUpdates.AddRange(resourceVerifier.GetAppearanceUpdates(stagingRoot, plan.TargetRoot,
+                        prepared.Select(file => file.RelativePath).ToArray(), cancellationToken));
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception ex) { appearanceDiagnostics.Add("图片关联存档同步已跳过：" + ex.Message); }
+            }
+            if (appearanceUpdates.Count > 0)
+            {
+                appearanceSync = SaveAppearanceSyncService.Prepare(plan.TargetRoot, plan.TargetProfileId,
+                    File.ReadAllBytes(ProjectFileLocator.Resolve(stagingRoot, "Ekd5.exe")), AppearanceSyncUpdates.Merge(appearanceUpdates));
+                // Successful optional groups contribute their original bytes to the
+                // migration backup and the same undo history after group commit.
+            }
             var historyManifest = Path.Combine(new HistoryStore().GetRoot(plan.TargetRoot), "manifest.jsonl");
             historyManifestExisted = File.Exists(historyManifest);
             if (historyManifestExisted.Value)
@@ -198,7 +223,53 @@ internal static class MigrationCommitCoordinator
                 foreach (var relative in selectedResources.Select(item => TargetRelative(item.Change)).Distinct(StringComparer.OrdinalIgnoreCase))
                     _ = resourceVerifier.ValidateFile(plan.TargetRoot, plan.TargetRoot, relative,
                         File.ReadAllBytes(ResolveInside(plan.TargetRoot, relative)), cancellationToken);
-            foreach (var entry in createdHistory)
+            if (appearanceSync != null)
+            {
+                appearanceSync.Commit();
+                foreach (var file in appearanceSync.AppliedFiles)
+                {
+                    var snapshot = ResolveInside(Path.Combine(backupRoot!, "files"), file.RelativePath);
+                    Directory.CreateDirectory(Path.GetDirectoryName(snapshot)!);
+                    File.WriteAllBytes(snapshot, file.BeforeBytes);
+                    prepared.Add(new PreparedFile(file.RelativePath, file.Change.BeforeHash, file.Change.AfterHash, file.BeforeAttributes));
+                }
+                appearanceDiagnostics.Add(appearanceSync.Report.Summary);
+                appearanceDiagnostics.AddRange(appearanceSync.Report.Diagnostics);
+            }
+            var historiesToAppend = createdHistory.ToList();
+            if (appearanceSync?.AppliedFiles.Count > 0)
+            {
+                var syncHistory = historiesToAppend.LastOrDefault();
+                if (syncHistory == null)
+                {
+                    syncHistory = new HistoryEntry
+                    {
+                        ProfileId = stagedWorkspace.ActiveProfile.ProfileId,
+                        VariantId = stagedWorkspace.ActiveProfile.VariantId,
+                        LayoutRevision = stagedWorkspace.ActiveProfile.LayoutRevision,
+                        Summary = "迁移形象资源与相关存档",
+                        CoreFileFingerprints = plan.TargetCoreFileFingerprints.Where(pair => pair.Value.Length > 0)
+                            .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase)
+                    };
+                    historiesToAppend.Add(syncHistory);
+                }
+                syncHistory.Files.AddRange(appearanceSync.AppliedFiles.Select(file => file.Change));
+                syncHistory.Modules.Add("存档形象同步");
+                syncHistory.AppearanceSyncMessages = [.. appearanceDiagnostics];
+                syncHistory.Summary += "；" + appearanceSync.Report.Summary;
+                // A resource-only R/S migration must undo the images together
+                // with their save references, rather than reverting just saves.
+                foreach (var file in prepared.Where(file => IsAppearanceResource(file.RelativePath)))
+                {
+                    if (syncHistory.Files.Any(change => change.RelativePath.Equals(file.RelativePath, StringComparison.OrdinalIgnoreCase))) continue;
+                    var before = file.BeforeSha256 == null ? [] : File.ReadAllBytes(ResolveInside(Path.Combine(backupRoot!, "files"), file.RelativePath));
+                    var after = File.ReadAllBytes(ResolveInside(plan.TargetRoot, file.RelativePath));
+                    syncHistory.Files.Add(new FileByteChange(file.RelativePath, file.BeforeSha256 ?? HashService.Sha256(before), file.AfterSha256,
+                        after.Length, [new ByteChunk(0, before, after)])
+                    { WholeFileReplacement = true, BeforeLength = before.Length, BeforeExists = file.BeforeSha256 != null });
+                }
+            }
+            foreach (var entry in historiesToAppend)
             {
                 entry.OperationKind = "一键迁移";
                 entry.Summary = $"迁移 {new DirectoryInfo(plan.SourceRoot).Name} → {new DirectoryInfo(plan.TargetRoot).Name}：{entry.Summary}";
@@ -212,7 +283,9 @@ internal static class MigrationCommitCoordinator
             return stagedResult with
             {
                 BackupPath = backupRoot,
-                Messages = [.. stagedResult.Messages, .. resourceDiagnostics, $"临时副本校验及目标 SHA-256 复读完成；迁移历史：{Path.Combine(backupRoot, "migration.json")}"]
+                Messages = [.. stagedResult.Messages, .. resourceDiagnostics, .. appearanceDiagnostics,
+                    $"临时副本校验及目标 SHA-256 复读完成；迁移历史：{Path.Combine(backupRoot, "migration.json")}"],
+                AppearanceSync = appearanceSync?.Report
             };
 
             MigrationChoice Choice(int index) => includeAllWritable ? MigrationChoice.Overwrite
@@ -253,6 +326,8 @@ internal static class MigrationCommitCoordinator
         {
             progress?.Report(new("恢复目标", ex is OperationCanceledException ? "已取消，清理临时项目" : ex.Message));
             var failures = new List<string>();
+            try { appearanceSync?.Rollback(); }
+            catch (Exception rollback) { failures.Add("存档形象回滚：" + rollback.Message); }
             foreach (var item in installed.AsEnumerable().Reverse())
             {
                 try
@@ -260,7 +335,11 @@ internal static class MigrationCommitCoordinator
                     var target = ResolveInside(plan.TargetRoot, item.RelativePath);
                     if (item.BeforeSha256 == null)
                     {
-                        if (File.Exists(target)) { MakeWritable(target); File.Delete(target); }
+                        if (File.Exists(target))
+                        {
+                            VerifyFile(target, item.AfterSha256, "回滚新建文件前的外部修改检查");
+                            MakeWritable(target); File.Delete(target);
+                        }
                     }
                     else
                     {
@@ -269,6 +348,7 @@ internal static class MigrationCommitCoordinator
                             if (item.BeforeAttributes is { } originalAttributes) File.SetAttributes(target, originalAttributes);
                             continue;
                         }
+                        VerifyFile(target, item.AfterSha256, "回滚前的外部修改检查");
                         var snapshot = ResolveInside(Path.Combine(backupRoot!, "files"), item.RelativePath);
                         CopyFile(snapshot, target);
                         if (item.BeforeAttributes is { } attributes) File.SetAttributes(target, attributes);
@@ -321,6 +401,9 @@ internal static class MigrationCommitCoordinator
     private static bool IsWritable(MigrationChange change)
         => change.Kind is MigrationChangeKind.Added or MigrationChangeKind.Changed or MigrationChangeKind.ResourceAdded or MigrationChangeKind.ResourceChanged or MigrationChangeKind.PhysicalFileAdded or MigrationChangeKind.NativeStructureChanged;
 
+    private static bool IsAppearanceResource(string relative)
+        => Path.GetFileName(relative).ToLowerInvariant() is "pmapobj.e5" or "unit_mov.e5" or "unit_atk.e5" or "unit_spc.e5";
+
     private static IReadOnlyList<int[]> PackIds(IEnumerable<int> ids)
     {
         var values = ids.Distinct().Order().ToArray();
@@ -342,7 +425,7 @@ internal static class MigrationCommitCoordinator
             var path = ResolveInside(plan.TargetRoot, relative);
             if (File.Exists(path)) CopyFile(path, ResolveInside(stagingRoot, relative));
         }
-        if (!plan.TargetProfileId.Equals("ccz-6.5", StringComparison.OrdinalIgnoreCase)) return;
+        if (plan.TargetProfileId is not ("ccz-6.4" or "ccz-6.5")) return;
         var target = new ProjectWorkspace();
         target.Open(plan.TargetRoot, plan.TargetProfileId, plan.TargetVariantId);
         if (!target.Definitions.Any(table => table.Key == "person-r-assign" && table.Capability == TableCapability.ReadOnly)) return;

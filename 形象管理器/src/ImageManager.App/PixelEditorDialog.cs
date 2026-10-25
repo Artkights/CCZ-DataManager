@@ -14,6 +14,14 @@ public sealed class PixelEditorDialog : Form
     private readonly Panel _scroll = new() { Dock = DockStyle.Fill, AutoScroll = true, BackColor = Color.FromArgb(55, 57, 60) };
     private readonly Button _colorButton = new() { Width = 36, Height = 30, BackColor = Color.Black, FlatStyle = FlatStyle.Flat };
     private readonly NumericUpDown _zoom = new() { Minimum = 25, Maximum = 3200, Increment = 25, Value = 100, Width = 82 };
+    private readonly List<Control> _editingCommands = [];
+    private readonly Label _replacementStatus = new()
+    {
+        Name = "ReplacementStatus", AutoSize = true, Visible = false,
+        MaximumSize = new Size(650, 0), Margin = new Padding(8), ForeColor = Color.DarkSlateBlue
+    };
+    private PixelColorReplaceDialog? _replacementDialog;
+    private (int Row, PixelColorPickField Field)? _pendingPick;
     public Bitmap? ResultBitmap { get; private set; }
     public PixelSaveMode SaveMode { get; private set; }
 
@@ -30,12 +38,14 @@ public sealed class PixelEditorDialog : Form
         AutoScaleMode = AutoScaleMode.Dpi;
         KeyPreview = true;
         _replacementPalette = replacementPalette;
-        _canvas = new PixelCanvas(source, sections) { Location = Point.Empty };
+        _canvas = new PixelCanvas(source, sections) { Name = "PixelCanvas", Location = Point.Empty };
         _scroll.Controls.Add(_canvas);
         Controls.Add(_scroll);
         Controls.Add(BuildBottomBar(allowAppendCopy));
         Controls.Add(BuildToolbar());
         _canvas.ColorPicked += color => { _colorButton.BackColor = color; _canvas.DrawingColor = color; };
+        _canvas.ReplacementColorPicked += CompleteReplacementPick;
+        _canvas.ReplacementPickCancelled += CancelReplacementPick;
         _canvas.ZoomChanged += zoom =>
         {
             var percent = Math.Clamp((decimal)Math.Round(zoom * 100), _zoom.Minimum, _zoom.Maximum);
@@ -60,6 +70,7 @@ public sealed class PixelEditorDialog : Form
         {
             var button = ToolButton(item.Item1);
             button.Click += (_, _) => _canvas.Tool = item.Item2;
+            _editingCommands.Add(button);
             panel.Controls.Add(button);
         }
         var undo = ToolButton("撤回");
@@ -68,9 +79,11 @@ public sealed class PixelEditorDialog : Form
         redo.Click += (_, _) => _canvas.Redo();
         panel.Controls.Add(undo);
         panel.Controls.Add(redo);
+        _editingCommands.AddRange([undo, redo, _colorButton]);
         _colorButton.Click += (_, _) => ChooseColor(_colorButton);
         panel.Controls.Add(_colorButton);
         var replace = ToolButton("换色");
+        replace.Name = "OpenColorReplacement";
         replace.Click += (_, _) => OpenColorReplacement();
         panel.Controls.Add(replace);
         var grid = new CheckBox { Text = "网格", Checked = true, AutoSize = true, Margin = new Padding(8, 7, 2, 0) };
@@ -85,6 +98,7 @@ public sealed class PixelEditorDialog : Form
         actual.Click += (_, _) => SetZoom(1, null);
         panel.Controls.Add(fit);
         panel.Controls.Add(actual);
+        panel.Controls.Add(_replacementStatus);
         return panel;
     }
 
@@ -100,6 +114,7 @@ public sealed class PixelEditorDialog : Form
         var cancel = CommandButton("取消");
         write.Click += (_, _) => Finish(PixelSaveMode.WriteCurrent);
         append.Click += (_, _) => Finish(PixelSaveMode.AppendCopy);
+        _editingCommands.AddRange([write, append]);
         cancel.Click += (_, _) => DialogResult = DialogResult.Cancel;
         panel.Controls.Add(write);
         if (allowAppendCopy) panel.Controls.Add(append);
@@ -109,8 +124,68 @@ public sealed class PixelEditorDialog : Form
 
     private void OpenColorReplacement()
     {
-        using var dialog = new PixelColorReplaceDialog(_canvas.CountColor, _replacementPalette);
-        if (dialog.ShowDialog(this) == DialogResult.OK) _canvas.ReplaceColors(dialog.Pairs);
+        if (_replacementDialog is { } existing)
+        {
+            CancelReplacementPick();
+            existing.Show();
+            existing.Activate();
+            return;
+        }
+        var dialog = new PixelColorReplaceDialog(_canvas.CountColor, _replacementPalette);
+        _replacementDialog = dialog;
+        dialog.PickRequested += (row, field) =>
+        {
+            if (!ReferenceEquals(_replacementDialog, dialog)) return;
+            _pendingPick = (row, field);
+            _canvas.ReplacementPickActive = true;
+            _canvas.Cursor = Cursors.Cross;
+            _replacementStatus.Text = $"第 {row + 1} 组{(field == PixelColorPickField.Source ? "原色" : "目标色")}：左键点底图取色；右键或 Esc 取消。可滚动或 Ctrl+滚轮缩放。";
+            Activate();
+            _canvas.Focus();
+        };
+        dialog.FormClosed += (_, _) =>
+        {
+            if (!ReferenceEquals(_replacementDialog, dialog)) return;
+            _replacementDialog = null;
+            _pendingPick = null;
+            SetReplacementMode(false);
+            if (dialog.DialogResult == DialogResult.OK) _canvas.ReplaceColors(dialog.Pairs);
+        };
+        SetReplacementMode(true);
+        dialog.Show(this);
+    }
+
+    private void SetReplacementMode(bool active)
+    {
+        foreach (var command in _editingCommands) command.Enabled = !active;
+        _canvas.EditingEnabled = !active;
+        _canvas.ReplacementPickActive = false;
+        _canvas.Cursor = Cursors.Default;
+        _replacementStatus.Visible = active;
+        _replacementStatus.Text = "正在配置换色；点击规则旁的“取色”可从底图选色。";
+    }
+
+    private void CompleteReplacementPick(Color color)
+    {
+        if (_pendingPick is not { } request || _replacementDialog is not { } dialog) return;
+        if (!dialog.ApplyPickedColor(request.Row, request.Field, color))
+        {
+            _replacementStatus.Text = "项目调色板没有可用目标色，请右键或 Esc 取消本次取色。";
+            return;
+        }
+        _pendingPick = null;
+        SetReplacementMode(true);
+        dialog.Show();
+        dialog.Activate();
+    }
+
+    private void CancelReplacementPick()
+    {
+        if (_replacementDialog is not { } dialog) return;
+        _pendingPick = null;
+        SetReplacementMode(true);
+        dialog.Show();
+        dialog.Activate();
     }
 
     private void CanvasMouseWheel(object? sender, MouseEventArgs e)
@@ -152,6 +227,7 @@ public sealed class PixelEditorDialog : Form
 
     private void Finish(PixelSaveMode mode)
     {
+        if (_replacementDialog != null) return;
         ResultBitmap?.Dispose();
         ResultBitmap = _canvas.Snapshot();
         SaveMode = mode;
@@ -160,6 +236,16 @@ public sealed class PixelEditorDialog : Form
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
+        if (_replacementDialog != null)
+        {
+            if (keyData == Keys.Escape)
+            {
+                if (_pendingPick != null) CancelReplacementPick();
+                else _replacementDialog.Close();
+                return true;
+            }
+            if (keyData == (Keys.Control | Keys.Z) || keyData == (Keys.Control | Keys.Y)) return true;
+        }
         if (keyData == (Keys.Control | Keys.Z)) { _canvas.Undo(); return true; }
         if (keyData == (Keys.Control | Keys.Y)) { _canvas.Redo(); return true; }
         return base.ProcessCmdKey(ref msg, keyData);
@@ -175,7 +261,14 @@ public sealed class PixelEditorDialog : Form
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) ResultBitmap?.Dispose();
+        if (disposing)
+        {
+            var replacement = _replacementDialog;
+            _replacementDialog = null;
+            _pendingPick = null;
+            replacement?.Dispose();
+            ResultBitmap?.Dispose();
+        }
         base.Dispose(disposing);
     }
 
@@ -189,6 +282,8 @@ public sealed class PixelEditorDialog : Form
     }
 }
 
+public enum PixelColorPickField { Source, Target }
+
 public sealed class PixelColorReplaceDialog : Form
 {
     private readonly Func<Color, int> _count;
@@ -196,6 +291,8 @@ public sealed class PixelColorReplaceDialog : Form
     public IReadOnlyList<(Color From, Color To)> Pairs { get; private set; } = Array.Empty<(Color, Color)>();
 
     private readonly IReadOnlyList<Color>? _palette;
+    private readonly ToolTip _colorTips = new();
+    public event Action<int, PixelColorPickField>? PickRequested;
 
     public PixelColorReplaceDialog(Func<Color, int> count, IReadOnlyList<Color>? palette = null)
     {
@@ -205,77 +302,172 @@ public sealed class PixelColorReplaceDialog : Form
         AutoScaleMode = AutoScaleMode.Dpi;
         AutoSize = true;
         AutoSizeMode = AutoSizeMode.GrowAndShrink;
-        MinimumSize = new Size(430, 300);
-        MaximumSize = new Size(760, 720);
+        MinimumSize = new Size(600, 300);
+        MaximumSize = new Size(900, 720);
         StartPosition = FormStartPosition.CenterParent;
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 5, RowCount = 8, Padding = new Padding(12) };
+        ShowInTaskbar = false;
+        MinimizeBox = false;
+        var root = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            ColumnCount = 7, RowCount = 9, Padding = new Padding(12)
+        };
+        for (var row = 0; row < root.RowCount; row++) root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        var help = new Label
+        {
+            Text = "点击“取色”后在底图左键选色；右键或 Esc 取消本次取色。",
+            AutoSize = true, Margin = new Padding(0, 0, 0, 8)
+        };
+        root.Controls.Add(help, 0, 0);
+        root.SetColumnSpan(help, 7);
         if (_palette != null)
         {
-            var note = new Label { Text = "索引资源：目标色必须从项目调色板选择；透明像素请使用橡皮工具。",
+            var note = new Label { Text = "索引资源：目标色取色会匹配项目调色板；也可取透明色。",
                 AutoSize = true, ForeColor = Color.DarkSlateBlue, Margin = new Padding(0, 0, 0, 8) };
-            root.Controls.Add(note, 0, 0);
-            root.SetColumnSpan(note, 5);
+            root.Controls.Add(note, 0, 1);
+            root.SetColumnSpan(note, 7);
         }
-        var headerRow = _palette == null ? 0 : 1;
+        var headerRow = _palette == null ? 1 : 2;
         root.Controls.Add(new Label { Text = "使用", AutoSize = true }, 0, headerRow);
         root.Controls.Add(new Label { Text = "原色", AutoSize = true }, 1, headerRow);
         root.Controls.Add(new Label { Text = "", AutoSize = true }, 2, headerRow);
-        root.Controls.Add(new Label { Text = "目标色", AutoSize = true }, 3, headerRow);
-        root.Controls.Add(new Label { Text = "命中", AutoSize = true }, 4, headerRow);
+        root.Controls.Add(new Label { Text = "", AutoSize = true }, 3, headerRow);
+        root.Controls.Add(new Label { Text = "目标色", AutoSize = true }, 4, headerRow);
+        root.Controls.Add(new Label { Text = "", AutoSize = true }, 5, headerRow);
+        root.Controls.Add(new Label { Text = "命中", AutoSize = true }, 6, headerRow);
         for (var index = 0; index < 5; index++)
         {
             var enabled = new CheckBox { Checked = index == 0, AutoSize = true, Anchor = AnchorStyles.None };
             var from = Swatch(Color.Magenta);
             var to = Swatch(_palette?.FirstOrDefault() ?? Color.Transparent);
-            var hits = new Label { AutoSize = true, Text = "0", Anchor = AnchorStyles.Left };
+            from.Name = $"ReplacementSource{index}";
+            to.Name = $"ReplacementTarget{index}";
+            var hits = new Label { Name = $"ReplacementHits{index}", AutoSize = true, Text = "0", Anchor = AnchorStyles.Left };
             from.Click += (_, _) => { Choose(from); UpdateHits(); };
             to.Click += (_, _) => ChooseTarget(to);
             enabled.CheckedChanged += (_, _) => UpdateHits();
+            var sourcePick = PickButton(index, PixelColorPickField.Source);
+            var targetPick = PickButton(index, PixelColorPickField.Target);
             _rows.Add((enabled, from, to, hits));
             var row = headerRow + index + 1;
             root.Controls.Add(enabled, 0, row);
             root.Controls.Add(from, 1, row);
-            root.Controls.Add(new Label { Text = "→", AutoSize = true, Anchor = AnchorStyles.None }, 2, row);
-            root.Controls.Add(to, 3, row);
-            root.Controls.Add(hits, 4, row);
+            root.Controls.Add(sourcePick, 2, row);
+            root.Controls.Add(new Label { Text = "→", AutoSize = true, Anchor = AnchorStyles.None }, 3, row);
+            root.Controls.Add(to, 4, row);
+            root.Controls.Add(targetPick, 5, row);
+            root.Controls.Add(hits, 6, row);
         }
-        var buttons = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.RightToLeft, Dock = DockStyle.Fill };
+        var buttons = new FlowLayoutPanel
+        {
+            AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            FlowDirection = FlowDirection.RightToLeft, WrapContents = false,
+            Dock = DockStyle.Fill, MinimumSize = new Size(200, 38)
+        };
         var apply = CommandButton("同时替换");
         var cancel = CommandButton("取消");
+        apply.Name = "ReplacementApply";
+        cancel.Name = "ReplacementCancel";
         apply.Click += (_, _) =>
         {
-            Pairs = _rows.Where(row => row.Enabled.Checked).Select(row => (row.From.BackColor, row.To.BackColor)).ToArray();
+            Pairs = _rows.Where(row => row.Enabled.Checked).Select(row => (SwatchColor(row.From), SwatchColor(row.To))).ToArray();
             if (Pairs.Count == 0) { MessageBox.Show(this, "至少启用一组换色。", "没有换色组"); return; }
             DialogResult = DialogResult.OK;
+            Close();
         };
-        cancel.Click += (_, _) => DialogResult = DialogResult.Cancel;
+        cancel.Click += (_, _) => { DialogResult = DialogResult.Cancel; Close(); };
+        CancelButton = cancel;
         buttons.Controls.Add(apply);
         buttons.Controls.Add(cancel);
         root.Controls.Add(buttons, 0, headerRow + 6);
-        root.SetColumnSpan(buttons, 5);
+        root.SetColumnSpan(buttons, 7);
         Controls.Add(root);
         UpdateHits();
     }
 
     private void UpdateHits()
     {
-        foreach (var row in _rows) row.Hits.Text = row.Enabled.Checked ? _count(row.From.BackColor).ToString() : "-";
+        foreach (var row in _rows) row.Hits.Text = row.Enabled.Checked ? _count(SwatchColor(row.From)).ToString() : "-";
     }
 
-    private static void Choose(Button button)
+    private void Choose(Button button)
     {
-        using var dialog = new ColorDialog { Color = button.BackColor, FullOpen = true, AnyColor = true };
-        if (dialog.ShowDialog() == DialogResult.OK) button.BackColor = dialog.Color;
+        using var dialog = new ColorDialog { Color = SwatchColor(button), FullOpen = true, AnyColor = true };
+        if (dialog.ShowDialog(this) == DialogResult.OK) SetSwatch(button, dialog.Color);
     }
 
     private void ChooseTarget(Button button)
     {
         if (_palette == null) { Choose(button); return; }
-        using var dialog = new PalettePickerDialog(_palette, button.BackColor);
-        if (dialog.ShowDialog(this) == DialogResult.OK) button.BackColor = dialog.SelectedColor;
+        using var dialog = new PalettePickerDialog(_palette, SwatchColor(button));
+        if (dialog.ShowDialog(this) == DialogResult.OK) SetSwatch(button, dialog.SelectedColor);
     }
 
-    private static Button Swatch(Color color) => new() { Width = 64, Height = 30, BackColor = color, FlatStyle = FlatStyle.Flat };
+    private Button PickButton(int row, PixelColorPickField field)
+    {
+        var button = new Button
+        {
+            Name = $"Replacement{field}Pick{row}", Text = "取色", AutoSize = true,
+            MinimumSize = new Size(58, 30), Margin = new Padding(3)
+        };
+        button.Click += (_, _) =>
+        {
+            if (PickRequested == null) return;
+            Hide();
+            PickRequested.Invoke(row, field);
+        };
+        return button;
+    }
+
+    public bool ApplyPickedColor(int rowIndex, PixelColorPickField field, Color color)
+    {
+        if (rowIndex < 0 || rowIndex >= _rows.Count) return false;
+        color = color.A == 0 ? Color.Transparent : color;
+        if (field == PixelColorPickField.Target && _palette != null && color.A != 0)
+        {
+            var palette = _palette.Take(256).Where(candidate => candidate.A != 0).ToArray();
+            if (palette.Length == 0) return false;
+            color = palette.MinBy(candidate =>
+                (candidate.R - color.R) * (candidate.R - color.R) +
+                (candidate.G - color.G) * (candidate.G - color.G) +
+                (candidate.B - color.B) * (candidate.B - color.B));
+        }
+        var row = _rows[rowIndex];
+        SetSwatch(field == PixelColorPickField.Source ? row.From : row.To, color);
+        row.Enabled.Checked = true;
+        UpdateHits();
+        return true;
+    }
+
+    private Button Swatch(Color color)
+    {
+        var button = new Button { Width = 74, Height = 30, FlatStyle = FlatStyle.Flat };
+        SetSwatch(button, color);
+        return button;
+    }
+
+    private void SetSwatch(Button button, Color color)
+    {
+        color = color.A == 0 ? Color.Transparent : color;
+        button.Tag = color;
+        // Keep the actual ARGB value separate from the opaque UI background.
+        button.BackColor = Color.FromArgb(
+            (color.R * color.A + 255 * (255 - color.A)) / 255,
+            (color.G * color.A + 255 * (255 - color.A)) / 255,
+            (color.B * color.A + 255 * (255 - color.A)) / 255);
+        button.ForeColor = button.BackColor.GetBrightness() < .5f ? Color.White : Color.Black;
+        button.Text = color.A == 0 ? "透明" : color.A < 255 ? $"A={color.A}" : string.Empty;
+        _colorTips.SetToolTip(button, color.A == 0 ? "透明" : $"#{color.A:X2}{color.R:X2}{color.G:X2}{color.B:X2}");
+    }
+
+    private static Color SwatchColor(Button button) => button.Tag is Color color ? color : button.BackColor;
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) _colorTips.Dispose();
+        base.Dispose(disposing);
+    }
+
     private static Button CommandButton(string text) => new() { Text = text, AutoSize = true, MinimumSize = new Size(88, 32) };
 }
 
@@ -324,6 +516,7 @@ internal sealed class PixelCanvas : Control
     private double _zoom = 1;
     private bool _showGrid = true;
     private bool _drawing;
+    private bool _editingEnabled = true;
     private Point _start;
     private Point _last;
     private Rectangle _activeBounds;
@@ -346,8 +539,16 @@ internal sealed class PixelCanvas : Control
     }
 
     public event Action<Color>? ColorPicked;
+    public event Action<Color>? ReplacementColorPicked;
+    public event Action? ReplacementPickCancelled;
     public event Action<double>? ZoomChanged;
     public PixelTool Tool { get; set; }
+    public bool ReplacementPickActive { get; set; }
+    public bool EditingEnabled
+    {
+        get => _editingEnabled;
+        set { _editingEnabled = value; if (!value) _drawing = false; }
+    }
     public Color DrawingColor { get; set; }
     public Size SourceSize => _bitmap.Size;
     public double Zoom
@@ -370,12 +571,13 @@ internal sealed class PixelCanvas : Control
         foreach (var section in _sections)
         for (var y = section.Bounds.Top; y < section.Bounds.Bottom; y++)
         for (var x = section.Bounds.Left; x < section.Bounds.Right; x++)
-            if (_bitmap.GetPixel(x, y).ToArgb() == color.ToArgb()) count++;
+            if (ColorKey(_bitmap.GetPixel(x, y)) == ColorKey(color)) count++;
         return count;
     }
 
     public void Undo()
     {
+        if (!EditingEnabled) return;
         if (_undo.Count == 0) return;
         _redo.Push(new Bitmap(_bitmap));
         _bitmap.Dispose();
@@ -385,6 +587,7 @@ internal sealed class PixelCanvas : Control
 
     public void Redo()
     {
+        if (!EditingEnabled) return;
         if (_redo.Count == 0) return;
         _undo.Push(new Bitmap(_bitmap));
         _bitmap.Dispose();
@@ -394,15 +597,16 @@ internal sealed class PixelCanvas : Control
 
     public void ReplaceColors(IReadOnlyList<(Color From, Color To)> pairs)
     {
-        if (pairs.Count == 0) return;
+        if (!EditingEnabled || pairs.Count == 0) return;
+        var replacements = new Dictionary<int, Color>();
+        foreach (var pair in pairs) replacements.TryAdd(ColorKey(pair.From), pair.To.A == 0 ? Color.Transparent : pair.To);
         PushUndo();
         foreach (var section in _sections)
         for (var y = section.Bounds.Top; y < section.Bounds.Bottom; y++)
         for (var x = section.Bounds.Left; x < section.Bounds.Right; x++)
         {
             var original = _bitmap.GetPixel(x, y);
-            var replacement = pairs.FirstOrDefault(pair => pair.From.ToArgb() == original.ToArgb());
-            if (replacement != default) _bitmap.SetPixel(x, y, replacement.To);
+            if (replacements.TryGetValue(ColorKey(original), out var replacement)) _bitmap.SetPixel(x, y, replacement);
         }
         Invalidate();
     }
@@ -453,10 +657,23 @@ internal sealed class PixelCanvas : Control
     protected override void OnMouseDown(MouseEventArgs e)
     {
         base.OnMouseDown(e);
+        if (ReplacementPickActive && e.Button == MouseButtons.Right)
+        {
+            ReplacementPickCancelled?.Invoke();
+            return;
+        }
         if (e.Button != MouseButtons.Left) return;
+        if (e.X < 0 || e.Y < 0 || e.X >= Scaled(_bitmap.Width) || e.Y >= Scaled(_bitmap.Height)) return;
         var point = ToPixel(e.Location);
+        if (point.X < 0 || point.Y < 0 || point.X >= _bitmap.Width || point.Y >= _bitmap.Height) return;
         var section = _sections.FirstOrDefault(item => item.Bounds.Contains(point));
         if (section == null) return;
+        if (ReplacementPickActive)
+        {
+            ReplacementColorPicked?.Invoke(_bitmap.GetPixel(point.X, point.Y));
+            return;
+        }
+        if (!EditingEnabled) return;
         _activeBounds = section.Bounds;
         if (Tool == PixelTool.Eyedropper)
         {
@@ -475,7 +692,7 @@ internal sealed class PixelCanvas : Control
     protected override void OnMouseMove(MouseEventArgs e)
     {
         base.OnMouseMove(e);
-        if (!_drawing || Tool is not (PixelTool.Pencil or PixelTool.Eraser)) return;
+        if (!EditingEnabled || !_drawing || Tool is not (PixelTool.Pencil or PixelTool.Eraser)) return;
         var point = ToPixel(e.Location);
         point.X = Math.Clamp(point.X, _activeBounds.Left, _activeBounds.Right - 1);
         point.Y = Math.Clamp(point.Y, _activeBounds.Top, _activeBounds.Bottom - 1);
@@ -487,7 +704,7 @@ internal sealed class PixelCanvas : Control
     protected override void OnMouseUp(MouseEventArgs e)
     {
         base.OnMouseUp(e);
-        if (!_drawing) return;
+        if (!EditingEnabled || !_drawing) return;
         _drawing = false;
         var point = ToPixel(e.Location);
         point.X = Math.Clamp(point.X, _activeBounds.Left, _activeBounds.Right - 1);
@@ -551,7 +768,8 @@ internal sealed class PixelCanvas : Control
         }
     }
 
-    private Point ToPixel(Point point) => new((int)(point.X / Zoom), (int)(point.Y / Zoom));
+    private static int ColorKey(Color color) => color.A == 0 ? 0 : color.ToArgb();
+    private Point ToPixel(Point point) => new((int)Math.Floor(point.X / Zoom), (int)Math.Floor(point.Y / Zoom));
     private int Scaled(int value) => (int)Math.Round(value * Zoom);
     private Rectangle Scale(Rectangle rectangle) => new(Scaled(rectangle.X), Scaled(rectangle.Y), Scaled(rectangle.Width), Scaled(rectangle.Height));
     private void UpdateSize() => Size = new Size(Scaled(_bitmap.Width) + 1, Scaled(_bitmap.Height) + 1);

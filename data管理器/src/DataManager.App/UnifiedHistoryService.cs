@@ -27,8 +27,8 @@ public sealed class UnifiedHistoryService(ProjectWorkspace workspace, ResourceCa
             entry.Status == HistoryStatus.Active && entry.Files.Count > 0,
             entry.Status == HistoryStatus.Reverted && entry.Files.Count > 0,
             $"版本：{entry.ProfileId}；布局：{entry.VariantId}；修订：{entry.LayoutRevision}{Environment.NewLine}" +
-            string.Join(Environment.NewLine, entry.Tables.Select(change =>
-                $"{change.TableName} {change.Id}：{change.FieldName}，{change.OldValue} → {change.NewValue}（0x{change.AbsoluteOffset:X} +{change.ByteLength}）")))).ToList();
+            string.Join(Environment.NewLine, entry.AppearanceSyncMessages.Concat(entry.Tables.Select(change =>
+                $"{change.TableName} {change.Id}：{change.FieldName}，{change.OldValue} → {change.NewValue}（0x{change.AbsoluteOffset:X} +{change.ByteLength}）"))))).ToList();
         entries.AddRange(_resourceHistory.List(workspace.RootPath).Select(entry => new UnifiedHistoryEntry("形象",
             entry.OperationId, entry.Timestamp, entry.Operation, entry.Summary, entry.Status, entry.Targets,
             entry.BeforeSha, entry.AfterSha, entry.CanUndo, entry.CanRedo,

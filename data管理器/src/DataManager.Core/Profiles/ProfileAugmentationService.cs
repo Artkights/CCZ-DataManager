@@ -19,14 +19,26 @@ public sealed class ProfileAugmentationService
     private const int AssignmentRows = 1024;
     private const int AssignmentWidth = 2;
 
-    public ResolvedProfile Apply(string root, ResolvedProfile profile)
+    public ResolvedProfile Apply(string root, ResolvedProfile profile) => ApplyCore(root, profile, false);
+
+    // Only used to reproduce the frozen, shipped 6.4 CSV/history identity.
+    internal ResolvedProfile ApplyPreConfiguration64(string root, ResolvedProfile profile) => ApplyCore(root, profile, true);
+
+    private ResolvedProfile ApplyCore(string root, ResolvedProfile profile, bool preConfiguration64)
     {
         if (string.IsNullOrWhiteSpace(root)) return profile;
         var path = ProjectFileLocator.Resolve(root, "Ekd5.exe");
         var executable = File.Exists(path) ? File.ReadAllBytes(path) : [];
-        var personalEffectNames = new EffectNamePoolProbe().Inspect(executable);
+        var is64 = profile.ProfileId.Equals("ccz-6.4", StringComparison.OrdinalIgnoreCase);
+        var configuration64 = is64 && !preConfiguration64 ? Ccz64ConfigurationProbe.Inspect(executable) : null;
+        var personalEffectNames = new EffectNamePoolProbe().Inspect(executable, is64 ? 180 : 255);
         var evidence = "特殊暴击人物映射缺少可验证的 PE 引用。";
         var supported = executable.Length > 0 && HasExecutableReference(executable, SpecialQuoteOffset, out evidence);
+        if (configuration64 is not null)
+        {
+            supported = configuration64.SpecialCriticalMap;
+            evidence = configuration64.CriticalEvidence;
+        }
         var table = new TableDefinition("person-critical-special-map", "特殊暴击人物分配", "Ekd5.exe",
             SpecialQuoteOffset, 21, 4, 0,
             [new TableFieldDefinition("人物ID", 0, 4, FieldKind.UInt32, Maximum: 1024, ReferenceTable: "persons")],
@@ -36,14 +48,30 @@ public sealed class ProfileAugmentationService
         var assignments65 = !is66 ? EmbeddedEngineLayoutProbe.InspectAssignments65(executable) : null;
         var assignmentEvidence = InspectAssignmentLayout(root, profile, executable, assignments65);
         var assignments66 = is66 ? EmbeddedEngineLayoutProbe.InspectAssignments(executable) : null;
-        var terrain66 = is66 ? EmbeddedEngineLayoutProbe.InspectStrategyTerrain(executable) : null;
+        var terrain66 = is66 || is64 ? EmbeddedEngineLayoutProbe.InspectStrategyTerrain(executable) : null;
         var ini66 = is66 ? ReadAssignmentIni(root, assignments66!.R.Offset, assignments66.S.Offset) : default;
         var tables = profile.Tables.Where(item => item.Key != table.Key).Select(item =>
         {
             item = AugmentExtensionGeometry(root, item);
+            if (configuration64 is not null)
+            {
+                if (item.Key == "person-retreat-quotes")
+                    return item with { DataOffset = 130000, RowCount = 49, RowSize = 200,
+                        Capability = configuration64.RetreatQuotes ? TableCapability.Editable : TableCapability.Unavailable,
+                        CapabilityEvidence = configuration64.RetreatEvidence,
+                        VerificationLevel = configuration64.RetreatQuotes ? VerificationLevel.SourceReviewed : VerificationLevel.InheritedUnverified };
+                if (item.Key == "persons")
+                    return item with { Fields = item.Fields.Select(field => field.Offset >= 27
+                            ? field with { Policy = configuration64.PersonDefaults ? FieldPolicy.Editable : FieldPolicy.Preserve } : field).ToArray(),
+                        CapabilityEvidence = configuration64.PersonEvidence };
+                if (item.Key == "detailed-job-growth")
+                    return item with { Fields = item.Fields.Select(field => field.Offset >= 9
+                            ? field with { Policy = configuration64.EquipmentPermissions ? FieldPolicy.Editable : FieldPolicy.Preserve } : field).ToArray(),
+                        CapabilityEvidence = configuration64.PermissionEvidence };
+            }
             if (item.Key == "effect-names")
                 return item with { DataOffset = personalEffectNames.Success ? personalEffectNames.FileOffset!.Value : item.DataOffset,
-                    Capability = TableCapability.ReadOnly,
+                    Capability = is64 && !personalEffectNames.Success ? TableCapability.Unavailable : TableCapability.ReadOnly,
                     CapabilityEvidence = personalEffectNames.Message,
                     VerificationLevel = personalEffectNames.Success ? VerificationLevel.SourceReviewed : VerificationLevel.InheritedUnverified };
             if (is66 && (item.Key is "person-r-assign" or "person-s-assign"))
@@ -55,7 +83,7 @@ public sealed class ProfileAugmentationService
                     CapabilityEvidence = probe.Evidence + (ini66.HasAssignmentKeys ? " " + ini66.Evidence : " 本项目无指定器 INI；以独立消费者/PE 映射为准。"),
                     VerificationLevel = verified ? VerificationLevel.SourceReviewed : VerificationLevel.InheritedUnverified };
             }
-            if (is66 && item.Key == "strategy-terrain-availability")
+            if ((is66 || is64) && item.Key == "strategy-terrain-availability")
                 return item with { DataOffset = terrain66!.Verified ? terrain66.Offset : item.DataOffset, RowCount = 30, RowSize = 1,
                     Capability = terrain66.Verified ? TableCapability.Editable : TableCapability.Unavailable,
                     CapabilityEvidence = terrain66.Evidence,
@@ -78,6 +106,8 @@ public sealed class ProfileAugmentationService
         // affect the layout identity, so a checked history chain keeps undo/redo valid.
         var geometry = string.Join("|", tables.Where(item => item.Key is "person-r-assign" or "person-s-assign" or "person-critical-special-map" or "strategy-terrain-availability" or "equipment-type-names" or "equipment-type-display")
             .OrderBy(item => item.Key).Select(item => $"{item.Key}:{item.Capability}:{item.DataOffset}:{item.RowCount}:{item.RowSize}"));
+        if (configuration64 is not null)
+            geometry += $"|64-configuration:{configuration64.RetreatQuotes}:{configuration64.PersonDefaults}:{configuration64.EquipmentPermissions}:{configuration64.SpecialCriticalMap}";
         // Keep existing history identities when extension geometry is unchanged.
         // Actual short/long, complete physical files get their own layout identity.
         var extensionChanges = tables.Where(item => IsExtension(item.Key) && profile.Tables.Any(original =>
@@ -91,13 +121,14 @@ public sealed class ProfileAugmentationService
     private static (TableCapability Capability, string Evidence) InspectAssignmentLayout(string root, ResolvedProfile profile, byte[] executable,
         EmbeddedEngineLayoutProbe.Assignments? consumers)
     {
-        if (!profile.ProfileId.Equals("ccz-6.5", StringComparison.OrdinalIgnoreCase))
+        if (profile.ProfileId is not ("ccz-6.4" or "ccz-6.5"))
             return (TableCapability.Unavailable, "6.6 R/S 指定尚无独立布局证据，禁止套用 6.5 System.ini 或固定偏移。");
+        var version = profile.Profile.Version;
         var r = profile.Tables.FirstOrDefault(item => item.Key == "person-r-assign");
         var s = profile.Tables.FirstOrDefault(item => item.Key == "person-s-assign");
         if (r == null || s == null || r.DataOffset != RAssignmentOffset65 || s.DataOffset != SAssignmentOffset65 ||
             r.RowCount != AssignmentRows || s.RowCount != AssignmentRows || r.RowSize != AssignmentWidth || s.RowSize != AssignmentWidth)
-            return (TableCapability.Unavailable, "6.5 R/S 表几何与已验证的 1024×UInt16 布局不一致，未开放偏移覆盖。");
+            return (TableCapability.Unavailable, $"{version} R/S 表几何与已验证的 1024×UInt16 布局不一致，未开放偏移覆盖。");
         var dynamicVerified = consumers is { R.Verified: true, S.Verified: true };
         if (!dynamicVerified && executable.LongLength < Math.Max(r.EndOffsetExclusive, s.EndOffsetExclusive))
             return (TableCapability.Unavailable, "Ekd5.exe 长度不足，R/S 指定表越过文件边界。");
@@ -110,7 +141,7 @@ public sealed class ProfileAugmentationService
             .Select(fingerprint => fingerprint.Sha256["Ekd5.exe"]).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var currentHash = HashService.Sha256(executable);
         if (knownHashes.Contains(currentHash))
-            return (TableCapability.Editable, "Ekd5.exe SHA-256 匹配已验证的 6.5 原样样本；R +0xE1000、S +0xD2800，1024×UInt16 边界已核对。" +
+            return (TableCapability.Editable, $"Ekd5.exe SHA-256 匹配已验证的 {version} 原样样本；R +0xE1000、S +0xD2800，1024×UInt16 边界已核对。" +
                 (ini.MatchesKnownLayout ? " 本项目 System.ini FileHead/RFileHead 与样本一致。" : " 本项目未提供指定器 INI，沿用已验证样本几何。"));
         if (TryRecoverVerifiedExecutable(root, profile, executable, knownHashes, out var historyEvidence))
             return (TableCapability.Editable, historyEvidence + "；R/S 沿用已验证样本几何，保存后的 SHA 变化不改变布局身份。");
@@ -219,7 +250,7 @@ public sealed class ProfileAugmentationService
             if (prior == null || priorHash == null || !visited.Add(priorHash)) return false;
             if (knownHashes.Contains(priorHash))
             {
-                evidence = $"通过 {step + 1} 条逐字节/前后 SHA-256 校验的本项目保存历史回溯到已验证 6.5 EXE 样本";
+                evidence = $"通过 {step + 1} 条逐字节/前后 SHA-256 校验的本项目保存历史回溯到已验证 {profile.Profile.Version} EXE 样本";
                 return true;
             }
             current = prior;

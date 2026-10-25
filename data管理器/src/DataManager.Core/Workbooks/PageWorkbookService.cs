@@ -103,13 +103,25 @@ public sealed class PageWorkbookService(ProjectWorkspace workspace)
                         throw new InvalidDataException($"{context}：与当前草稿冲突。导出时“{original[c]}”，当前“{currentRow.Values[c]}”，文件“{values[c]}”。");
                     if (Equal(currentRow.Values[c], values[c], column.Numeric)) continue;
                     var proposal = new WorkbookProposal(definition.Key, id, column.Key, currentRow.Values[c], values[c]);
-                    try { ValidatePhysical(proposal, physicalLookup); }
+                    try { ValidatePhysical(proposal, physicalLookup, validateEquipment: false); }
                     catch (Exception ex) when (ex is ArgumentException or InvalidDataException or FormatException or OverflowException or InvalidOperationException)
                     { throw new InvalidDataException($"{context}：实际值“{values[c]}”；{ex.Message}", ex); }
                     proposals.Add(proposal);
                     changes.Add(new(sheet.Name?.Value ?? definition.Label, addresses[c], id, column.Label, currentRow.Values[c], values[c]));
                 }
             });
+        }
+        var pendingPhysical = PhysicalEdits(proposals, physicalLookup);
+        for (var index = 0; index < proposals.Count; index++)
+        {
+            var proposal = proposals[index];
+            if (proposal.Dataset != "persons" || !PersonEquipmentService.CategoryForField(proposal.Field).HasValue) continue;
+            try { ValidatePhysical(proposal, physicalLookup, pendingPhysical); }
+            catch (Exception ex) when (ex is ArgumentException or InvalidDataException or FormatException or OverflowException or InvalidOperationException)
+            {
+                var change = changes[index];
+                throw new InvalidDataException($"工作表 {change.Sheet} / 单元格 {change.Cell} / ID={proposal.Id} / 字段“{proposal.Field}”：实际值“{proposal.After}”；{ex.Message}", ex);
+            }
         }
         try { ValidateNative(proposals); }
         catch (Exception ex) when (ex is InvalidDataException or InvalidOperationException or FormatException or ArgumentException or OverflowException)
@@ -166,6 +178,7 @@ public sealed class PageWorkbookService(ProjectWorkspace workspace)
         var currentRows = new Dictionary<string, Dictionary<string, WorkbookRow>>(StringComparer.Ordinal);
         var currentColumns = new Dictionary<string, Dictionary<string, int>>(StringComparer.Ordinal);
         var physicalLookup = _registry.CreatePhysicalLookup();
+        var physical = PhysicalEdits(preview.Proposals, physicalLookup);
         foreach (var proposal in preview.Proposals)
         {
             if (!current.TryGetValue(proposal.Dataset, out var dataset)) throw new InvalidDataException("预览的数据集已不可用，请重新导入。");
@@ -178,11 +191,9 @@ public sealed class PageWorkbookService(ProjectWorkspace workspace)
             if (!rows.TryGetValue(proposal.Id, out var row) || !currentColumns[proposal.Dataset].TryGetValue(proposal.Field, out var c) ||
                 !dataset.Columns[c].Editable || row.Values[c] != proposal.Before)
                 throw new InvalidDataException($"ID={proposal.Id} 字段“{proposal.Field}”在预览后已改变，请重新导入。");
-            ValidatePhysical(proposal, physicalLookup);
+            ValidatePhysical(proposal, physicalLookup, physical);
         }
         ValidateNative(preview.Proposals);
-        var physical = preview.Proposals.Where(p => !p.Dataset.StartsWith("native-", StringComparison.Ordinal)).Select(p =>
-        { var value = _registry.ConvertPhysical(p, physicalLookup, out var doc, out var row); return new CompositeCellEdit(doc.Definition.Key, row, p.Field, value); }).ToArray();
         using var group = workspace.Commands.BeginGroup("导入业务页工作簿");
         workspace.ApplyCompositeTransaction("导入工作簿物理字段", physical);
         var groups = GroupChanges(preview.Proposals);
@@ -191,11 +202,19 @@ public sealed class PageWorkbookService(ProjectWorkspace workspace)
         return preview.ChangedCells;
     }
 
-    private void ValidatePhysical(WorkbookProposal proposal, PageDatasetRegistry.PhysicalLookup lookup)
+    private CompositeCellEdit[] PhysicalEdits(IReadOnlyList<WorkbookProposal> proposals, PageDatasetRegistry.PhysicalLookup lookup)
+        => proposals.Where(proposal => !proposal.Dataset.StartsWith("native-", StringComparison.Ordinal)).Select(proposal =>
+        {
+            var value = _registry.ConvertPhysical(proposal, lookup, out var document, out var row);
+            return new CompositeCellEdit(document.Definition.Key, row, proposal.Field, value);
+        }).ToArray();
+
+    private void ValidatePhysical(WorkbookProposal proposal, PageDatasetRegistry.PhysicalLookup lookup,
+        IReadOnlyList<CompositeCellEdit>? pendingEdits = null, bool validateEquipment = true)
     {
         if (proposal.Dataset.StartsWith("native-", StringComparison.Ordinal)) return;
         var value = _registry.ConvertPhysical(proposal, lookup, out var document, out var row);
-        workspace.ValidateCellValue(document, row, proposal.Field, value);
+        workspace.ValidateCellValue(document, row, proposal.Field, value, pendingEdits, validateEquipment);
     }
     private void ValidateNative(IReadOnlyList<WorkbookProposal> proposals)
     {

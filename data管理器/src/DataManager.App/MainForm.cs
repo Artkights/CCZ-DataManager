@@ -77,7 +77,7 @@ public sealed partial class MainForm : Form
         _businessEditor = CreateBusinessEditor();
         _businessEditors[BusinessPageKind.Persons] = _businessEditor;
         _imageEditor.CategoriesChanged += () => RefreshResourceCategories();
-        Text = $"data 与形象管理器 - 曹操传加强版 6.5/6.6 · {Application.ProductVersion.Split('+')[0]}";
+        Text = $"data 与形象管理器 - 曹操传加强版 6.4/6.5/6.6 · {Application.ProductVersion.Split('+')[0]}";
         StartPosition = FormStartPosition.CenterScreen;
         Width = 1500;
         Height = 900;
@@ -385,9 +385,10 @@ public sealed partial class MainForm : Form
                 resultText += Environment.NewLine + $"本次仅完成所选兼容项；仍有 {incompatible:N0} 项不可映射/缺失，未自动写入。具体原因已保存在迁移日志的 Unmapped 中。";
             if (result.Success && ignored > 0)
                 resultText += Environment.NewLine + $"有 {ignored:N0} 个逻辑段按迁移策略或目标支持能力忽略，未写入目标。详情已保存在迁移日志的 Ignored 中。";
+            var appearanceWarning = result.AppearanceSync?.HasWarnings == true || result.Messages.Any(text => text.StartsWith("图片关联存档同步已跳过：", StringComparison.Ordinal));
             MessageBox.Show(this, resultText + (result.BackupPath == null ? string.Empty : Environment.NewLine + $"备份：{result.BackupPath}"),
-                result.Success ? "所选迁移项已完成" : "迁移失败", MessageBoxButtons.OK,
-                result.Success ? MessageBoxIcon.Information : MessageBoxIcon.Error);
+                result.Success ? appearanceWarning ? "形象已保存，部分存档未同步" : "所选迁移项已完成" : "迁移失败", MessageBoxButtons.OK,
+                result.Success ? appearanceWarning ? MessageBoxIcon.Warning : MessageBoxIcon.Information : MessageBoxIcon.Error);
             if (result.Success && string.Equals(_workspace.RootPath, plan.TargetRoot, StringComparison.OrdinalIgnoreCase))
             {
                 var report = _workspace.Open(plan.TargetRoot, plan.TargetProfileId, plan.TargetVariantId);
@@ -408,7 +409,7 @@ public sealed partial class MainForm : Form
     {
         if (!_resourceModule || _grid.CurrentRow == null || !_grid.Columns.Contains("资源键"))
         {
-            MessageBox.Show(this, "请先在形象设定页选择一个资源。", "资源操作", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            MessageBox.Show(this, "请先在图片设定页选择一个资源。", "资源操作", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return null;
         }
         var key = Convert.ToString(_grid.CurrentRow.Cells["资源键"].Value, CultureInfo.InvariantCulture);
@@ -497,7 +498,7 @@ public sealed partial class MainForm : Form
 
     private void OpenProjectFromDialog()
     {
-        using var dialog = new FolderBrowserDialog { Description = "选择曹操传加强版 6.5 或 6.6 项目目录" };
+        using var dialog = new FolderBrowserDialog { Description = "选择曹操传加强版 6.4、6.5 或 6.6 项目目录" };
         if (dialog.ShowDialog(this) == DialogResult.OK) OpenProject(dialog.SelectedPath);
     }
 
@@ -545,7 +546,7 @@ public sealed partial class MainForm : Form
             _moduleTabs.TabPages.Clear();
             foreach (var module in _workspace.Modules)
                 _moduleTabs.TabPages.Add(new TabPage(module.DisplayName) { Tag = module.Key });
-            _moduleTabs.TabPages.Add(new TabPage("形象设定") { Tag = "__resources" });
+            _moduleTabs.TabPages.Add(new TabPage("图片设定") { Tag = "__resources" });
             _moduleTabs.TabPages.Add(new TabPage("历史记录") { Tag = "__history" });
             _moduleTabs.TabPages.Add(new TabPage("扫描诊断") { Tag = "__scan" });
             if (_moduleTabs.TabPages.Count > 0) _moduleTabs.SelectedIndex = 0;
@@ -881,7 +882,7 @@ public sealed partial class MainForm : Form
                 sAssignmentReferencesProvider: GetCurrentSAssignmentReferences);
             RefreshResourceCategories();
             _diagnosticBox.Text = "选择左侧资源分类。新增、替换、删除、导入导出与历史由原形象管理器控件处理。删除导致编号前移时不会自动修正其他文件引用。";
-            SetStatus("形象设定已载入。");
+            SetStatus("图片设定已载入。");
         }
         catch (Exception ex) { _diagnosticBox.Text = ex.Message; SetStatus("形象资源加载失败：" + ex.Message, true); }
     }
@@ -1194,9 +1195,14 @@ public sealed partial class MainForm : Form
         var column = _grid.Columns[e.ColumnIndex];
         var field = _currentDocument.Data.Columns[column.DataPropertyName]?.ExtendedProperties["Field"] as TableFieldDefinition;
         if (field == null) return;
+        if (_currentDocument.Definition.Key == "persons" && PersonEquipmentService.CategoryForField(field.Name).HasValue &&
+            !_grid.IsCurrentCellDirty) return;
         try
         {
             var text = Convert.ToString(e.FormattedValue, CultureInfo.InvariantCulture) ?? string.Empty;
+            if (column is DataGridViewComboBoxColumn && field.Kind is FieldKind.UInt8 or FieldKind.UInt16 or FieldKind.UInt32 &&
+                int.TryParse(text.Split('：', ':')[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var referencedId))
+                text = referencedId.ToString(CultureInfo.InvariantCulture);
             if (field.Kind is FieldKind.UInt8 or FieldKind.UInt16) BinaryValueCodec.ParseInteger(text, field.Minimum, field.Maximum, field.Name);
             _workspace.ValidateCellValue(_currentDocument, PhysicalRowIndex(e.RowIndex), column.DataPropertyName, text);
             _grid.Rows[e.RowIndex].Cells[e.ColumnIndex].ErrorText = string.Empty;
@@ -1270,10 +1276,12 @@ public sealed partial class MainForm : Form
             SetStatus(ex.Message, true);
             return;
         }
-        SetStatus(result.Messages.FirstOrDefault() ?? "保存完成", !result.Saved);
+        SetStatus(result.Messages.FirstOrDefault() ?? "保存完成", !result.Saved || result.AppearanceSync?.HasWarnings == true);
         RefreshDirtyState();
         if (!result.Saved) MessageBox.Show(this, string.Join(Environment.NewLine, result.Messages), "保存失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
-        else if (result.History != null) _diagnosticBox.Text = $"历史记录：{result.History.Summary}{Environment.NewLine}" + string.Join(Environment.NewLine, result.History.Tables.Take(12).Select(change => $"{change.TableName} ID={change.Id} {change.FieldName}: {change.OldValue} -> {change.NewValue}"));
+        else if (result.History != null) _diagnosticBox.Text = $"历史记录：{result.History.Summary}{Environment.NewLine}" +
+            string.Join(Environment.NewLine, result.History.AppearanceSyncMessages.Concat(result.History.Tables.Take(12)
+                .Select(change => $"{change.TableName} ID={change.Id} {change.FieldName}: {change.OldValue} -> {change.NewValue}")));
     }
 
     private void HistoryUndo() => RestoreHistory(redo: false);

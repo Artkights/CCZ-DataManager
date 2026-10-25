@@ -1,5 +1,6 @@
 using System.Data;
 using System.Globalization;
+using System.ComponentModel;
 using DataManager.Core.Domain;
 using DataManager.Core.Binary;
 using DataManager.Core.Models;
@@ -42,6 +43,8 @@ public sealed partial class MainForm
             var displayIndex = oldColumn.DisplayIndex;
             var combo = new DataGridViewComboBoxColumn
             {
+                CellTemplate = document.Definition.Key == "persons" && PersonEquipmentService.CategoryForField(field.Name).HasValue
+                    ? new EquipmentReferenceCell() : new DataGridViewComboBoxCell(),
                 Name = field.Name, HeaderText = oldColumn.HeaderText, DataPropertyName = field.Name,
                 DataSource = choices, ValueMember = nameof(ReferenceChoice.Value), DisplayMember = nameof(ReferenceChoice.Display),
                 DisplayStyle = DataGridViewComboBoxDisplayStyle.DropDownButton, FlatStyle = FlatStyle.Flat,
@@ -55,6 +58,9 @@ public sealed partial class MainForm
 
     private ReferenceChoice[] GetReferenceChoices(TableDocument document, TableFieldDefinition field)
     {
+        if (document.Definition.Key == "persons" && PersonEquipmentService.CategoryForField(field.Name).HasValue)
+            return PersonEquipmentService.GetOptions(_workspace.Documents, field.Name, field.Minimum, field.Maximum)
+                .Select(option => new ReferenceChoice(option.Id, option.Display)).ToArray();
         var key = (document, field.Name);
         if (!_referenceOptions.TryGetValue(key, out var entry))
             _referenceOptions[key] = entry = new ReferenceOptionsEntry(document.Data, field);
@@ -103,6 +109,30 @@ public sealed partial class MainForm
         if (entry.Choices == null || !entry.Choices.SequenceEqual(choices)) entry.Choices = choices;
         entry.Dependencies = dependencies; entry.NativeIdentity = nativeIdentity; entry.Values = actualValues;
         return entry.Choices;
+    }
+
+    private sealed class EquipmentReferenceCell : DataGridViewComboBoxCell
+    {
+        public override void InitializeEditingControl(int rowIndex, object? initialFormattedValue, DataGridViewCellStyle cellStyle)
+        {
+            base.InitializeEditingControl(rowIndex, initialFormattedValue, cellStyle);
+            if (DataGridView?.EditingControl is not DataGridViewComboBoxEditingControl editor || Value == null || Value == DBNull.Value ||
+                DataSource is not ReferenceChoice[] choices) return;
+            var id = Convert.ToInt32(Value, CultureInfo.InvariantCulture);
+            if (choices.Any(choice => choice.Value == id)) return;
+            editor.DropDownStyle = ComboBoxStyle.DropDown;
+            editor.Text = $"{id}：原值（类别不匹配）";
+            editor.EditingControlValueChanged = false;
+        }
+
+        protected override object? GetFormattedValue(object? value, int rowIndex, ref DataGridViewCellStyle cellStyle,
+            TypeConverter? valueTypeConverter, TypeConverter? formattedValueTypeConverter, DataGridViewDataErrorContexts context)
+        {
+            if (value != null && value != DBNull.Value && DataSource is ReferenceChoice[] choices &&
+                Convert.ToInt32(value, CultureInfo.InvariantCulture) is var id && choices.All(choice => choice.Value != id))
+                return $"{id}：原值（类别不匹配）";
+            return base.GetFormattedValue(value, rowIndex, ref cellStyle, valueTypeConverter, formattedValueTypeConverter, context);
+        }
     }
 
     private sealed class ReferenceOptionsEntry : IDisposable

@@ -8,6 +8,7 @@ using DataManager.Core.History;
 using DataManager.Core.Models;
 using DataManager.Core.Profiles;
 using DataManager.Core.Scanner;
+using DataManager.Core.Appearance;
 
 namespace DataManager.Core.Editing;
 
@@ -168,7 +169,8 @@ public sealed class ProjectWorkspace
             }));
     }
 
-    public void ValidateCellValue(TableDocument document, int rowIndex, string columnName, object? value)
+    public void ValidateCellValue(TableDocument document, int rowIndex, string columnName, object? value,
+        IReadOnlyList<CompositeCellEdit>? pendingEdits = null, bool validateEquipment = true)
     {
         if (document.Definition.Capability != TableCapability.Editable)
         {
@@ -191,6 +193,9 @@ public sealed class ProjectWorkspace
             _ = _codecs.Get(document.Definition.RecordCodecKey).EncodeChangedField(row, field, value);
             if (document.Definition.Key == "shops" && field.ReferenceTable == "items" && !ValuesEqual(document.GetOriginal(rowIndex, field.Name), value))
                 ShopValueValidator.ValidateItem(this, Convert.ToInt32(value, CultureInfo.InvariantCulture));
+            if (validateEquipment && document.Definition.Key == "persons" && PersonEquipmentService.CategoryForField(field.Name).HasValue &&
+                !ValuesEqual(document.GetOriginal(rowIndex, field.Name), value))
+                PersonEquipmentService.Validate(this, field.Name, Convert.ToInt32(value, CultureInfo.InvariantCulture), pendingEdits);
             if (document.Definition.Key == EquipmentTypeCatalogService.DisplayTableKey &&
                 !ValuesEqual(document.GetOriginal(rowIndex, field.Name), value) &&
                 Convert.ToInt32(value, CultureInfo.InvariantCulture) is var displayValue &&
@@ -347,10 +352,13 @@ public sealed class ProjectWorkspace
                 // but the active record codec may impose additional
                 // Variant-specific constraints. Validate the resulting cells
                 // before allowing the bundle to become a draft.
-                foreach (var change in result.Changes)
-                    ValidateCellValue(document, change.RowIndex, change.ColumnName, change.NewValue);
                 results[key] = result;
             }
+            // All tables are present before category-dependent references are
+            // checked, regardless of the CSV dictionary's order.
+            foreach (var (key, result) in results)
+                foreach (var change in result.Changes)
+                    ValidateCellValue(_documents[key], change.RowIndex, change.ColumnName, change.NewValue);
         });
         var changed = results.Values.Sum(result => result.ChangedCells);
         if (changed == 0) return new CsvBundleImportResult(results, 0);
@@ -394,7 +402,7 @@ public sealed class ProjectWorkspace
             var field = document.Definition.Fields.FirstOrDefault(candidate => candidate.Name.Equals(edit.FieldName, StringComparison.Ordinal));
             if (field == null || field.Policy != FieldPolicy.Editable || !document.Data.Columns.Contains(edit.FieldName))
                 throw new InvalidOperationException($"字段不可编辑：{edit.TableKey}.{edit.FieldName}");
-            ValidateCellValue(document, edit.RowIndex, edit.FieldName, edit.NewValue);
+            ValidateCellValue(document, edit.RowIndex, edit.FieldName, edit.NewValue, edits);
             var oldValue = document.Data.Rows[edit.RowIndex][edit.FieldName] == DBNull.Value ? null : document.Data.Rows[edit.RowIndex][edit.FieldName];
             if (ValuesEqual(oldValue, edit.NewValue)) continue;
             proposals.Add((document, edit.RowIndex, edit.FieldName, oldValue, edit.NewValue));
@@ -429,7 +437,7 @@ public sealed class ProjectWorkspace
         foreach (var edit in edits)
         {
             var document = GetDocument(edit.TableKey);
-            ValidateCellValue(document, edit.RowIndex, edit.FieldName, edit.NewValue);
+            ValidateCellValue(document, edit.RowIndex, edit.FieldName, edit.NewValue, edits);
         }
         foreach (var edit in edits)
             GetDocument(edit.TableKey).Data.Rows[edit.RowIndex][edit.FieldName] = edit.NewValue ?? DBNull.Value;
@@ -507,8 +515,6 @@ public sealed class ProjectWorkspace
             changesByFile.Add(path, []);
         }
         if (changesByFile.Count == 0) return new SaveResult(true, 0, 0, 0, null, ["没有未保存修改。"]);
-        // Resolve project configuration before any disk or in-memory baseline is accepted.
-        var itemBoundary = ItemCategoryBoundary.Read(RootPath);
         var recoverDrafts = _documents.Values.Select(document => document.CaptureSaveRecovery())
             .Concat(participants.Select(draft => draft.CaptureSaveRecovery())).ToArray();
 
@@ -623,6 +629,16 @@ public sealed class ProjectWorkspace
             fileChanges.Add(new FileByteChange(Path.GetRelativePath(RootPath, group.Key), beforeHash, HashService.Sha256(after), after.Length, historyChunks));
         }
 
+        AppearanceSyncSession? appearanceSync = null;
+        var appearanceUpdates = AppearanceSyncUpdates.FromChanges(allChanges);
+        if (appearanceUpdates.Count > 0)
+        {
+            var exePath = Path.GetFullPath(ProjectFileLocator.Resolve(RootPath, "Ekd5.exe"));
+            var executable = candidateBytes.TryGetValue(exePath, out var exeCandidate)
+                ? exeCandidate : File.ReadAllBytes(exePath);
+            appearanceSync = SaveAppearanceSyncService.Prepare(RootPath, ActiveProfile.ProfileId, executable, appearanceUpdates);
+        }
+
         var history = new HistoryEntry
         {
             SchemaVersion = fileEdits.Count > 0 ? "2.1" : "2.0",
@@ -667,6 +683,14 @@ public sealed class ProjectWorkspace
                 foreach (var document in _documents.Values.Where(document => Path.GetFullPath(document.FilePath).Equals(file.Key, StringComparison.OrdinalIgnoreCase)))
                     verifiedDocuments[document.Definition.Key] = _reader.ReadBytes(file.Key, document.Definition, bytes);
             }
+            if (appearanceSync != null)
+            {
+                appearanceSync.Commit();
+                fileChanges.AddRange(appearanceSync.AppliedFiles.Select(file => file.Change));
+                history.AppearanceSyncMessages = [appearanceSync.Report.Summary, .. appearanceSync.Report.Diagnostics];
+                history.Summary += "；" + appearanceSync.Report.Summary;
+                if (appearanceSync.AppliedFiles.Count > 0) history.Modules.Add("存档形象同步");
+            }
             history.Status = HistoryStatus.Active;
             _history.Update(RootPath, history);
             foreach (var document in _documents.Values)
@@ -677,17 +701,22 @@ public sealed class ProjectWorkspace
                 }
             }
             AddParentReferenceNames();
-            AddDerivedItemFields(itemBoundary);
+            AddDerivedItemFields();
             foreach (var draft in participants) draft.AcceptSaved();
             Commands.Clear();
             var changedBytes = recordCellHistory ? fileChanges.Sum(change => change.Chunks.Sum(chunk => chunk.Length))
                 : fileChanges.Sum(change => change.Chunks.Sum(chunk => chunk.NewBytes.Where((value, index) => value != chunk.OldBytes[index]).Count()));
-            return new SaveResult(true, changesByFile.Count, allChanges.Count, changedBytes, history,
-                [$"已保存：{changesByFile.Count} 个文件、{allChanges.Count} 个字段、{changedBytes} 字节；候选及磁盘语义复读通过。"]);
+            var savedMessage = $"已保存：{fileChanges.Count} 个文件、{allChanges.Count} 个字段、{changedBytes} 字节；候选及磁盘语义复读通过。";
+            if (appearanceSync?.Report.HasWarnings == true) savedMessage = "形象已保存，部分存档未同步。 " + savedMessage;
+            return new SaveResult(true, fileChanges.Count, allChanges.Count, changedBytes, history,
+                appearanceSync == null ? [savedMessage] : [savedMessage + " " + appearanceSync.Report.Summary, .. appearanceSync.Report.Diagnostics])
+                { AppearanceSync = appearanceSync?.Report };
         }
         catch (Exception ex)
         {
             var rollbackErrors = new List<string>();
+            try { appearanceSync?.Rollback(); }
+            catch (Exception rollback) { rollbackErrors.Add("存档形象回滚：" + rollback.Message); }
             foreach (var recover in recoverDrafts)
             {
                 try { recover(); }
@@ -820,11 +849,10 @@ public sealed class ProjectWorkspace
         return result;
     }
 
-    private void AddDerivedItemFields(ItemCategoryBoundary? savedBoundary = null)
+    private void AddDerivedItemFields()
     {
         if (!_documents.TryGetValue("detailed-job-growth", out var growth)) return;
         _documents.TryGetValue("detailed-jobs", out var detailedJobs);
-        var boundary = savedBoundary ?? ItemCategoryBoundary.Read(RootPath);
 
         foreach (var key in new[] { "items-low", "items-high", "items-extended" })
         {
@@ -836,7 +864,7 @@ public sealed class ProjectWorkspace
             foreach (DataRow row in itemDocument.Data.Rows)
             {
                 var rowIndex = itemDocument.Data.Rows.IndexOf(row);
-                var semantics = ItemTypeService.Resolve(itemDocument, rowIndex, boundary);
+                var semantics = ItemTypeService.Resolve(itemDocument, rowIndex);
                 row["物品分类"] = semantics.CategoryName;
                 row["可装备部队"] = semantics.PermissionColumn is { } equipmentColumn
                     ? BuildEquipmentSummary(growth.Data, detailedJobs?.Data, equipmentColumn)
@@ -874,10 +902,6 @@ public sealed class ProjectWorkspace
     private void ExecuteDraftOperation(IReadOnlyList<TableDocument> documents, Action operation)
     {
         var distinct = documents.Distinct().ToArray();
-        // Resolve external configuration before changing any draft. The same
-        // resolved value is reused by both completion and recovery.
-        var boundary = distinct.Any(document => NeedsItemDerivedRefresh(document.Definition.Key))
-            ? ItemCategoryBoundary.Read(RootPath) : null;
         var before = distinct.ToDictionary(document => document.Definition.Key, document => TableSnapshot.Capture(document.Data), StringComparer.OrdinalIgnoreCase);
         try
         {
@@ -885,7 +909,7 @@ public sealed class ProjectWorkspace
             foreach (var document in distinct.Where(document => document.Definition.Key == "forge"))
                 foreach (var dirtyRow in document.EnumerateChanges().Select(change => change.RowIndex).Distinct())
                     ExtendDataService.ValidateForgeDraft(document, dirtyRow);
-            foreach (var document in distinct) RefreshDerivedFor(document.Definition.Key, boundary);
+            foreach (var document in distinct) RefreshDerivedFor(document.Definition.Key);
         }
         catch (Exception original)
         {
@@ -898,7 +922,7 @@ public sealed class ProjectWorkspace
             }
             foreach (var document in distinct)
             {
-                try { RefreshDerivedFor(document.Definition.Key, boundary); }
+                try { RefreshDerivedFor(document.Definition.Key); }
                 catch (Exception refresh) { failures.Add(new InvalidOperationException($"恢复派生显示失败：{document.Definition.Key}：{refresh.Message}", refresh)); }
             }
             if (failures.Count > 0) throw new AggregateException("草稿操作失败，恢复异常已汇总。", new[] { original }.Concat(failures));
@@ -912,12 +936,12 @@ public sealed class ProjectWorkspace
             foreach (var document in documents) snapshots[document.Definition.Key].Restore(document.Data);
         });
 
-    private void RefreshDerivedFor(string tableKey, ItemCategoryBoundary? boundary = null)
+    private void RefreshDerivedFor(string tableKey)
     {
         if (NeedsItemDerivedRefresh(tableKey))
         {
             AddParentReferenceNames();
-            AddDerivedItemFields(boundary);
+            AddDerivedItemFields();
         }
         if (tableKey is "persons") AddParentReferenceNames();
     }

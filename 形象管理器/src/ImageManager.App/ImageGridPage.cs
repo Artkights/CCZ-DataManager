@@ -14,6 +14,7 @@ public sealed class ImageGridPage : UserControl
     private readonly IBatchRenameService _renames;
     private readonly IImagePreviewService _previews;
     private readonly MapPairService _mapPairs = new();
+    private readonly SceneTerrainService _sceneTerrain = new();
     private readonly RsStripExchangeService _strips;
     private readonly ImagePageCapabilities _capabilities;
     private readonly ComboBox _resourceSelector = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 240 };
@@ -34,6 +35,7 @@ public sealed class ImageGridPage : UserControl
     private List<ImageResourceDescriptor> _resources = [];
     private List<LogicalImageAsset> _assets = [];
     private string _search = string.Empty;
+    private string? _lastCommitStatus;
     private CancellationTokenSource? _renderCancellation;
     private long _renderGeneration;
     private CancellationTokenSource? _loadCancellation;
@@ -45,6 +47,13 @@ public sealed class ImageGridPage : UserControl
     private bool _isActive = true;
     private string? _focusedAssetId;
     private Task _loadingTask = Task.CompletedTask;
+    private CancellationTokenSource? _terrainLoadCancellation;
+    private bool _terrainOpening;
+    private CancellationTokenSource? _terrainAvailabilityCancellation;
+    private TerrainProbeKey? _terrainAvailabilityKey;
+    private readonly Dictionary<TerrainProbeKey, TerrainAvailability> _terrainAvailabilityCache = new();
+    private Task _terrainAvailabilityTask = Task.CompletedTask;
+    public Task TerrainAvailabilityTask => _terrainAvailabilityTask;
 
     public Task LoadingTask => _loadingTask;
     public string SearchText => _search;
@@ -95,8 +104,11 @@ public sealed class ImageGridPage : UserControl
 
     public void LoadProject(ProjectProfile project, IEnumerable<ImageResourceDescriptor> resources, IReadOnlySet<int>? usedIds = null)
     {
+        _terrainLoadCancellation?.Cancel();
+        InvalidateTerrainAvailability();
         _loadCancellation?.Cancel();
         _resourceLoads.Clear();
+        _lastCommitStatus = null;
         _project = project;
         var palette = new PaletteService().Resolve(project);
         _paletteTip.SetToolTip(_resourceSelector, $"RAW 调色板来源：{palette.Source}\n{palette.Diagnostic}");
@@ -157,6 +169,12 @@ public sealed class ImageGridPage : UserControl
     public void InvalidateResources(IReadOnlyList<string> paths)
     {
         var changed = paths.Select(Path.GetFullPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (_project != null && new[] { _project.TryGetResource("Mmap.e5"), _project.TryGetResource("Pmap.e5") }
+                .Any(path => path != null && changed.Contains(Path.GetFullPath(path))))
+        {
+            InvalidateTerrainAvailability();
+            UpdateWriteConstraints();
+        }
         foreach (var resource in _resources.Where(resource => resource.Paths.Any(path => changed.Contains(Path.GetFullPath(path)))))
         {
             _resourceLoads.Remove(resource.Key + ":person");
@@ -184,6 +202,8 @@ public sealed class ImageGridPage : UserControl
         if (keys == (Keys.Control | Keys.A)) { SetAllSelected(true); return true; }
         if (keys == Keys.F5)
         {
+            if (Has(ImagePageCapabilities.SceneTerrainEdit) && SelectedResources().Any(resource =>
+                    resource.Key.Equals("Mmap.e5", StringComparison.OrdinalIgnoreCase))) InvalidateTerrainAvailability();
             foreach (var resource in SelectedResources()) { _resourceLoads.Remove(resource.Key + ":person"); _resourceLoads.Remove(resource.Key + ":job"); }
             var paths = SelectedResources().SelectMany(resource => resource.Paths).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
             _previews.InvalidatePaths(paths); _animationPreview.InvalidatePaths(paths);
@@ -209,6 +229,7 @@ public sealed class ImageGridPage : UserControl
                      ("play", "播放动作", Play, ImagePageCapabilities.Play),
                      ("frames", "全部帧数", ShowAllFrames, ImagePageCapabilities.AllFrames),
                      ("pixel", "像素编辑", PixelEdit, ImagePageCapabilities.PixelEdit),
+                     ("terrain", "地形编辑", EditSceneTerrain, ImagePageCapabilities.SceneTerrainEdit),
                      ("atlas-export", "导出参考图", ExportAtlas, ImagePageCapabilities.ReferenceAtlas),
                      ("atlas-import", "导入参考图", ImportAtlas, ImagePageCapabilities.ReferenceAtlas),
                      ("rename", "批量修改文件名", BatchRename, ImagePageCapabilities.BatchRename),
@@ -217,7 +238,7 @@ public sealed class ImageGridPage : UserControl
         {
             if (!Has(item.Capability)) continue;
             var button = new Button { Text = item.Text, AutoSize = true, MinimumSize = new Size(0, 30), Margin = new Padding(2) };
-            if (item.Key == "map-pair") button.Visible = false;
+            if (item.Key is "map-pair" or "terrain") button.Visible = false;
             button.Click += (_, _) => item.Action();
             _buttons[item.Key] = button;
             panel.Controls.Add(button);
@@ -252,6 +273,7 @@ public sealed class ImageGridPage : UserControl
         var job = Has(ImagePageCapabilities.SPreviewSelector) && _sMode.SelectedIndex == 1;
         if (!preserveState)
         {
+            _lastCommitStatus = null;
             _focusedAssetId = null;
             _gallery.FocusedAssetId = null;
             _animationPreview.Clear();
@@ -385,7 +407,7 @@ public sealed class ImageGridPage : UserControl
         var filtered = FilteredAssets();
         _gallery.SetItems(filtered, asset => CreateCard(asset, generation), preserveSelection, !refreshThumbnails);
         _gallery.FocusedAssetId = _focusedAssetId;
-        _status.Text = $"{SelectedResource()?.DisplayName}：共 {filtered.Count} 项；滚动时按需显示缩略图";
+        _status.Text = _lastCommitStatus ?? $"{SelectedResource()?.DisplayName}：共 {filtered.Count} 项；滚动时按需显示缩略图";
         UpdateWriteConstraints();
     }
 
@@ -699,9 +721,11 @@ public sealed class ImageGridPage : UserControl
             var text = string.Join(Environment.NewLine, plan.Warnings) + Environment.NewLine + Environment.NewLine + "确定继续？";
             var nativeIdsOnly = selected.All(asset => asset.Kind == ResourceKind.DllBitmap &&
                 asset.Category is not (ImageCategory.ItemIcon or ImageCategory.StrategyIcon));
-            if (MessageBox.Show(this, text, nativeIdsOnly ? "删除所选原生 ID，其他编号保持" : "高风险：删除并前移编号",
+            var pairedScenes = plan.Metadata?.ContainsKey("ScenePairProtocol") == true;
+            if (MessageBox.Show(this, text, pairedScenes ? "确认场景与地形操作" :
+                    nativeIdsOnly ? "删除所选原生 ID，其他编号保持" : "高风险：删除并前移编号",
                     MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
-            CommitVerified(plan);
+            CommitVerified(pairedScenes ? plan with { RequiresRiskConfirmation = false } : plan);
         }
         catch (Exception ex) { ShowError(ex); }
     }
@@ -936,6 +960,61 @@ public sealed class ImageGridPage : UserControl
             finally { foreach (var frame in frames) frame.Dispose(); }
         }
         catch (Exception ex) { ShowError(ex); }
+    }
+
+    private async void EditSceneTerrain()
+    {
+        if (_project == null || _terrainOpening || !Has(ImagePageCapabilities.SceneTerrainEdit)) return;
+        var asset = FocusedAsset();
+        if (asset == null) { ShowFocusRequired(); return; }
+        if (!asset.ResourceKey.Equals("Mmap.e5", StringComparison.OrdinalIgnoreCase)) return;
+        var imageNumber = asset.Frames.First().ImageNumber;
+        if (imageNumber <= 40)
+        {
+            MessageBox.Show(this, "前 40 张为外场景；地形编辑适用于第 41 张起的内场景。", "地形编辑",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        if (!ButtonEnabled("terrain")) return;
+        var project = _project;
+        _terrainOpening = true;
+        _terrainLoadCancellation?.Cancel();
+        _terrainLoadCancellation?.Dispose();
+        using var cancellation = new CancellationTokenSource();
+        _terrainLoadCancellation = cancellation;
+        UpdateWriteConstraints();
+        _status.Text = "正在读取内场景与对应地形…";
+        try
+        {
+            using var document = await Task.Run(() => _sceneTerrain.Load(project, imageNumber, cancellation.Token), cancellation.Token);
+            if (IsDisposed || cancellation.IsCancellationRequested || _project != project) return;
+            using var dialog = new SceneTerrainEditorDialog(document, async () =>
+            {
+                try
+                {
+                    var plan = await Task.Run(() => _sceneTerrain.PlanEdit(project, document));
+                    if (IsDisposed || _project != project) return false;
+                    if (!Commit(plan)) return false;
+                    await Task.Run(() => _sceneTerrain.AcceptSaved(project, document));
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    if (!IsDisposed) MessageBox.Show(this, ex.Message, "地形保存失败",
+                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return false;
+                }
+            });
+            dialog.ShowDialog(this);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { if (!IsDisposed) ShowError(ex); }
+        finally
+        {
+            if (ReferenceEquals(_terrainLoadCancellation, cancellation)) _terrainLoadCancellation = null;
+            _terrainOpening = false;
+            if (!IsDisposed) UpdateWriteConstraints();
+        }
     }
 
     private void PixelEdit()
@@ -1199,7 +1278,6 @@ public sealed class ImageGridPage : UserControl
                     finally { foreach (var frame in referenceFrames) frame.Dispose(); }
                 }
                 CommitVerified(_rsImports.PlanImportMany(_project, imports));
-                _status.Text = $"已通过 AI 归一化预览导入 {imports.Count} 个 R/S 逻辑形象。";
             }
             finally { foreach (var frame in imports.SelectMany(item => item.Frames)) frame.Dispose(); }
         }
@@ -1286,13 +1364,16 @@ public sealed class ImageGridPage : UserControl
         BuiltInDocumentation.Show(this);
     }
 
-    private void Commit(MutationPlan plan, bool reloadSelectedResource = true)
+    private bool Commit(MutationPlan plan, bool reloadSelectedResource = true)
     {
-        if (_project == null) return;
+        if (_project == null) return false;
         if (plan.RequiresRiskConfirmation && MessageBox.Show(this, string.Join(Environment.NewLine, plan.Warnings),
-                "确认立即写回", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return;
+                "确认立即写回", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return false;
         var result = _mutations.Commit(_project, plan);
         if (!result.Success) throw new InvalidOperationException(string.Join(Environment.NewLine, result.Diagnostics));
+        if (_project.TryGetResource("Pmap.e5") is { } terrainPath && result.WrittenPaths.Any(path =>
+                Path.GetFullPath(path).Equals(Path.GetFullPath(terrainPath), StringComparison.OrdinalIgnoreCase)))
+            InvalidateTerrainAvailability();
         _previews.InvalidatePaths(result.WrittenPaths);
         _animationPreview.InvalidatePaths(result.WrittenPaths);
         foreach (var resource in _resources.Where(resource => resource.Paths.Intersect(result.WrittenPaths, StringComparer.OrdinalIgnoreCase).Any()))
@@ -1302,7 +1383,13 @@ public sealed class ImageGridPage : UserControl
         }
         if (reloadSelectedResource) LoadSelectedResource(preserveState: true);
         ResourcesChanged?.Invoke(result.WrittenPaths);
-        _status.Text = "已立即保存并复读校验：" + result.Summary + "；历史编号 " + result.HistoryId;
+        _lastCommitStatus = "已立即保存并复读校验：" + result.Summary + "；历史编号 " + result.HistoryId;
+        _status.Text = _lastCommitStatus;
+        _paletteTip.SetToolTip(_status, string.Join(Environment.NewLine, result.Diagnostics));
+        if (result.Diagnostics.Any(message => message.StartsWith("存档同步跳过：", StringComparison.Ordinal)))
+            MessageBox.Show(this, string.Join(Environment.NewLine, result.Diagnostics), "图片已保存，部分存档形象未同步",
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+        return true;
     }
 
     private MutationPlanningSnapshot? CaptureSources(IEnumerable<string> paths)
@@ -1311,13 +1398,127 @@ public sealed class ImageGridPage : UserControl
         catch (Exception ex) { ShowError(ex); return null; }
     }
 
+    private string ConfigureTerrainAvailability(ImageResourceDescriptor resource)
+    {
+        if (!_buttons.TryGetValue("terrain", out var button)) return string.Empty;
+        button.Visible = Has(ImagePageCapabilities.SceneTerrainEdit) && resource.Key.Equals("Mmap.e5", StringComparison.OrdinalIgnoreCase);
+        button.Enabled = false;
+        string Report(string reason)
+        {
+            _paletteTip.SetToolTip(button, reason);
+            return button.Visible ? reason : string.Empty;
+        }
+        if (!button.Visible) { CancelTerrainAvailabilityProbe(); return string.Empty; }
+        var current = FocusedAsset();
+        if (current == null) { CancelTerrainAvailabilityProbe(); return Report("地形编辑：请先点击一张内场景图片。"); }
+        var number = current.Frames.FirstOrDefault()?.ImageNumber ?? 0;
+        if (number <= SceneTerrainService.OuterSceneCount)
+        {
+            CancelTerrainAvailabilityProbe();
+            return Report("地形编辑：前 40 张为外场景，请选择第 41 张起的内场景。");
+        }
+        if (_terrainOpening) return Report("正在读取内场景与对应地形…");
+        if (_project?.TryGetResource("Pmap.e5") is not { } path)
+        {
+            CancelTerrainAvailabilityProbe();
+            return Report("地形编辑不可用：缺少 Pmap.e5。");
+        }
+        TerrainProbeKey key;
+        try
+        {
+            var info = new FileInfo(path);
+            if (!info.Exists) { CancelTerrainAvailabilityProbe(); return Report("地形编辑不可用：缺少 Pmap.e5。"); }
+            key = new TerrainProbeKey(info.FullName, number - SceneTerrainService.OuterSceneCount, info.Length, info.LastWriteTimeUtc.Ticks);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            CancelTerrainAvailabilityProbe();
+            return Report("地形编辑不可用：" + ex.Message);
+        }
+        if (_terrainAvailabilityCache.TryGetValue(key, out var availability))
+        {
+            CancelTerrainAvailabilityProbe();
+            button.Enabled = availability.Available;
+            return Report(availability.Available
+                ? "编辑当前内场景对应的 Pmap 地形；Ctrl+S 保存，关闭时可选择保存或放弃。"
+                : "地形编辑不可用：" + availability.Reason);
+        }
+        if (_terrainAvailabilityKey != key)
+        {
+            CancelTerrainAvailabilityProbe();
+            var cancellation = new CancellationTokenSource();
+            _terrainAvailabilityCancellation = cancellation;
+            _terrainAvailabilityKey = key;
+            _terrainAvailabilityTask = ProbeTerrainAvailabilityAsync(_project!, key, cancellation);
+        }
+        return Report("正在检查当前内场景对应的 Pmap 地形…");
+    }
+
+    private async Task ProbeTerrainAvailabilityAsync(ProjectProfile project, TerrainProbeKey key, CancellationTokenSource cancellation)
+    {
+        using (cancellation)
+        {
+            try
+            {
+                var availability = await Task.Run(() =>
+                {
+                    cancellation.Token.ThrowIfCancellationRequested();
+                    var archive = E5Archive.OpenFresh(key.Path);
+                    if (key.ImageNumber > archive.Entries.Count)
+                        return new TerrainAvailability(false, $"缺少 Pmap 第 {key.ImageNumber} 条，无法匹配当前内场景。");
+                    var terrain = PmapTerrainCodec.Decode(archive.ReadDecoded(key.ImageNumber));
+                    var info = new FileInfo(key.Path);
+                    if (!info.Exists || info.Length != key.Length || info.LastWriteTimeUtc.Ticks != key.ModifiedTicks)
+                        throw new IOException("Pmap 在检查期间发生变化，请重新读取。");
+                    cancellation.Token.ThrowIfCancellationRequested();
+                    return new TerrainAvailability(terrain.CanEdit, terrain.CanEdit ? string.Empty :
+                        "Pmap 地形的尺寸、层数或格值尚未验证。");
+                }, cancellation.Token);
+                if (cancellation.IsCancellationRequested || IsDisposed) return;
+                if (_terrainAvailabilityCache.Count >= 256) _terrainAvailabilityCache.Clear();
+                _terrainAvailabilityCache[key] = availability;
+            }
+            catch (OperationCanceledException) { return; }
+            catch (Exception ex)
+            {
+                if (cancellation.IsCancellationRequested || IsDisposed) return;
+                _terrainAvailabilityCache[key] = new TerrainAvailability(false, ex.Message);
+            }
+            finally
+            {
+                if (ReferenceEquals(_terrainAvailabilityCancellation, cancellation)) _terrainAvailabilityCancellation = null;
+            }
+            if (!IsDisposed && !cancellation.IsCancellationRequested && _project == project && _terrainAvailabilityKey == key)
+                UpdateWriteConstraints();
+        }
+    }
+
+    private void CancelTerrainAvailabilityProbe()
+    {
+        _terrainAvailabilityCancellation?.Cancel();
+        _terrainAvailabilityCancellation = null;
+        _terrainAvailabilityKey = null;
+    }
+
+    private void InvalidateTerrainAvailability()
+    {
+        CancelTerrainAvailabilityProbe();
+        _terrainAvailabilityCache.Clear();
+    }
+
+    private readonly record struct TerrainProbeKey(string Path, int ImageNumber, long Length, long ModifiedTicks);
+    private sealed record TerrainAvailability(bool Available, string Reason);
+
     private void UpdateWriteConstraints()
     {
         var resource = SelectedResource();
         if (_project == null || resource == null) { _writeConstraints.Text = ""; return; }
+        var terrainReason = ConfigureTerrainAvailability(resource);
         if (_project.IsReadOnly || !resource.CanMutate)
         {
-            _writeConstraints.Text = "当前资源只读：" + resource.Status;
+            _writeConstraints.Text = "当前资源只读：" + resource.Status +
+                (string.IsNullOrEmpty(terrainReason) ? "" : Environment.NewLine + terrainReason);
+            _paletteTip.SetToolTip(_writeConstraints, _writeConstraints.Text);
             return;
         }
         var selected = SelectedAssets();
@@ -1357,6 +1558,8 @@ public sealed class ImageGridPage : UserControl
             rule = $"天气新增与替换自动适配216×200整条并按目标调色板编码；固定4个{WeatherResourceCodec.FrameWidth}×{WeatherResourceCodec.FrameHeight}帧；可末尾新增，禁止删除或重命名编号。";
         else if (resource.Kind == ResourceKind.PmapSpecial)
             rule = "Pmap新增与替换自动适配目标MOD画布及调色板，保留已验证的16字节专用头；禁止删除/重命名编号，像素编辑暂不可用。";
+        else if (Has(ImagePageCapabilities.SceneTerrainEdit) && resource.Key.Equals("Mmap.e5", StringComparison.OrdinalIgnoreCase))
+            rule = "前40张为外场景；第41张起为内场景，可点击当前图片后使用“地形编辑”。内场景与Pmap按编号一一对应。";
         else if (resource.Kind == ResourceKind.FaceComposite)
             rule = resource.Paths.Any(path => Path.GetFileName(path).Equals("Tou.dll", StringComparison.OrdinalIgnoreCase))
                 ? "头像按目标模板编码并同步 Face/Tou；新增扩容，现有编号保持。" : "头像按目标模板编码；Tou.dll 缺失，本次仅写 Face。";
@@ -1381,7 +1584,14 @@ public sealed class ImageGridPage : UserControl
                 !selected.Any(asset => asset.IsFixedSlot);
         if (selected.Count > 0 && !fixedJob && resource.Kind is not (ResourceKind.WeatherSpecial or ResourceKind.PmapSpecial or ResourceKind.MapPair))
         {
-            if (selected.Any(asset => asset.IsFixedSlot)) selection += " 所选包含固定槽，禁止物理删除。";
+            if (Has(ImagePageCapabilities.SceneTerrainEdit) && resource.Key.Equals("Mmap.e5", StringComparison.OrdinalIgnoreCase))
+            {
+                var outerCount = selected.Count(asset => asset.Frames.First().ImageNumber <= 40);
+                var innerCount = selected.Count - outerCount;
+                if (outerCount > 0) selection += $" 删除操作将清空 {outerCount} 个外场景并保留槽位。";
+                if (innerCount > 0) selection += $" 删除操作将成对删除 {innerCount} 个内场景及地形，后续内场景编号前移；剧本引用不自动调整。";
+            }
+            else if (selected.Any(asset => asset.IsFixedSlot)) selection += " 所选包含固定槽，禁止物理删除。";
             else if (resource.Kind == ResourceKind.SComposite)
             {
                 var ids = selected.Select(SResourceExchangeNaming.PhysicalId).Order().ToArray();
@@ -1406,12 +1616,13 @@ public sealed class ImageGridPage : UserControl
         }
         _writeConstraints.Text = "资源操作会立即保存。" + rule + Environment.NewLine + selection;
         _writeConstraints.Text += focused == null ? " 当前项：请点击缩略图。" : " 当前项：" + focused.DisplayName + "。";
+        if (!string.IsNullOrEmpty(terrainReason)) _writeConstraints.Text += " " + terrainReason;
         _paletteTip.SetToolTip(_writeConstraints, _writeConstraints.Text);
     }
 
     private void SetWriteEnabled(bool enabled)
     {
-        foreach (var key in new[] { "add", "delete", "replace", "map-pair", "pixel", "atlas-import", "rename" })
+        foreach (var key in new[] { "add", "delete", "replace", "map-pair", "pixel", "terrain", "atlas-import", "rename" })
             if (_buttons.TryGetValue(key, out var button)) button.Enabled = enabled;
     }
 
@@ -1423,6 +1634,8 @@ public sealed class ImageGridPage : UserControl
         if (_buttons.TryGetValue("delete", out var deleteButton))
             deleteButton.Text = resource.Kind == ResourceKind.SComposite && _sMode.SelectedIndex == 1 ? "清空兵种形象" : "删除图片";
         if (_buttons.TryGetValue("map-pair", out var mapPairButton)) mapPairButton.Visible = resource.Kind == ResourceKind.MapPair;
+        if (_buttons.TryGetValue("terrain", out var terrainButton))
+            terrainButton.Visible = Has(ImagePageCapabilities.SceneTerrainEdit) && resource.Key.Equals("Mmap.e5", StringComparison.OrdinalIgnoreCase);
         SetWriteEnabled(writable);
         foreach (var key in new[] { "add", "delete", "replace", "map-pair", "pixel", "atlas-import", "rename" })
             if (_buttons.TryGetValue(key, out var button))
@@ -1456,6 +1669,8 @@ public sealed class ImageGridPage : UserControl
             loading?.Cancel();
             loading?.Dispose();
             ++_loadRevision;
+            _terrainLoadCancellation?.Cancel();
+            InvalidateTerrainAvailability();
             _paletteTip.Dispose();
         }
         base.Dispose(disposing);

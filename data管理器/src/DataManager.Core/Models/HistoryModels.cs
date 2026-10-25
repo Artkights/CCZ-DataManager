@@ -25,6 +25,7 @@ public sealed class HistoryEntry
     public List<string> Modules { get; set; } = [];
     public List<HistoryTableChange> Tables { get; set; } = [];
     public List<FileByteChange> Files { get; set; } = [];
+    public List<string> AppearanceSyncMessages { get; set; } = [];
 }
 
 public sealed record HistoryTableChange(

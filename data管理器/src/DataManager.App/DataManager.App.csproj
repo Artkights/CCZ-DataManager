@@ -9,8 +9,8 @@
     <AssemblyName>data管理器</AssemblyName>
     <RootNamespace>DataManager.App</RootNamespace>
     <ApplicationIcon>Assets\About\Doro-white.ico</ApplicationIcon>
-    <Version>1.2026.1022.6</Version>
-    <InformationalVersion>1.2026.1022.6</InformationalVersion>
+    <Version>1.2026.1023.4</Version>
+    <InformationalVersion>1.2026.1023.4</InformationalVersion>
   </PropertyGroup>
   <ItemGroup>
     <Content Include="..\..\..\形象管理器\docs\第三方组件许可-ImageSharp.txt" Link="第三方组件许可-ImageSharp.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

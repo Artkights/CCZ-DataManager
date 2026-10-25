@@ -25,6 +25,8 @@ internal static class UiCleanupNavigationTests
             WriteArchive(Path.Combine(root, "Pmapobj.e5"), [Png(Color.Red, 48, 1280), Png(Color.Blue, 48, 1280)]);
             WriteArchive(Path.Combine(root, "Fb.e5"), Enumerable.Range(0, 18).Select(index => Png(Color.FromArgb(255, index * 11, 180, 80), 120, 240)).ToArray());
             form.Show(); form.LoadProjectForSmokeTest(root); Application.DoEvents();
+            TestSupport.Assert(form.ModuleTabsForSmokeTest.TabPages.Cast<TabPage>()
+                .Single(page => Equals(page.Tag, "__resources")).Text == "图片设定", "资源页签没有更名为图片设定");
             CheckSinglePage(form.BusinessEditorForSmokeTest, form.WorkspaceForSmokeTest.ActiveProfile.ProfileId == "ccz-6.6");
             form.SelectModuleForSmokeTest("兵种系");
             var series = form.BusinessEditorForSmokeTest;
@@ -57,6 +59,7 @@ internal static class UiCleanupNavigationTests
             var images = Descendants(form).OfType<IntegratedResourcePanel>().Single();
             form.SelectModuleForSmokeTest("__resources");
             Wait(() => images.LoadingTask.IsCompleted, "首次形象目录读取超时");
+            TestSupport.Assert(form.StatusForSmokeTest.Contains("图片设定", StringComparison.Ordinal), "资源页状态提示仍使用旧页名");
             TestSupport.Assert(form.EntityListForSmokeTest.Items.Count > 0, "首次形象页没有左侧分类");
             var selected = form.EntityListForSmokeTest.Items.Cast<object>().Select((item, index) => (item, index))
                 .First(pair => pair.item.ToString()!.Contains("头像", StringComparison.Ordinal)).index;

@@ -38,7 +38,9 @@ public sealed class EffectNamePoolService
         if (channel == EffectNameChannel.PersonalJob)
         {
             var definition = workspace.Definitions.FirstOrDefault(table => table.Key == "effect-names");
-            var slots = ReadFixed(workspace, 0, 255, definition?.DataOffset ?? PersonalJobOffset, "人物/兵种特效名称",
+            if (workspace.ActiveProfile.ProfileId == "ccz-6.4" && definition?.Capability == Models.TableCapability.Unavailable)
+                return Array.Empty<EffectNameSlot>();
+            var slots = ReadFixed(workspace, 0, definition?.RowCount ?? 255, definition?.DataOffset ?? PersonalJobOffset, "人物/兵种特效名称",
                 definition?.CapabilityEvidence ?? "6.5/6.6 Ekd5.exe 固定 16 字节名称池");
             if (workspace.Documents.TryGetValue("effect-names", out var document))
                 return slots.Select(slot => slot with { IsWritable = definition?.IsWriteSupported == true,

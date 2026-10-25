@@ -7,10 +7,48 @@ internal static class Program
     {
         DataManager.App.ApplicationBootstrap.Initialize();
         Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException);
-        var testHistoryRoot = Path.Combine(Path.GetTempPath(), "DataManagerHistoryTests_" + Guid.NewGuid().ToString("N"));
+        var testHistoryBase = args.FirstOrDefault() == "--scene-terrain" && args.Length > 1
+            ? Path.Combine(Path.GetFullPath(args[1]), "data管理器", "验证", "2026-10-23-内场景地形编辑")
+            : Path.GetTempPath();
+        var testHistoryRoot = Path.Combine(testHistoryBase, "DataManagerHistoryTests_" + Guid.NewGuid().ToString("N"));
         using var historyScope = DataManager.Core.History.ProjectHistoryPaths.UseBaseDirectory(testHistoryRoot);
         try
         {
+            if (args.FirstOrDefault() is "--save-appearance" or "--save-appearance-service" or "--save-appearance-images" or "--save-appearance-integration")
+            {
+                var root = args.Length > 1 ? Path.GetFullPath(args[1]) : Directory.GetCurrentDirectory();
+                if (args[0] is "--save-appearance" or "--save-appearance-service") SaveAppearanceSyncTests.Run(root);
+                if (args[0] == "--save-appearance-images") RsImageAppearanceSyncTests.Run(root);
+                if (args[0] == "--save-appearance-integration") AppearanceSaveIntegrationTests.Run(root);
+                if (args[0] == "--save-appearance")
+                {
+                    SaveAppearanceLayoutTests.Run(root);
+                    CreationHistoryTests.Run(root);
+                    RsImageAppearanceSyncTests.Run(root);
+                    AppearanceSaveIntegrationTests.Run(root);
+                }
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--scene-terrain")
+            {
+                SceneTerrainIntegrationTests.Run(args.Length > 1 ? Path.GetFullPath(args[1]) : Directory.GetCurrentDirectory());
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--ccz64-configuration" && args.Length == 2)
+            {
+                Ccz64ConfigurationTests.Run(Path.GetFullPath(args[1]));
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--ccz64-field-writeback" && args.Length == 2)
+            {
+                FieldWritebackMatrixTests.Run(Path.GetFullPath(args[1]), only64: true);
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--ccz64-compatibility" && args.Length == 4)
+            {
+                Ccz64CompatibilityTests.Run(Path.GetFullPath(args[1]), Path.GetFullPath(args[2]), Path.GetFullPath(args[3]));
+                return 0;
+            }
             if (args.FirstOrDefault() == "--effects-removal")
             {
                 EffectsRemovalTests.Run(Path.GetFullPath(args[1]));
@@ -303,6 +341,17 @@ internal static class Program
                 ScanMatrixTests.Run(basePath);
                 ProfileWriteTests.Run(basePath);
                 Console.WriteLine("CORE_REGRESSION_TESTS_OK");
+                return 0;
+            }
+            if (args.Length >= 2 && args[0] == "--person-equipment")
+            {
+                PersonEquipmentTests.Run(Path.GetFullPath(args[1]), include64: !args.Contains("--skip64"));
+                return 0;
+            }
+            if (args.Length >= 2 && args[0] == "--item-migration")
+            {
+                ItemMigrationTests.Run(Path.GetFullPath(args[1]));
+                Console.WriteLine("ITEM_MIGRATION_TESTS_OK");
                 return 0;
             }
             ItemTypeTests.Run();

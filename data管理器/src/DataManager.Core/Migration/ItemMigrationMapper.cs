@@ -20,8 +20,8 @@ internal static class ItemMigrationMapper
         if (sourceDynamic == targetDynamic) return false;
         var sourceIndex = source.Data.Rows.IndexOf(sourceRow);
         var targetIndex = target.Data.Rows.IndexOf(targetRow);
-        var sourceSemantics = ItemTypeService.Resolve(source, sourceIndex, ItemCategoryBoundary.Read(sourceWorkspace.RootPath));
-        var targetSemantics = ItemTypeService.Resolve(target, targetIndex, ItemCategoryBoundary.Read(targetWorkspace.RootPath));
+        var sourceSemantics = ItemTypeService.Resolve(source, sourceIndex);
+        var targetSemantics = ItemTypeService.Resolve(target, targetIndex);
         var sourceCategory = sourceSemantics.Category is ItemCategory.Accessory or ItemCategory.Consumable;
         var targetCategory = targetSemantics.Category is ItemCategory.Accessory or ItemCategory.Consumable;
         if (!sourceCategory && !targetCategory) return false;
@@ -34,7 +34,7 @@ internal static class ItemMigrationMapper
             return true;
         }
         // Fixed 6.5 uses +11 as effect and +12 as category in the verified
-        // accessory ID segment. Dynamic 6.6 exposes those bytes as the opposite
+        // accessory/consumable rows. Dynamic 6.6 exposes those bytes as the opposite
         // named columns. Both sides must already be proven marker-category rows.
         var effect = sourceRow[sourceDynamic ? "装备特效号" : "宝物类型"];
         var marker = sourceRow[sourceDynamic ? "宝物类型" : "装备特效号"];

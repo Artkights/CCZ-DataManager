@@ -6,34 +6,6 @@ namespace DataManager.Core.Domain;
 
 public enum ItemCategory { Weapon, Armor, Accessory, Consumable, Unknown }
 
-public sealed record ItemCategoryBoundary(int DefenseStartId = 70, int AccessoryStartId = 109)
-{
-    public static ItemCategoryBoundary Read(string rootPath)
-    {
-        // These are the same project-side keys used by the image assigner.
-        // Never borrow another project's INI while classifying this project.
-        foreach (var relative in new[] { "System.ini", Path.Combine("RS", "System.ini"),
-                     Path.Combine("B形象指定器", "6.6x形象指定器", "System.ini"),
-                     Path.Combine("B形象指定器", "形象指定器6.5", "System.ini") })
-        {
-            var path = Path.Combine(rootPath, relative);
-            if (!File.Exists(path)) continue;
-            int? defense = null, accessory = null;
-            // Relevant key/value bytes are ASCII even in a GBK INI.
-            foreach (var raw in File.ReadLines(path))
-            {
-                var pair = raw.Split(';', 2)[0].Split('=', 2, StringSplitOptions.TrimEntries);
-                if (pair.Length != 2 || !int.TryParse(pair[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var value)) continue;
-                if (pair[0].Equals("DefID", StringComparison.OrdinalIgnoreCase)) defense = value;
-                if (pair[0].Equals("AssID", StringComparison.OrdinalIgnoreCase)) accessory = value;
-            }
-            if (defense is >= 0 and <= 255 && accessory is >= 0 and <= 255 && defense <= accessory)
-                return new ItemCategoryBoundary(defense.Value, accessory.Value);
-        }
-        return new ItemCategoryBoundary();
-    }
-}
-
 public sealed record ItemTypeSemantics(int TypeValue, ItemCategory Category, bool IsCategoryMarker,
     int? PermissionSlot, string Description)
 {
@@ -73,12 +45,16 @@ public static class ItemTypeService
         "普通衣服", "特殊衣服", "普通袍服", "特殊袍服"
     });
 
-    public static ItemTypeSemantics Resolve(TableDocument document, int rowIndex, ItemCategoryBoundary? boundary = null)
+    public static ItemTypeSemantics Resolve(TableDocument document, int rowIndex)
     {
-        boundary ??= new ItemCategoryBoundary();
         var row = document.Data.Rows[rowIndex];
         var type = Convert.ToInt32(row["宝物类型"], CultureInfo.InvariantCulture);
-        var id = Convert.ToInt32(row["ID"], CultureInfo.InvariantCulture);
+        var effect = Convert.ToInt32(row["装备特效号"], CultureInfo.InvariantCulture);
+        return ResolveValues(document, rowIndex, type, effect);
+    }
+
+    internal static ItemTypeSemantics ResolveValues(TableDocument document, int rowIndex, int type, int effect)
+    {
         var offset = checked((int)(document.Definition.DataOffset + (long)rowIndex * document.Definition.RowSize));
         if (document.Definition.RowSize <= 0x12 || offset < 0 || offset + document.Definition.RowSize > document.OriginalFileBytes.Length)
             return new(type, ItemCategory.Unknown, false, null, "物品原始行边界无效，无法确定类型语义。");
@@ -87,22 +63,35 @@ public static class ItemTypeService
         var dynamicCodec = document.Definition.RecordCodecKey.Equals("item-66-15-v1", StringComparison.OrdinalIgnoreCase);
         // The original marker selects codec addresses throughout a draft. The
         // current logical value selects 2/3 after an unsaved category edit.
-        if (dynamicCodec && rawMarker is 2 or 3)
+        if (dynamicCodec && document.OriginalFileBytes[offset + 0x11] >= 26 && rawMarker is 2 or 3)
         {
             var category = type switch { 2 => ItemCategory.Accessory, 3 => ItemCategory.Consumable, _ => ItemCategory.Unknown };
             return new(type, category, true, null,
                 "6.6 类别标记位于 row+0x12：2=辅助装备，3=道具；实际特效号位于 row+0x11，不对应兵种装备许可槽。");
         }
 
-        var marker = Convert.ToInt32(row["装备特效号"], CultureInfo.InvariantCulture);
-        var kind = id < boundary.DefenseStartId ? ItemCategory.Weapon
-            : id < boundary.AccessoryStartId ? ItemCategory.Armor
-            : marker switch { 2 => ItemCategory.Accessory, 3 => ItemCategory.Consumable, _ => ItemCategory.Unknown };
+        var marker = effect;
+        // 40B444 reads runtime +11 first: <20 is weapon, <26 is armor.
+        // Only larger type codes read runtime +14, which the loader rotates
+        // from file +12. Item IDs and image-assigner INI boundaries do not
+        // participate, including when an ordinary effect happens to be 2/3.
+        var kind = type switch
+        {
+            >= 0 and <= 19 => ItemCategory.Weapon,
+            >= 20 and <= 25 => ItemCategory.Armor,
+            _ => marker switch
+            {
+                0 => ItemCategory.Weapon,
+                1 => ItemCategory.Armor,
+                2 => ItemCategory.Accessory,
+                3 => ItemCategory.Consumable,
+                _ => ItemCategory.Unknown
+            }
+        };
         var ordinary = kind is ItemCategory.Weapon or ItemCategory.Armor;
         int? slot = ordinary && type is >= 0 and < 26 ? type : null;
-        return new(type, kind, false, slot, ordinary
-            ? "普通武器/防具类型码直接对应 26 类兵种许可槽，不按十位数分组；当前数值超出槽范围时不提供许可。"
-            : "辅助段的类型字节是效果/子类型码，装备特效字节用于区分类别；不对应 26 类兵种装备许可。");
+        return new(type, kind, false, slot,
+            "按引擎类型码分类：0～19 为武器，20～25 为防具；超出时按 row+0x12 的 0/1/2/3 分为武器/防具/辅助/道具。仅 0～25 类型对应兵种许可槽，不使用宝物编号分段。");
     }
 
     public static IReadOnlyList<IdNameOption> GetOptions(ItemTypeSemantics semantics, ProjectWorkspace? workspace = null)
@@ -111,7 +100,7 @@ public static class ItemTypeService
         if (semantics.Category is ItemCategory.Weapon or ItemCategory.Armor)
             return EquipmentColumns.Select((name, id) => new IdNameOption(id,
                 workspace == null ? name : new EquipmentTypeCatalogService().GetTypeDisplayName(workspace, id))).ToArray();
-        var prefix = semantics.Category switch { ItemCategory.Accessory => "辅助效果码", ItemCategory.Consumable => "道具效果码", _ => "辅助段类型码" };
+        var prefix = semantics.Category switch { ItemCategory.Accessory => "辅助效果码", ItemCategory.Consumable => "道具效果码", _ => "未确认类型码" };
         return Enumerable.Range(0, 256).Select(id => new IdNameOption(id, prefix + "（具体语义需实测）")).ToArray();
     }
 

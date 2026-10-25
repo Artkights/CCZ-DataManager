@@ -34,10 +34,20 @@ internal static class RecordCodecTests
         TestSupport.Assert(Convert.ToInt32(codec.Decode(normal, type)) == 7 && Convert.ToInt32(codec.Decode(normal, effect)) == 9, "6.6 普通装备逻辑字段解码错误");
         TestSupport.Assert(codec.EncodeChangedField(normal, effect, 11).Single().Offset == 0x12, "6.6 普通装备特效必须写 row+0x12");
         TestSupport.Assert(codec.EncodeChangedField(normal, name, "测试").Single().Bytes.Length == 15, "6.6 物品名必须只编码 15 字节");
-        var conversionRejected = false;
-        try { codec.EncodeChangedField(normal, effect, 2); }
-        catch (InvalidOperationException) { conversionRejected = true; }
-        TestSupport.Assert(conversionRejected, "6.6 普通装备不得通过特效号隐式转换为辅助/道具行");
+        TestSupport.Assert(codec.EncodeChangedField(normal, effect, 2).Single().Offset == 0x12,
+            "6.6 类型<26时效果2仍为普通装备特效，不得交换字段");
+        foreach (var (rawType, rawEffect) in new[] { (0, 2), (20, 3) })
+        {
+            var conflict = new byte[25]; conflict[0x11] = (byte)rawType; conflict[0x12] = (byte)rawEffect;
+            TestSupport.Assert(Convert.ToInt32(codec.Decode(conflict, type)) == rawType &&
+                Convert.ToInt32(codec.Decode(conflict, effect)) == rawEffect &&
+                codec.EncodeChangedField(conflict, effect, 7).Single().Offset == 0x12,
+                "6.6 普通类型优先于效果2/3的引擎分类规则未保留");
+            var conversionRejected = false;
+            try { codec.EncodeChangedField(conflict, type, 50); }
+            catch (InvalidOperationException) { conversionRejected = true; }
+            TestSupport.Assert(conversionRejected, "普通行类型变为>=26造成字段交换时没有拒绝");
+        }
 
         var marker = new byte[25];
         marker[17] = 88;
@@ -49,5 +59,9 @@ internal static class RecordCodecTests
         try { codec.EncodeChangedField(marker, type, 7); }
         catch (InvalidOperationException) { markerConversionRejected = true; }
         TestSupport.Assert(markerConversionRejected, "6.6 辅助/道具行不得隐式转换为普通装备");
+        markerConversionRejected = false;
+        try { codec.EncodeChangedField(marker, effect, 0); }
+        catch (InvalidOperationException) { markerConversionRejected = true; }
+        TestSupport.Assert(markerConversionRejected, "6.6 辅助效果降至普通类型区间造成字段交换时没有拒绝");
     }
 }

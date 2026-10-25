@@ -18,7 +18,7 @@ internal static class ItemMigrationTests
         {
             foreach (var root in new[] { source, target }) File.WriteAllText(Path.Combine(root, "System.ini"), "DefID=70\r\nAssID=80\r\n");
             Seed(source, source66, [(0, 4, 5), (90, 44, 2), (109, 45, 2), (110, 46, 3), (111, 47, 2)]);
-            Seed(target, !source66, [(0, 6, 7), (90, 16, 2), (109, 17, 2), (110, 18, 2), (111, 19, 4)]);
+            Seed(target, !source66, [(0, 6, 7), (90, 36, 2), (109, 37, 2), (110, 38, 2), (111, 39, 4)]);
             var targetBefore = new Dictionary<string, byte[]> { ["Data.e5"] = File.ReadAllBytes(Path.Combine(target, "Data.e5")), ["Star.e5"] = File.ReadAllBytes(Path.Combine(target, "Star.e5")) };
             var service = new MigrationService();
             var plan = service.Preview(source, target, source66 ? "ccz-6.6" : "ccz-6.5", source66 ? "66-standard-v1" : "65-standard-v1",
@@ -33,7 +33,7 @@ internal static class ItemMigrationTests
             var result = service.Apply(plan, choices);
             TestSupport.Assert(result.Success, $"{(source66 ? "66→65" : "65→66")}物品迁移失败：" + string.Join("；", result.Messages));
             var workspace = Open(target, !source66);
-            foreach (var (id, effect, marker) in new[] { (0, 4, 5), (90, 44, 2), (109, 45, 2), (110, 46, 3), (111, 19, 4) })
+            foreach (var (id, effect, marker) in new[] { (0, 4, 5), (90, 44, 2), (109, 45, 2), (110, 46, 3), (111, 39, 4) })
             {
                 var document = workspace.GetDocument(id < 104 ? "items-low" : "items-high");
                 var rowIndex = id - document.Definition.BeginId;

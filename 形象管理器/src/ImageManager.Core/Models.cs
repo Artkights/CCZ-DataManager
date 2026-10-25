@@ -4,9 +4,10 @@ namespace ImageManager.Core;
 
 public enum ProjectVersion
 {
-    Unknown,
-    Ccz65,
-    Ccz66
+    Unknown = 0,
+    Ccz65 = 1,
+    Ccz66 = 2,
+    Ccz64 = 3
 }
 
 public enum ImageCategory
@@ -66,6 +67,7 @@ public enum ImagePageCapabilities
     IdleFilter = 1 << 10,
     BackgroundToggle = 1 << 11,
     SPreviewSelector = 1 << 12,
+    SceneTerrainEdit = 1 << 13,
     Standard = Add | Delete | Replace | Export | PixelEdit | BatchRename | Documentation,
     CharacterRs = Standard | Play | AllFrames | ReferenceAtlas | IdleFilter | BackgroundToggle,
     CharacterS = CharacterRs | SPreviewSelector,
@@ -83,7 +85,8 @@ public enum MutationKind
     AssignmentSave,
     Undo,
     Redo,
-    WholeFileReplace
+    WholeFileReplace,
+    TerrainEdit
 }
 
 public enum HistoryStatus
@@ -104,6 +107,7 @@ public sealed record ProjectProfile(
 {
     public string VersionText => Version switch
     {
+        ProjectVersion.Ccz64 => "6.4",
         ProjectVersion.Ccz65 => "6.5/6.5pl",
         ProjectVersion.Ccz66 => "6.6",
         _ => "未识别"
@@ -487,6 +491,8 @@ public sealed record CharacterAssignmentLayoutProfile(
 
     public static CharacterAssignmentLayoutProfile For(ProjectVersion version) => version switch
     {
+        ProjectVersion.Ccz64 => new(version, 0xE1000, 0xD2800, 1024, 2, false,
+            "6.4 人物指定须通过当前 EXE 的完整 R/S 消费者与 PE 映射验证"),
         ProjectVersion.Ccz65 => new(version, 0xE1000, 0xD2800, 1024, 2, true,
             "6.5/6.5pl 本地样本及旧形象指定器配置"),
         ProjectVersion.Ccz66 => new(version, 0xE1000, 0xD2800, 1024, 2, true,

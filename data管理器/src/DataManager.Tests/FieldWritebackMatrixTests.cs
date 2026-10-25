@@ -18,20 +18,21 @@ internal static class FieldWritebackMatrixTests
     private static readonly HashSet<string> PhysicalNames = BuildPhysicalNames();
     private static readonly Sample[] Samples =
     [
+        new("洗隋"),
         new("加强版6.5未加密版"), new("曹操传6.6-V7.16 解压密码：66"), new("新改曹操傳6.6修正版"), new("清儿吕布传"),
         new("复刻版6.6山贼"), new("复刻版6.6山贼 国庆"), new("厚黑6.6测（7.9水杯版）"),
         new("烈焰同盟6.6x(新修版)黄线完结+红线5关"), new("曹操传6.6-V10.1 【解压密码：66】/复刻版6.6"),
         new("曹操传6.6-V7.16 解压密码：66", "合成旧山贼布局：沿用CSV回归的标准6.6文件+强制布局fixture", "ccz-6.6", "66-shanzhai-legacy")
     ];
 
-    public static void Run(string basePath)
+    public static void Run(string basePath, bool only64 = false)
     {
         var repository = Directory.GetParent(Directory.GetParent(Path.GetFullPath(basePath))!.FullName)!.FullName;
         var baseRoot = Path.Combine(repository, "基底");
-        var output = Path.Combine(repository, "data管理器", "验证", "写回完善", "字段写回矩阵.csv");
+        var output = Path.Combine(repository, "data管理器", "验证", only64 ? "6.4适配-20261022" : "写回完善", "字段写回矩阵.csv");
         var entries = new List<Entry>();
         var failures = new List<string>();
-        foreach (var sample in Samples)
+        foreach (var sample in Samples.Where(sample => !only64 || sample.Directory == "洗隋"))
         {
             var source = Path.Combine(baseRoot, sample.Directory.Replace('/', Path.DirectorySeparatorChar));
             if (!Directory.Exists(source))
@@ -189,7 +190,10 @@ internal static class FieldWritebackMatrixTests
     }
 
     private static bool IsMarker(TableDocument document, int row)
-        => document.OriginalFileBytes[checked((int)(document.Definition.DataOffset + (long)row * document.Definition.RowSize + 0x12))] is 2 or 3;
+    {
+        var offset = checked((int)(document.Definition.DataOffset + (long)row * document.Definition.RowSize));
+        return document.OriginalFileBytes[offset + 0x11] >= 26 && document.OriginalFileBytes[offset + 0x12] is 2 or 3;
+    }
 
     private static void AssertFileChanges(string root, IReadOnlyDictionary<string, byte[]> before, IReadOnlyDictionary<string, bool[]> allowed)
     {

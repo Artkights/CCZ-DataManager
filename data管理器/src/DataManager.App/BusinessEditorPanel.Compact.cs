@@ -25,7 +25,7 @@ public sealed partial class BusinessEditorPanel
             foreach (var key in new[] { "items-low", "items-high", "items-extended" })
             {
                 if (!_workspace.Documents.TryGetValue(key, out var document) || FindRow(document, id) is not { } match) continue;
-                var semantics = ItemTypeService.Resolve(document, match.Index, _itemBoundary);
+                var semantics = ItemTypeService.Resolve(document, match.Index);
                 signature += $"|{semantics.Category}:{semantics.IsCategoryMarker}";
                 break;
             }
@@ -453,7 +453,7 @@ public sealed partial class BusinessEditorPanel
         var fieldOrder = new[] { "名称", "武力", "统帅", "智力", "敏捷", "士气", "兵种", "初始HP", "初始MP", "默认武器", "默认防具", "默认辅助" };
         // The column-major form puts the class beside the name on its first
         // row, followed by initial HP/MP and the three equipment slots.
-        var basic = FieldsBlock(string.Empty, Fields("persons").Where(binding => !hidden.Contains(binding.Field.Name))
+        var basic = FieldsBlock(string.Empty, Fields("persons").Where(binding => !hidden.Contains(binding.Field.Name) && binding.Field.Kind != FieldKind.RawBytes)
             .OrderBy(binding => Array.IndexOf(fieldOrder, binding.Field.Name) is var order && order >= 0 ? order : int.MaxValue), 2, 0);
         basic.Name = "PersonBasicFields";
         top.Controls.Add(basic, 0, 0);
@@ -516,7 +516,7 @@ public sealed partial class BusinessEditorPanel
         var left = Rows((SizeType.Percent, 45), (SizeType.Percent, 16), (SizeType.Percent, 39));
         leftBody.Controls.Add(left, 0, 0);
         var top = Columns(100); left.Controls.Add(top, 0, 0);
-        var fields = Fields("detailed-jobs").Concat(Fields("detailed-job-growth").Where(binding => !EquipmentColumns.Contains(binding.Field.Name)))
+        var fields = Fields("detailed-jobs").Concat(Fields("detailed-job-growth").Where(binding => !EquipmentColumns.Contains(binding.Field.Name) && binding.Field.Kind != FieldKind.RawBytes))
             .Concat(Fields("detailed-job-penetration"));
         var byName = fields.GroupBy(binding => binding.Field.Name, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
@@ -576,7 +576,7 @@ public sealed partial class BusinessEditorPanel
         var left = Rows((SizeType.Percent, 68), (SizeType.Percent, 32)); root.Controls.Add(left, 0, 0);
         var itemFields = Fields("items-low").Concat(Fields("items-high")).Concat(Fields("items-extended")).ToArray();
         var item = itemFields.FirstOrDefault();
-        var semanticSnapshot = item == null ? null : ItemSemanticResolver.Resolve(item.Document, item.RowIndex, _itemBoundary);
+        var semanticSnapshot = item == null ? null : ItemSemanticResolver.Resolve(item.Document, item.RowIndex);
         var semantics = semanticSnapshot?.Semantics;
         var hidden = new HashSet<string>(StringComparer.Ordinal);
         IReadOnlyList<string> categoryHidden = semantics?.Category switch
@@ -614,7 +614,7 @@ public sealed partial class BusinessEditorPanel
         {
             var binding = ResolveEditorBinding(item.Document.Definition.Key, item.Field.Name, item.RowIndex);
             if (binding == null) return;
-            var current = ItemSemanticResolver.Resolve(binding.Document, binding.RowIndex, _itemBoundary);
+            var current = ItemSemanticResolver.Resolve(binding.Document, binding.RowIndex);
             label.Text = current.Category switch
             {
                 ItemCategory.Accessory => "辅助装备：特殊效果值和适用兵种独立编辑，图鉴可勾选。保留值可在“原始字段”页编辑。",
@@ -650,8 +650,8 @@ public sealed partial class BusinessEditorPanel
             {
                 if (_binding) return;
                 var item = CurrentItem(); if (item == null) return;
-                var semantics = ItemTypeService.Resolve(item.Document, item.RowIndex, _itemBoundary);
-                if (semantics.PermissionColumn is not { } column) return;
+                var semantics = ItemTypeService.Resolve(item.Document, item.RowIndex);
+                if (semantics.PermissionColumn is not { } column || !growth.Data.Columns.Contains(column)) return;
                 try
                 {
                     if (_workspace.ApplyCompositeTransaction($"编辑宝物 {_id} 可装备部队", [new("detailed-job-growth", index, column, check.Checked ? 1 : 0)]).Applied) OnEdited();
@@ -665,12 +665,15 @@ public sealed partial class BusinessEditorPanel
             try
             {
                 var item = CurrentItem(); if (item == null) return;
-                var semantics = ItemTypeService.Resolve(item.Document, item.RowIndex, _itemBoundary);
-                message.Text = semantics.PermissionColumn is { } column ? $"{EquipmentPermissionDisplayName(column)}：同类型宝物共享装备许可" : $"{semantics.CategoryName}不使用兵种装备许可";
+                var semantics = ItemTypeService.Resolve(item.Document, item.RowIndex);
+                var hasPermission = semantics.PermissionColumn is { } permissionColumn && growth.Data.Columns.Contains(permissionColumn);
+                message.Text = semantics.PermissionColumn is { } column
+                    ? hasPermission ? $"{EquipmentPermissionDisplayName(column)}：同类型宝物共享装备许可" : "当前引擎尚无此装备许可字段的独立证据，保留原字节。"
+                    : $"{semantics.CategoryName}不使用兵种装备许可";
                 foreach (var (check, rowIndex) in checks)
                 {
-                    check.Enabled = semantics.PermissionColumn != null && growth.Definition.IsWriteSupported;
-                    check.Checked = semantics.PermissionColumn is { } permission && Convert.ToInt32(growth.Data.Rows[rowIndex][permission], CultureInfo.InvariantCulture) != 0;
+                    check.Enabled = hasPermission && growth.Definition.IsWriteSupported;
+                    check.Checked = hasPermission && Convert.ToInt32(growth.Data.Rows[rowIndex][semantics.PermissionColumn!], CultureInfo.InvariantCulture) != 0;
                 }
             }
             finally { _binding = previous; }

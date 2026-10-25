@@ -37,7 +37,7 @@ public static class ProjectImageHistory
         var canonical = Canonicalize(profile);
         foreach (var file in plan.Files) ProjectHistoryPaths.ValidateInside(file.TargetPath, canonical.RootPath);
         var history = PrepareForWrite(profile);
-        return new ImageMutationService(history).Commit(canonical, plan);
+        return new ImageAppearanceSyncTransaction().Commit(canonical, plan, history);
     }
 
     public static HistoryService PrepareForWrite(ProjectProfile profile)

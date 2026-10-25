@@ -229,16 +229,23 @@ public sealed partial class ResourceCatalogAdapter : IDisposable
 
     public MutationResult Append(string rootPath, string resourceKey, IReadOnlyList<string> sources)
     {
+        IntegratedSceneMutationPolicy.RequireImageResource(resourceKey);
         var profile = _profileService.Detect(rootPath);
         var descriptor = FindDescriptor(profile, resourceKey);
         EnsureMutable(descriptor);
-        var plan = CreateMutationService(profile).PlanAppend(profile, descriptor, sources);
-        try { return ProjectImageHistory.Commit(profile, plan); }
+        var plan = IntegratedSceneMutationPolicy.Append(profile, resourceKey,
+            () => CreateMutationService(profile).PlanAppend(profile, descriptor, sources));
+        try
+        {
+            IntegratedSceneMutationPolicy.ValidateCommit(profile, plan);
+            return ProjectImageHistory.Commit(profile, plan);
+        }
         finally { Invalidate(profile.RootPath); }
     }
 
     public MutationResult Replace(string rootPath, string resourceKey, IReadOnlyList<int> logicalIds, IReadOnlyList<string> sources)
     {
+        IntegratedSceneMutationPolicy.RequireImageResource(resourceKey);
         var profile = _profileService.Detect(rootPath);
         var descriptor = FindDescriptor(profile, resourceKey);
         EnsureMutable(descriptor);
@@ -254,13 +261,19 @@ public sealed partial class ResourceCatalogAdapter : IDisposable
 
     public MutationResult Delete(string rootPath, string resourceKey, IReadOnlyList<int> logicalIds)
     {
+        IntegratedSceneMutationPolicy.RequireImageResource(resourceKey);
         var profile = _profileService.Detect(rootPath);
         var descriptor = FindDescriptor(profile, resourceKey);
         EnsureMutable(descriptor);
         var assets = _catalogService.ReadAssets(profile, descriptor)
             .Where(asset => logicalIds.Contains(asset.LogicalId)).ToArray();
         var service = CreateMutationService(profile);
-        try { return ProjectImageHistory.Commit(profile, service.PlanDelete(profile, assets)); }
+        try
+        {
+            var plan = IntegratedSceneMutationPolicy.Delete(profile, assets, () => service.PlanDelete(profile, assets));
+            IntegratedSceneMutationPolicy.ValidateCommit(profile, plan);
+            return ProjectImageHistory.Commit(profile, plan);
+        }
         finally { Invalidate(profile.RootPath); }
     }
 

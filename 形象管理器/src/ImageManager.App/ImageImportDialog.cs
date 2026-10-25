@@ -28,6 +28,16 @@ public sealed class ImageImportDialog : Form
     private readonly Dictionary<string, Bitmap> _sourceImages = new(StringComparer.OrdinalIgnoreCase);
     private readonly ComboBox _previewMode = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 126 };
     private readonly NumericUpDown _frame = new() { Minimum = 0, Maximum = 0, Width = 68 };
+    private readonly ComboBox _outputFormat = new() { Name = "ImageImportOutputFormat", DropDownStyle = ComboBoxStyle.DropDownList, Width = 145 };
+    private readonly Label _formatInfo = new() { AutoSize = true, ForeColor = SystemColors.GrayText, Margin = new Padding(4, 6, 4, 4) };
+    private readonly CheckBox _showDetails = new() { Text = "详细信息", AutoSize = true, Margin = new Padding(4) };
+    private readonly SplitContainer _mappingSplit = new() { Dock = DockStyle.Fill, Size = new Size(600, 360), Orientation = Orientation.Horizontal, Panel1MinSize = 80, Panel2MinSize = 70, SplitterDistance = 220 };
+    private TableLayoutPanel? _previewLayout;
+    private Control? _previewImages;
+    private bool _arrangingResults;
+    private bool _updatingFormat;
+    private Task? _formatPreparationTask;
+    private string? _selectionToRestore;
     private PreparedImageImport? _prepared;
     private CancellationTokenSource? _cancellation;
     private long _revision;
@@ -60,7 +70,8 @@ public sealed class ImageImportDialog : Form
         }
         else AddSlots(null, 0);
         PopulateMapping();
-        SetStatus("先选择图片或目录并核对分配，再准备转换。确认写入前不会更改项目。" + Rules());
+        SetStatus("选择素材并核对映射，再生成预览。");
+        _details.Text = Rules();
         DragEnter += (_, e) => e.Effect = e.Data?.GetDataPresent(DataFormats.FileDrop) == true ? DragDropEffects.Copy : DragDropEffects.None;
         DragDrop += (_, e) =>
         {
@@ -85,13 +96,45 @@ public sealed class ImageImportDialog : Form
     {
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Padding(8) };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 0));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.SizeChanged += (_, _) => root.RowStyles[2].Height = Math.Clamp(root.ClientSize.Height / 9F, 56, 96);
+        root.SizeChanged += (_, _) =>
+        {
+            _status.MaximumSize = new Size(Math.Max(100, root.ClientSize.Width - 24), 0);
+            if (_showDetails.Checked) root.RowStyles[2].Height = Math.Clamp(root.ClientSize.Height / 6F, 72, 130);
+        };
         Controls.Add(root);
+        var mappingTab = new TabPage("1 素材映射") { Padding = new Padding(4), AutoScroll = true };
+        var previewTab = new TabPage("2 转换预览") { Padding = new Padding(4), AutoScroll = true };
+        AddScrollableContent(mappingTab, BuildMapping(), 340);
+        AddScrollableContent(previewTab, BuildResults(), 280);
+        _tabs.TabPages.Add(mappingTab); _tabs.TabPages.Add(previewTab);
+        root.Controls.Add(_tabs, 0, 0);
+        _showDetails.CheckedChanged += (_, _) =>
+        {
+            _details.Visible = _showDetails.Checked;
+            root.RowStyles[2].Height = _showDetails.Checked ? Math.Clamp(root.ClientSize.Height / 6F, 72, 130) : 0;
+        };
+        root.Controls.Add(_showDetails, 0, 1);
+        _details.Visible = false;
+        root.Controls.Add(_details, 0, 2);
+        root.Controls.Add(_status, 0, 3);
+        var actions = Flow(); actions.FlowDirection = FlowDirection.RightToLeft;
+        var cancel = new Button { Text = "取消", AutoSize = true, MinimumSize = new Size(82, 34), DialogResult = DialogResult.Cancel };
+        var back = Button("返回映射", () => _tabs.SelectedIndex = 0);
+        back.Name = "ImageImportBackToMapping";
+        _prepare.Click += async (_, _) => await PrepareAsync();
+        _confirm.Click += (_, _) => Confirm();
+        actions.Controls.Add(cancel); actions.Controls.Add(_confirm); actions.Controls.Add(_prepare); actions.Controls.Add(back);
+        root.Controls.Add(actions, 0, 4);
+        AcceptButton = _prepare; CancelButton = cancel;
+    }
+
+    private Control BuildSourceHeader()
+    {
         var header = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 2, AutoSize = true };
         header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
@@ -117,22 +160,7 @@ public sealed class ImageImportDialog : Form
             options.Controls.Add(_naming);
         }
         header.Controls.Add(options, 0, 1); header.SetColumnSpan(options, 3);
-        root.Controls.Add(header, 0, 0);
-        var mappingTab = new TabPage("1 素材映射") { Padding = new Padding(4), AutoScroll = true };
-        var previewTab = new TabPage("2 转换预览") { Padding = new Padding(4), AutoScroll = true };
-        AddScrollableContent(mappingTab, BuildMapping(), 320);
-        AddScrollableContent(previewTab, BuildResults(), 240);
-        _tabs.TabPages.Add(mappingTab); _tabs.TabPages.Add(previewTab);
-        root.Controls.Add(_tabs, 0, 1);
-        root.Controls.Add(_details, 0, 2);
-        root.Controls.Add(_status, 0, 3);
-        var actions = Flow(); actions.FlowDirection = FlowDirection.RightToLeft;
-        var cancel = new Button { Text = "取消", AutoSize = true, MinimumSize = new Size(82, 34), DialogResult = DialogResult.Cancel };
-        _prepare.Click += async (_, _) => await PrepareAsync();
-        _confirm.Click += (_, _) => Confirm();
-        actions.Controls.Add(cancel); actions.Controls.Add(_confirm); actions.Controls.Add(_prepare);
-        root.Controls.Add(actions, 0, 4);
-        AcceptButton = _prepare; CancelButton = cancel;
+        return header;
     }
 
     private Control BuildMapping()
@@ -157,32 +185,48 @@ public sealed class ImageImportDialog : Form
             var slot = (SourceSlot)_mapping.Rows[e.RowIndex].Tag!;
             Assign(slot, dialog.FileName); PopulateMapping();
         };
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4 };
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 68));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 32));
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.Controls.Add(_mapping, 0, 0);
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        root.Controls.Add(BuildSourceHeader(), 0, 0);
+        root.Controls.Add(_mappingSplit, 0, 1);
+        var mappingArea = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
+        mappingArea.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        mappingArea.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        mappingArea.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        _mappingSplit.Panel1.Controls.Add(mappingArea);
+        mappingArea.Controls.Add(_mapping, 0, 0);
         var tools = Flow();
         tools.Controls.Add(Button("清空所选槽", () => { foreach (var slot in SelectedSlots()) { slot.SourcePath = ""; slot.Status = "未分配"; } InvalidatePrepared(); PopulateMapping(); }));
-        tools.Controls.Add(Button("排除所选槽", () => { foreach (var slot in SelectedSlots()) slot.Included = false; InvalidatePrepared(); PopulateMapping(); }));
+        var mappingMore = MoreButton();
+        AddMenuItem(mappingMore, "排除所选槽", () => { foreach (var slot in SelectedSlots()) slot.Included = false; InvalidatePrepared(); PopulateMapping(); });
         if (_operation == ImageImportOperation.Append)
         {
             tools.Controls.Add(Button("增加一组", () => { AddSlots(null, _slots.Select(slot => slot.Group).DefaultIfEmpty(-1).Max() + 1); InvalidatePrepared(); PopulateMapping(); }));
-            tools.Controls.Add(Button("本组上移", () => MoveGroup(-1)));
-            tools.Controls.Add(Button("本组下移", () => MoveGroup(1)));
+            AddMenuItem(mappingMore, "本组上移", () => MoveGroup(-1));
+            AddMenuItem(mappingMore, "本组下移", () => MoveGroup(1));
         }
-        root.Controls.Add(tools, 0, 1);
-        var pool = new GroupBox { Text = "待分配图片（任意文件名；按此列表的可见顺序分配）", Dock = DockStyle.Fill };
-        pool.Controls.Add(_pending); root.Controls.Add(pool, 0, 2);
+        tools.Controls.Add(mappingMore);
+        mappingArea.Controls.Add(tools, 0, 1);
+        var pool = new GroupBox { Text = "待分配图片 · 按列表顺序分配", Dock = DockStyle.Fill };
+        var poolArea = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
+        poolArea.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        poolArea.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        poolArea.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        pool.Controls.Add(poolArea);
+        poolArea.Controls.Add(_pending, 0, 0);
+        _mappingSplit.Panel2.Controls.Add(pool);
         var poolTools = Flow();
         poolTools.Controls.Add(Button("分配到当前槽", AssignCurrent));
-        poolTools.Controls.Add(Button("按列表顺序分配到空槽", AssignInOrder));
-        poolTools.Controls.Add(Button("同一图片应用到所选槽", ReuseSelected));
-        poolTools.Controls.Add(Button("文件名排序", () => { _pendingPaths.Sort(StringComparer.OrdinalIgnoreCase); PopulatePending(); }));
-        poolTools.Controls.Add(Button("移除待分配项", () => { foreach (var path in SelectedPending()) _pendingPaths.Remove(path); PopulatePending(); }));
-        root.Controls.Add(poolTools, 0, 3);
+        poolTools.Controls.Add(Button("按顺序分配空槽", AssignInOrder));
+        var poolMore = MoreButton();
+        AddMenuItem(poolMore, "同一图片应用到所选槽", ReuseSelected);
+        AddMenuItem(poolMore, "文件名排序", () => { _pendingPaths.Sort(StringComparer.OrdinalIgnoreCase); PopulatePending(); });
+        AddMenuItem(poolMore, "移除待分配项", () => { foreach (var path in SelectedPending()) _pendingPaths.Remove(path); PopulatePending(); });
+        poolTools.Controls.Add(poolMore);
+        poolArea.Controls.Add(poolTools, 0, 1);
+        _mappingSplit.Panel2Collapsed = true;
         return root;
     }
 
@@ -192,21 +236,35 @@ public sealed class ImageImportDialog : Form
         _results.MinimumSize = new Size(0, 80);
         _results.Margin = Padding.Empty;
         _results.ReadOnly = true; _results.MultiSelect = false;
-        AddColumn(_results, "target", "目标", 175);
-        AddColumn(_results, "role", "动作", 65);
-        AddColumn(_results, "source", "素材", 150);
-        AddColumn(_results, "size", "源 → 输出", 145);
-        AddColumn(_results, "sourceFormat", "素材格式 / 色深", 135);
-        AddColumn(_results, "format", "目标格式", 140);
-        AddColumn(_results, "state", "状态 / 处理", 260);
+        AddColumn(_results, "target", "目标 / 动作", 180);
+        _results.Columns["target"].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+        _results.Columns["target"].MinimumWidth = 110;
+        AddColumn(_results, "format", "输出", 75);
+        AddColumn(_results, "state", "状态", 55);
         _results.SelectionChanged += (_, _) => UpdatePreview();
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3 };
+        _previewLayout = root;
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 320));
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.Controls.Add(_results, 0, 0);
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 0));
+        root.Controls.Add(_results, 0, 1);
+        var toolbar = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 1, RowCount = 2 };
+        toolbar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        toolbar.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        toolbar.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         var controls = Flow();
+        ConfigureFormatOptions();
+        _outputFormat.SelectedIndexChanged += async (_, _) =>
+        {
+            if (_updatingFormat || _closed || IsDisposed) return;
+            var canPrepare = _slots.Any(slot => slot.Included && !string.IsNullOrWhiteSpace(slot.SourcePath));
+            if (canPrepare) { _formatPreparationTask = PrepareAsync(); await _formatPreparationTask; }
+            else { InvalidatePrepared(); SetStatus("写入格式已改变，请先分配素材。"); }
+        };
+        controls.Controls.Add(new Label { Text = "写入格式", AutoSize = true, Margin = new Padding(4, 8, 4, 4) });
+        controls.Controls.Add(_outputFormat);
         _previewMode.Items.AddRange(["整条 / 整图", "逐帧"]); _previewMode.SelectedIndex = 0;
         _previewMode.SelectedIndexChanged += (_, _) => UpdatePreview();
         _frame.ValueChanged += (_, _) => UpdatePreview();
@@ -214,22 +272,69 @@ public sealed class ImageImportDialog : Form
         controls.Controls.Add(_previewMode);
         controls.Controls.Add(new Label { Text = "第0帧起", AutoSize = true, Margin = new Padding(8, 8, 4, 4) });
         controls.Controls.Add(_frame);
-        controls.Controls.Add(Button("排除当前来源并返回映射", ExcludeCurrentResult));
-        root.Controls.Add(controls, 0, 1);
+        controls.Controls.Add(Button("排除此来源", ExcludeCurrentResult));
+        toolbar.Controls.Add(controls, 0, 0);
+        toolbar.Controls.Add(_formatInfo, 0, 1);
+        root.Controls.Add(toolbar, 0, 0); root.SetColumnSpan(toolbar, 2);
         var images = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 2 };
         for (var index = 0; index < 3; index++) images.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F / 3));
         images.RowStyles.Add(new RowStyle(SizeType.AutoSize)); images.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         images.Controls.Add(new Label { Text = "当前目标", AutoSize = true }, 0, 0);
         images.Controls.Add(new Label { Text = "源图（红框为裁切范围）", AutoSize = true }, 1, 0);
-        images.Controls.Add(new Label { Text = "转换后（实际候选载荷）", AutoSize = true }, 2, 0);
+        images.Controls.Add(new Label { Text = "转换后 · 实际写入效果", AutoSize = true }, 2, 0);
         foreach (var (picture, column) in new[] { (_before, 0), (_sourcePreview, 1), (_after, 2) })
         {
             var viewport = PreviewImageLayout.CreateViewport(picture);
             viewport.MinimumSize = new Size(0, 96);
             images.Controls.Add(viewport, column, 1);
         }
-        root.Controls.Add(images, 0, 2);
+        _previewImages = images;
+        root.Controls.Add(images, 1, 1);
+        root.SizeChanged += (_, _) => ArrangeResults();
+        ArrangeResults();
         return root;
+    }
+
+    private void ConfigureFormatOptions(bool nativeIndexed = false)
+    {
+        var support = ImageImportFormatPolicy.GetSupport(_resource, nativeIndexed);
+        var previous = _outputFormat.SelectedItem is FormatChoice choice ? choice.Format : ImageImportOutputFormat.Bmp;
+        _updatingFormat = true;
+        try
+        {
+            _outputFormat.Items.Clear();
+            foreach (var format in support.AllowedFormats) _outputFormat.Items.Add(new FormatChoice(format));
+            _outputFormat.SelectedIndex = Math.Max(0, _outputFormat.Items.Cast<FormatChoice>().ToList().FindIndex(item => item.Format == previous));
+            _outputFormat.Enabled = !support.IsLocked;
+            _formatInfo.Text = support.Description;
+        }
+        finally { _updatingFormat = false; }
+    }
+
+    private void ArrangeResults()
+    {
+        if (_arrangingResults || _previewLayout == null || _previewImages == null) return;
+        _arrangingResults = true;
+        var root = _previewLayout;
+        root.SuspendLayout();
+        try
+        {
+            var wide = root.ClientSize.Width >= 1100 * DeviceDpi / 96;
+            root.ColumnStyles[0].SizeType = wide ? SizeType.Absolute : SizeType.Percent;
+            root.ColumnStyles[0].Width = wide ? 320 * DeviceDpi / 96 : 100;
+            root.ColumnStyles[1].SizeType = wide ? SizeType.Percent : SizeType.Absolute;
+            root.ColumnStyles[1].Width = wide ? 100 : 0;
+            root.RowStyles[1].SizeType = wide ? SizeType.Percent : SizeType.Absolute;
+            root.RowStyles[1].Height = wide ? 100 : Math.Max(88, 104 * DeviceDpi / 96);
+            root.RowStyles[2].SizeType = wide ? SizeType.Absolute : SizeType.Percent;
+            root.RowStyles[2].Height = wide ? 0 : 100;
+            root.SetColumn(_previewImages, wide ? 1 : 0);
+            root.SetRow(_previewImages, wide ? 1 : 2);
+            root.SetColumnSpan(_previewImages, wide ? 1 : 2);
+            root.SetColumnSpan(_results, wide ? 1 : 2);
+            _formatInfo.MaximumSize = new Size(Math.Max(160, root.ClientSize.Width - 12), 0);
+        }
+        finally { root.ResumeLayout(true); _arrangingResults = false; }
     }
 
     private static void AddScrollableContent(TabPage page, Control content, int minimumHeight)
@@ -321,6 +426,11 @@ public sealed class ImageImportDialog : Form
         _pending.BeginUpdate(); _pending.Items.Clear();
         foreach (var path in _pendingPaths) _pending.Items.Add(path);
         _pending.EndUpdate();
+        var wasCollapsed = _mappingSplit.Panel2Collapsed;
+        _mappingSplit.Panel2Collapsed = _pendingPaths.Count == 0;
+        if (wasCollapsed && !_mappingSplit.Panel2Collapsed && _mappingSplit.Height > 170)
+            _mappingSplit.SplitterDistance = Math.Clamp(_mappingSplit.Height * 2 / 3,
+                _mappingSplit.Panel1MinSize, _mappingSplit.Height - _mappingSplit.Panel2MinSize - _mappingSplit.SplitterWidth);
     }
     private string[] SelectedPending() => _pending.SelectedItems.Cast<string>().ToArray();
     private SourceSlot[] SelectedSlots() => _mapping.SelectedRows.Cast<DataGridViewRow>().OrderBy(row => row.Index)
@@ -450,8 +560,8 @@ public sealed class ImageImportDialog : Form
             foreach (var child in Directory.EnumerateDirectories(root)) AddPending(ImageImportSourceDiscovery.Files(child));
             PopulateMapping();
             var assigned = _slots.Count(slot => slot.SourcePath.Length > 0 && slot.Included);
-            SetStatus($"目录识别完成；当前 {assigned} 个槽已有素材。未知文件名保留在待分配列表，冲突项须明确选择。" + Rules());
-            _details.Text = messages.Count == 0 ? "未发现歧义。请检查全部目标和动作，再准备转换。" : string.Join(Environment.NewLine, messages);
+            SetStatus($"目录识别完成 · 已分配 {assigned} 槽 · 待分配 {_pendingPaths.Count} 张。请核对目标和动作。");
+            _details.Text = (messages.Count == 0 ? "未发现歧义。" : string.Join(Environment.NewLine, messages)) + Environment.NewLine + Rules();
         }
         catch (Exception ex) { SetStatus("目录识别失败；尚未写入项目。"); _details.Text = ex.Message; PopulateMapping(); }
     }
@@ -475,6 +585,10 @@ public sealed class ImageImportDialog : Form
     private async Task PrepareAsync()
     {
         _mapping.EndEdit();
+        var selected = _results.CurrentRow?.Tag as ImageImportPreviewRow;
+        if (selected != null) _selectionToRestore = selected.TargetLabel + "|" + selected.Role + "|" + selected.SourcePath;
+        var selection = _selectionToRestore;
+        var frame = _frame.Value;
         InvalidatePrepared();
         var unresolved = _slots.Where(slot => slot.Included && slot.Status.Contains("须手动选择", StringComparison.Ordinal)).ToArray();
         if (unresolved.Length > 0)
@@ -486,19 +600,34 @@ public sealed class ImageImportDialog : Form
         }
         var revision = _revision;
         var cancellation = new CancellationTokenSource(); _cancellation = cancellation;
-        _prepare.Text = "重新准备";
-        SetStatus("正在后台解码、转换并校验候选载荷…可继续调整映射或取消。");
+        _prepare.Text = "更新预览";
+        SetStatus("正在生成转换预览…");
         var assignments = _slots.OrderBy(slot => slot.Group).Select(slot =>
             new ImageImportAssignment(slot.Target, slot.Role, slot.SourcePath, slot.Group,
                 slot.Included && (_operation == ImageImportOperation.Append || !string.IsNullOrWhiteSpace(slot.SourcePath)))).ToArray();
         try
         {
-            var prepared = await _preparation.PrepareAsync(new ImageImportRequest(_project, _resource, _operation, assignments), cancellation.Token);
+            var format = (_outputFormat.SelectedItem as FormatChoice)?.Format ?? ImageImportOutputFormat.Bmp;
+            var prepared = await _preparation.PrepareAsync(new ImageImportRequest(_project, _resource, _operation, assignments, format), cancellation.Token);
             if (_closed || IsDisposed || cancellation.IsCancellationRequested || revision != _revision) { prepared.Dispose(); return; }
             _prepared = prepared; _preparedRevision = revision;
             _confirm.Enabled = prepared.CanCommit && prepared.Plan != null;
-            PopulateResults(); _tabs.SelectedIndex = 1;
-            SetStatus(_confirm.Enabled ? "转换完成。请检查实际候选预览及物理目标，再确认写入。" : "存在阻断项或没有可写入素材。可排除问题来源、返回映射并重新准备。");
+            // Tou and other DIB companion rows keep their own encoding; the
+            // editable primary planes determine whether this batch is RAW-only.
+            var primaryRows = prepared.Rows.Where(row => row.Role != "Tou" && !row.OutputFormat.StartsWith("DIB", StringComparison.OrdinalIgnoreCase)).ToArray();
+            ConfigureFormatOptions(primaryRows.Length > 0 && primaryRows.All(row => row.OutputFormat.StartsWith("RAW", StringComparison.OrdinalIgnoreCase)));
+            PopulateResults();
+            if (selection != null)
+            {
+                var restored = _results.Rows.Cast<DataGridViewRow>().FirstOrDefault(row => row.Tag is ImageImportPreviewRow item &&
+                    item.TargetLabel + "|" + item.Role + "|" + item.SourcePath == selection);
+                if (restored != null) { _results.CurrentCell = restored.Cells[0]; restored.Selected = true; }
+            }
+            _frame.Value = Math.Min(frame, _frame.Maximum);
+            _tabs.SelectedIndex = 1;
+            var failed = prepared.Rows.Count(row => row.Error != null);
+            SetStatus($"预览完成 · 成功 {prepared.Rows.Count - failed} 项 / 失败 {failed} 项" +
+                (_confirm.Enabled ? "。核对效果后确认写入。" : "。请修正或排除问题素材。"));
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
         catch (Exception ex)
@@ -519,10 +648,10 @@ public sealed class ImageImportDialog : Form
         if (_prepared == null) return;
         foreach (var row in _prepared.Rows)
         {
-            var index = _results.Rows.Add(row.TargetLabel, row.Role, Path.GetFileName(row.SourcePath),
-                $"{FormatSize(row.SourceSize)} → {FormatSize(row.OutputSize)}", row.SourceFormat,
-                $"{row.OriginalFormat} → {row.OutputFormat}", string.IsNullOrWhiteSpace(row.Error) ? row.Notes : row.Error);
+            var index = _results.Rows.Add(row.TargetLabel + " / " + row.Role, row.OutputFormat, row.Error == null ? "就绪" : "失败");
             _results.Rows[index].Tag = row;
+            foreach (DataGridViewCell cell in _results.Rows[index].Cells)
+                cell.ToolTipText = row.Error ?? $"{row.SourcePath}\n{row.OriginalFormat} → {row.OutputFormat}\n{row.Notes}";
             if (!string.IsNullOrWhiteSpace(row.Error)) _results.Rows[index].DefaultCellStyle.ForeColor = Color.Firebrick;
         }
         if (_results.Rows.Count > 0) { _results.CurrentCell = _results.Rows[0].Cells[0]; _results.Rows[0].Selected = true; }
@@ -542,9 +671,10 @@ public sealed class ImageImportDialog : Form
         var count = spec.Item3;
         _frame.Enabled = _previewMode.SelectedIndex == 1 && count > 1;
         if (_frame.Maximum != count - 1) { _frame.Maximum = count - 1; if (_frame.Value > _frame.Maximum) _frame.Value = _frame.Maximum; }
-        ReplacePreview(_before, PreviewImage(row.Before, spec, _previewMode.SelectedIndex == 1, (int)_frame.Value));
+        var dllBlue = _resource.Kind == ResourceKind.DllBitmap || row.Role == "Tou";
+        ReplacePreview(_before, TargetPreview(row.Before, spec, dllBlue));
         ReplacePreview(_sourcePreview, SourcePreview(row, spec));
-        ReplacePreview(_after, PreviewImage(row.After, spec, _previewMode.SelectedIndex == 1, (int)_frame.Value));
+        ReplacePreview(_after, TargetPreview(row.After, spec, dllBlue));
         _details.Text = $"目标：{row.TargetLabel} / {row.Role}{Environment.NewLine}素材：{row.SourcePath}{Environment.NewLine}" +
             $"源尺寸：{FormatSize(row.SourceSize)}；源格式/色深：{row.SourceFormat}；输出尺寸：{FormatSize(row.OutputSize)}；目标存储：{row.OriginalFormat} → {row.OutputFormat}{Environment.NewLine}" +
             $"处理：{row.Notes}{Environment.NewLine}" +
@@ -596,6 +726,11 @@ public sealed class ImageImportDialog : Form
         if (source == null) return null;
         if (!single || spec.Count == 1 || source.Width != spec.Width || source.Height != spec.Height * spec.Count) return (Bitmap)source.Clone();
         return source.Clone(new Rectangle(0, frame * spec.Height, spec.Width, spec.Height), System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+    }
+    private Bitmap? TargetPreview(Bitmap? source, (int Width, int Height, int Count) spec, bool dllBlue)
+    {
+        using var frame = PreviewImage(source, spec, _previewMode.SelectedIndex == 1, (int)_frame.Value);
+        return frame == null ? null : ImageRendering.ApplyKeyTransparency(frame, false, dllBlue);
     }
     private void ExcludeCurrentResult()
     {
@@ -673,6 +808,16 @@ public sealed class ImageImportDialog : Form
         var button = new Button { Text = text, AutoSize = true, MinimumSize = new Size(65, 30), Margin = new Padding(3) };
         button.Click += (_, _) => action(); return button;
     }
+    private static Button MoreButton()
+    {
+        var button = new Button { Text = "更多 ▾", AutoSize = true, MinimumSize = new Size(65, 30), Margin = new Padding(3) };
+        var menu = new ContextMenuStrip(); button.ContextMenuStrip = menu;
+        button.Click += (_, _) => menu.Show(button, new Point(0, button.Height));
+        button.Disposed += (_, _) => menu.Dispose();
+        return button;
+    }
+    private static void AddMenuItem(Button button, string text, Action action)
+        => button.ContextMenuStrip!.Items.Add(text, null, (_, _) => action());
     private static PictureBox Preview() => new() { Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom, BackColor = Color.FromArgb(229, 232, 236), BorderStyle = BorderStyle.FixedSingle };
     protected override void Dispose(bool disposing)
     {
@@ -692,5 +837,14 @@ public sealed class ImageImportDialog : Form
         internal bool Included { get; set; } = true;
         internal string SourcePath { get; set; } = "";
         internal string Status { get; set; } = "未分配";
+    }
+    private sealed record FormatChoice(ImageImportOutputFormat Format)
+    {
+        public override string ToString() => Format switch
+        {
+            ImageImportOutputFormat.Bmp => "BMP（默认）",
+            ImageImportOutputFormat.Png => "PNG",
+            _ => "保留原格式"
+        };
     }
 }

@@ -25,28 +25,45 @@ internal static class ResourcePreviewTests
 
     private static void CheckResourceSelectionCommit()
     {
-        using var form = new Form
+        foreach (var idOnly in new[] { false, true }) CheckMode(idOnly);
+
+        static void CheckMode(bool idOnly)
         {
-            StartPosition = FormStartPosition.Manual, Location = new Point(-32000, -32000),
-            Size = new Size(400, 200), ShowInTaskbar = false
-        };
-        using var combo = new SearchableIdComboBox { Width = 240 };
-        combo.SetPreviewLoader((_, _) => Task.FromResult<Bitmap?>(null));
-        combo.SetOptions([new IdNameOption(12, "已选图片"), new IdNameOption(120, "先前输入")]);
-        form.Controls.Add(combo); form.Show(); Application.DoEvents();
-        combo.Text = "120";
-        combo.SelectedItem = combo.Items.Cast<IdNameOption>().Single(option => option.Id == 12);
-        var notifications = 0;
-        combo.SelectionChangeCommitted += (_, _) =>
-        {
-            notifications++;
-            TestSupport.Assert(combo.SelectedItem is IdNameOption selected && selected.Id == 12 &&
-                combo.Text == selected.Display && combo.TryGetSelectedId(out var id) && id == selected.Id,
-                "资源下拉提交事件读取了上次输入的文字/ID，而非当前选中项");
-        };
-        typeof(SearchableIdComboBox).GetMethod("OnSelectionChangeCommitted", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
-            .Invoke(combo, [EventArgs.Empty]);
-        TestSupport.Assert(notifications == 1, "资源下拉选择没有且仅有一次提交通知");
+            using var form = new Form
+            {
+                StartPosition = FormStartPosition.Manual, Location = new Point(-32000, -32000),
+                Size = new Size(400, 200), ShowInTaskbar = false
+            };
+            using var combo = new SearchableIdComboBox { Width = 240, IdOnly = idOnly };
+            if (!idOnly) combo.SetPreviewLoader((_, _) => Task.FromResult<Bitmap?>(null));
+            combo.SetOptions([new IdNameOption(12, "已选图片"), new IdNameOption(120, "先前输入")]);
+            form.Controls.Add(combo); form.Show(); Application.DoEvents();
+            TestSupport.Assert(combo.Items.Cast<IdNameOption>().All(option => combo.GetItemText(option) ==
+                    (idOnly ? option.Id.ToString(CultureInfo.InvariantCulture) : option.Display)),
+                "原生下拉候选没有使用当前数字/名称显示模式");
+            combo.Text = "120";
+            combo.SelectedItem = combo.Items.Cast<IdNameOption>().Single(option => option.Id == 12);
+            var notifications = 0;
+            combo.SelectionChangeCommitted += (_, _) =>
+            {
+                notifications++;
+                TestSupport.Assert(combo.SelectedItem is IdNameOption selected && selected.Id == 12 &&
+                    combo.Text == (idOnly ? "12" : selected.Display) && combo.TryGetSelectedId(out var id) && id == selected.Id,
+                    "资源下拉提交事件读取了上次输入的文字/ID，而非当前选中项");
+            };
+            typeof(SearchableIdComboBox).GetMethod("OnSelectionChangeCommitted", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+                .Invoke(combo, [EventArgs.Empty]);
+            TestSupport.Assert(notifications == 1, "资源下拉选择没有且仅有一次提交通知");
+            combo.Text = "已选";
+            typeof(SearchableIdComboBox).GetMethod("OnTextUpdate", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+                .Invoke(combo, [EventArgs.Empty]);
+            TestSupport.Assert(combo.Items.Cast<IdNameOption>().Select(option => option.Id).SequenceEqual([12]),
+                "数字展示模式丢失了选项名称搜索");
+            combo.DroppedDown = false;
+            combo.SetBoundValue("65535");
+            TestSupport.Assert(combo.TryGetSelectedId(out var unknown) && unknown == 65535 && combo.Text == "65535",
+                "列表外编号没有保留原数字");
+        }
     }
 
     private static void TestProject(string source)
@@ -197,6 +214,8 @@ internal static class ResourcePreviewTests
             host.Controls.Add(panel);
             panel.Bind(BusinessPageKind.Persons, 0);
             var combo = (SearchableIdComboBox)LabeledEditor(panel, "头像");
+            TestSupport.Assert(combo.IdOnly && combo.Text == ReadById(workspace, "persons", 0, "头像").ToString(CultureInfo.InvariantCulture),
+                "资源列表开始加载前的头像绑定不是纯数字");
             foreach (var control in Descendants(panel)) Track(control);
             var expected = adapter.GetIdOptions(workspace.RootPath, ResourceBindingKind.Portrait);
             combo.SetOptions(expected.Take(1).Select(option => new IdNameOption(option.Id, option.Name)));
@@ -218,6 +237,8 @@ internal static class ResourcePreviewTests
                 .Invoke(combo, null);
             WaitFor(() => combo.Options.Select(option => option.Id).SequenceEqual(expected.Select(option => option.Id)),
                 "建句柄前完成的资源列表没有在UI线程显示");
+            TestSupport.Assert(combo.Text == ReadById(workspace, "persons", 0, "头像").ToString(CultureInfo.InvariantCulture),
+                "异步资源列表把头像编号恢复成了名称格式");
             TestSupport.Assert(handlesCreated > 0, "资源下拉框句柄线程断言没有观察到真实目标控件");
 
             // A completion already posted to the old owner HWND must neither
@@ -237,6 +258,8 @@ internal static class ResourcePreviewTests
             panel.Bind(BusinessPageKind.Persons, 1);
             combo = (SearchableIdComboBox)LabeledEditor(panel, "头像");
             var boundText = combo.Text;
+            TestSupport.Assert(boundText == ReadById(workspace, "persons", 1, "头像").ToString(CultureInfo.InvariantCulture),
+                "切换人物后的头像绑定不是纯数字");
             TestSupport.Assert(expected.Count > 1, "资源选项样本不足以验证异步回填");
             combo.SetOptions(expected.Take(1).Select(option => new IdNameOption(option.Id, option.Name)));
             if (combo.Enabled) combo.Focus();
@@ -333,24 +356,29 @@ internal static class ResourcePreviewTests
         {
             if (!HasEntity(workspace, key, id)) continue;
             CheckResourcePicker(panel, label, adapter.GetIdOptions(workspace.RootPath, kind, job, job <= 59 ? job % 3 + 1 : 1),
-                ReadById(workspace, key, id, field));
+                ReadById(workspace, key, id, field), idOnly: true);
         }
     }
 
-    private static void CheckResourcePicker(Control panel, string label, IReadOnlyList<ResourceIdOption> expected, int selectedId)
+    private static void CheckResourcePicker(Control panel, string label, IReadOnlyList<ResourceIdOption> expected, int selectedId, bool idOnly = false)
     {
         var editor = LabeledEditor(panel, label);
         TestSupport.Assert(editor is SearchableIdComboBox, $"{label}没有使用可输入资源下拉框，而是{editor.GetType().Name}");
         var combo = (SearchableIdComboBox)editor;
-        TestSupport.Assert(combo.DrawMode == DrawMode.OwnerDrawVariable && combo.DropDownStyle == ComboBoxStyle.DropDown,
-            $"{label}没有启用资源缩略图OwnerDraw或数字输入");
+        TestSupport.Assert(combo.IdOnly == idOnly && combo.DrawMode == (idOnly ? DrawMode.Normal : DrawMode.OwnerDrawVariable) &&
+            combo.DropDownStyle == ComboBoxStyle.DropDown,
+            $"{label}没有使用要求的数字/缩略图展示模式");
         TestSupport.Assert(expected.Count > 0 && expected[0].Id == 0, $"{label}真实资源编号没有从0开始");
         WaitFor(() => combo.Options.Select(option => option.Id).SequenceEqual(expected.Select(option => option.Id)),
             $"{label}异步资源选项没有完整加载");
-        TestSupport.Assert(combo.Options[0].Display.StartsWith("0：", StringComparison.Ordinal) &&
-            combo.Options.All(option => !string.IsNullOrWhiteSpace(option.Name)), $"{label}资源选项没有显示ID和名称");
+        TestSupport.Assert(combo.Options.All(option => !string.IsNullOrWhiteSpace(option.Name)) &&
+            combo.Items.Cast<IdNameOption>().All(option => combo.GetItemText(option) ==
+                (idOnly ? option.Id.ToString(CultureInfo.InvariantCulture) : option.Display)),
+            $"{label}候选显示格式错误或丢失了名称搜索元数据");
         TestSupport.Assert(combo.TryGetSelectedId(out var value) && value == selectedId,
             $"{label}异步加载把当前绑定值{selectedId}改成了{combo.Text}");
+        if (idOnly) TestSupport.Assert(combo.Text == selectedId.ToString(CultureInfo.InvariantCulture),
+            $"{label}输入框仍然包含编号之外的内容：{combo.Text}");
         // Opening and painting the native dropdown requests visible thumbnails.
         // Neither option loading nor popup navigation should submit an edit.
         if (combo.Enabled)
@@ -528,6 +556,8 @@ internal static class ResourcePreviewTests
                     .Invoke(combo, [EventArgs.Empty]);
                 TestSupport.Assert(Convert.ToInt32(row[field], CultureInfo.InvariantCulture) == original && !panel.HasPendingChanges,
                     $"{label}选择下拉项没有立即更新编号");
+                TestSupport.Assert(combo.Text == original.ToString(CultureInfo.InvariantCulture),
+                    $"{label}选择候选后恢复了名称后缀");
                 WaitFor(() => cards.All(card => card.HasLoadedResource) &&
                     pictures.Select((picture, index) => picture.Image != null && !ReferenceEquals(picture.Image, typedImages[index])).All(loaded => loaded),
                     $"{label}选择下拉项后没有立即刷新预览");

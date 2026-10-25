@@ -71,6 +71,20 @@ internal static class MigrationFieldIsolationPerformanceTests
 
         Check(marker: false);
         bytes[0x12] = 2;
+        // The engine classifies +0x11 < 26 as weapon/armor before
+        // considering the category byte. A 2/3 byte alone is not a marker row.
+        Check(marker: false);
+        bytes[0x11] = 25;
+        Check(marker: false);
+        bytes[0x11] = 26;
+        Check(marker: true);
+        bytes[0x12] = 0;
+        Check(marker: false);
+        bytes[0x12] = 3;
+        Check(marker: true);
+        bytes[0x11] = 25;
+        Check(marker: false);
+        bytes[0x11] = 26;
         Check(marker: true);
         bytes[0x12] = 0;
         Check(marker: false);

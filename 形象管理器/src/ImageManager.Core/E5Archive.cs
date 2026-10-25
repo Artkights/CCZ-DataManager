@@ -115,6 +115,54 @@ public sealed class E5Archive
 
     private static E5Archive Parse(string logicalPath, byte[] bytes, bool allowNonZeroDirectoryTrailer)
     {
+        try { return ParseSequential(logicalPath, bytes, allowNonZeroDirectoryTrailer); }
+        catch (InvalidDataException)
+        {
+            // 洗隋 6.4 Face.e5 has eight JPEG entries redirected to appended payloads.
+            // Its directory still ends at an explicit four-byte zero sentinel.
+            // Restrict this recovery to Face and prove every uncompressed image;
+            // arbitrary E5/RAW files retain the ordinary strict directory rules.
+            if (TryParseRedirectedFace(logicalPath, bytes, out var archive)) return archive!;
+            throw;
+        }
+    }
+
+    private static bool TryParseRedirectedFace(string path, byte[] bytes, out E5Archive? archive)
+    {
+        archive = null;
+        if (!System.IO.Path.GetFileName(path).Equals("Face.e5", StringComparison.OrdinalIgnoreCase) ||
+            bytes.Length < IndexOffset + EntrySize + 4 || !bytes.AsSpan(0, 4).SequenceEqual("Ls12"u8)) return false;
+        var entries = new List<E5Entry>();
+        var directoryEnd = IndexOffset;
+        var firstPayload = bytes.Length;
+        while (directoryEnd <= bytes.Length - 4)
+        {
+            var stored = ReadUInt32(bytes, directoryEnd);
+            if (stored == 0) break;
+            if (directoryEnd > bytes.Length - EntrySize || directoryEnd + EntrySize > firstPayload) return false;
+            var decoded = ReadUInt32(bytes, directoryEnd + 4);
+            var dataOffset = ReadUInt32(bytes, directoryEnd + 8);
+            if (stored != decoded || stored > int.MaxValue || dataOffset > int.MaxValue ||
+                dataOffset < directoryEnd + EntrySize || (ulong)dataOffset + stored > (ulong)bytes.Length) return false;
+            firstPayload = Math.Min(firstPayload, (int)dataOffset);
+            entries.Add(new(entries.Count + 1, (int)stored, (int)decoded, (int)dataOffset));
+            directoryEnd += EntrySize;
+        }
+        if (entries.Count < 2 || directoryEnd > bytes.Length - 4 || ReadUInt32(bytes, directoryEnd) != 0 ||
+            firstPayload < directoryEnd + 4 || entries[0].DataOffset == directoryEnd + 4) return false;
+        var ordered = entries.OrderBy(entry => entry.DataOffset).ToArray();
+        for (var index = 0; index < ordered.Length; index++)
+        {
+            var entry = ordered[index];
+            if (index > 0 && entry.DataOffset < ordered[index - 1].DataOffset + (long)ordered[index - 1].StoredLength ||
+                !ImageRendering.IsStandardImage(bytes.AsSpan(entry.DataOffset, entry.StoredLength).ToArray())) return false;
+        }
+        archive = new E5Archive(path, bytes, entries, 4);
+        return true;
+    }
+
+    private static E5Archive ParseSequential(string logicalPath, byte[] bytes, bool allowNonZeroDirectoryTrailer)
+    {
         if (bytes.Length < IndexOffset + EntrySize) throw new InvalidDataException("文件过短，不包含 E5 索引。");
         var firstOffset = ReadUInt32(bytes, IndexOffset + 8);
         if (firstOffset <= IndexOffset || firstOffset > bytes.Length) throw new InvalidDataException("E5 首个载荷偏移无效。");

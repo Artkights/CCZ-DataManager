@@ -14,6 +14,7 @@ internal static class ItemTypeTests
     {
         foreach (var (profile, variant, dynamic) in new[]
         {
+            ("ccz-6.4", "64-xisui-v1", false),
             ("ccz-6.5", "65-standard-v1", false), ("ccz-6.6", "66-standard-v1", true),
             ("ccz-6.6", "66-legacy-data-v1", false), ("ccz-6.6", "66-shanzhai-legacy", true)
         })
@@ -23,17 +24,17 @@ internal static class ItemTypeTests
             TestSupport.Assert(ItemTypeService.GetOptions(ItemTypeService.Resolve(gun, 0)).Single(option => option.Id == 2).Name == "普通枪", "普通类型2名称错误");
             var armor = Create(profile, variant, 70, 20, 255);
             TestSupport.Assert(ItemTypeService.Resolve(armor, 0).PermissionColumn == "普通铠甲", $"{variant} 类型20不得按十位数映射");
-            var auxiliary = Create(profile, variant, 109, 2, 2);
+            var auxiliary = Create(profile, variant, 109, 74, 2);
             var auxiliaryType = ItemTypeService.Resolve(auxiliary, 0);
             TestSupport.Assert(auxiliaryType.Category == ItemCategory.Accessory && auxiliaryType.PermissionSlot == null,
-                $"{variant} 辅助类型/效果码2被误认为枪许可");
+                $"{variant} 辅助效果码74被误认为普通装备许可");
             var options = ItemTypeService.GetOptions(auxiliaryType);
             TestSupport.Assert(!options.Any(option => option.Name.Contains("枪", StringComparison.Ordinal)), $"{variant} 辅助选项包含枪类误映射");
             TestSupport.Assert(auxiliaryType.IsCategoryMarker == dynamic, $"{variant} 使用了错误的动态类型编码");
-            var consumable = Create(profile, variant, 150, 20, 3);
+            var consumable = Create(profile, variant, 150, 46, 3);
             var consumableSemantics = ItemTypeService.Resolve(consumable, 0);
             TestSupport.Assert(consumableSemantics.Category == ItemCategory.Consumable &&
-                consumableSemantics.PermissionSlot == null, $"{variant} 道具效果码20误关联铠甲许可");
+                consumableSemantics.PermissionSlot == null, $"{variant} 道具效果码46误关联普通装备许可");
             TestSupport.Assert(consumableSemantics.Layout.ConsumableParameterOffset == 0x15 &&
                 consumableSemantics.Layout.GrowthOffset == null && consumableSemantics.Layout.SuitableJobOffset == null,
                 $"{variant} 消耗品布局没有隐藏装备成长/适合兵种字段");
@@ -53,12 +54,30 @@ internal static class ItemTypeTests
                     .EncodeChangedField(auxiliary.OriginalFileBytes, field, 8).Single().Offset == 0x11,
                     "17字节兼容布局的类型写入被错误交换到类别标记字节");
             }
-            TestSupport.Assert(ItemTypeService.Resolve(Create(profile, variant, 180, 0, 0), 0).PermissionSlot == null,
-                "辅助段预留类型0不应获得剑许可");
+            foreach (var id in new[] { 0, 69, 70, 103, 104, 108, 109, 180, 254 })
+            {
+                TestSupport.Assert(ItemTypeService.Resolve(Create(profile, variant, id, 0, 255), 0).Category == ItemCategory.Weapon,
+                    $"{variant} 类型0的普通剑被编号{id}错误分段");
+                TestSupport.Assert(ItemTypeService.Resolve(Create(profile, variant, id, 25, 255), 0).Category == ItemCategory.Armor,
+                    $"{variant} 类型25的特殊袍服被编号{id}错误分段");
+                TestSupport.Assert(ItemTypeService.Resolve(Create(profile, variant, id, 0, 2), 0).Category == ItemCategory.Weapon,
+                    $"{variant} 类型0武器被效果2或编号{id}抢占类别");
+                TestSupport.Assert(ItemTypeService.Resolve(Create(profile, variant, id, 20, 3), 0).Category == ItemCategory.Armor,
+                    $"{variant} 类型20防具被效果3或编号{id}抢占类别");
+                TestSupport.Assert(ItemTypeService.Resolve(Create(profile, variant, id, 74, 2), 0).Category == ItemCategory.Accessory,
+                    $"{variant} 辅助类别被编号{id}错误分段");
+                TestSupport.Assert(ItemTypeService.Resolve(Create(profile, variant, id, 46, 3), 0).Category == ItemCategory.Consumable,
+                    $"{variant} 道具类别被编号{id}错误分段");
+                TestSupport.Assert(ItemTypeService.Resolve(Create(profile, variant, id, 26, 255), 0).Category == ItemCategory.Unknown,
+                    $"{variant} 未知类型26被编号{id}推断为装备");
+                foreach (var (marker, expected) in new[] { (0, ItemCategory.Weapon), (1, ItemCategory.Armor) })
+                {
+                    var fallback = ItemTypeService.Resolve(Create(profile, variant, id, 70, (byte)marker), 0);
+                    TestSupport.Assert(fallback.Category == expected && fallback.PermissionSlot == null,
+                        $"{variant} 类型>=26时没有按引擎fallback类别{marker}分类，或伪造装备许可槽");
+                }
+            }
         }
-        var custom = new ItemCategoryBoundary(10, 20);
-        TestSupport.Assert(ItemTypeService.Resolve(Create("ccz-6.5", "65-standard-v1", 20, 2, 2), 0, custom).PermissionSlot == null,
-            "自定义辅助段边界未应用");
         var accessoryLayout = ItemTypeService.GetLayout(ItemCategory.Accessory);
         TestSupport.Assert(accessoryLayout.SuitableJobOffset == 0x17 && accessoryLayout.EffectValueOffset == 0x15 &&
             accessoryLayout.GrowthOffset == null, "辅助装备语义布局错误");
@@ -82,7 +101,6 @@ internal static class ItemTypeTests
         try
         {
             File.WriteAllText(Path.Combine(root, "System.ini"), "DefID=70 ; 防具\r\nAssID=109 ; 辅助\r\n");
-            TestSupport.Assert(ItemCategoryBoundary.Read(root) == new ItemCategoryBoundary(70, 109), "INI物品边界读取失败");
             foreach (var (profile, variant) in new[] { ("ccz-6.5", "65-standard-v1"), ("ccz-6.6", "66-standard-v1"), ("ccz-6.6", "66-legacy-data-v1") })
             {
                 var workspace = new ProjectWorkspace(); workspace.Open(root, profile, variant);
@@ -106,6 +124,7 @@ internal static class ItemTypeTests
                 types.SelectedIndex = -1;
                 types.Text = "20";
                 TestSupport.Assert(panel.Flush(), "类型草稿未提交");
+                Application.DoEvents();
                 TestSupport.Assert(Convert.ToInt32(workspace.GetDocument("items-low").Data.Rows[3]["宝物类型"]) == 20,
                     $"类型输入未更新当前工作区：{types.Text} / {types.SelectedItem}");
                 permission = panel.DetailTabs.TabPages.Cast<TabPage>().Single(tab => tab.Text == "可装备部队");

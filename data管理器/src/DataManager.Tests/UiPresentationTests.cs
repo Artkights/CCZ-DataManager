@@ -49,6 +49,12 @@ internal static class UiPresentationTests
             var editor = form.BusinessEditorForSmokeTest;
             var boundCombos = Descendants(editor).OfType<SearchableIdComboBox>().Where(combo => combo.Visible).ToArray();
             TestSupport.Assert(boundCombos.Length >= 7, "真实人物页没有创建兵种/装备/头像/R/S下拉框");
+            var numericImages = boundCombos.Where(combo => combo.IdOnly).ToArray();
+            TestSupport.Assert(numericImages.Length == 3 && numericImages.All(combo =>
+                    int.TryParse(combo.Text, out _) && combo.DrawMode == DrawMode.Normal),
+                "头像及R/S编号没有全部使用纯数字输入和无缩略图候选");
+            TestSupport.Assert(boundCombos.Where(combo => !combo.IdOnly).All(combo => combo.Text.Contains('：')),
+                "图片编号之外的下拉框丢失了原有名称");
             foreach (var combo in boundCombos.Where(combo => !combo.Focused))
                 TestSupport.Assert(combo.SelectionLength == 0,
                     $"真实人物页 {size} 下程序绑定值仍全选：{combo.Text}，选区 {combo.SelectionStart}/{combo.SelectionLength}");
@@ -125,13 +131,15 @@ internal static class UiPresentationTests
             Descriptor("Item.e5", ResourceKind.E5Indexed, ImageCategory.ItemIcon, "Item.e5"),
             Descriptor("Weather.e5", ResourceKind.WeatherSpecial, ImageCategory.Dynamic, "Weather.e5"),
             Descriptor("Pmap.e5", ResourceKind.PmapSpecial, ImageCategory.Scene, "Pmap.e5"),
+            Descriptor("Mmap.e5", ResourceKind.E5Indexed, ImageCategory.Scene, "Mmap.e5"),
             Descriptor("SComposite", ResourceKind.SComposite, ImageCategory.CharacterS, "Unit_mov.e5", "Unit_atk.e5", "Unit_spc.e5")
         };
         var build = typeof(IntegratedResourcePanel).GetMethod("BuildProjectCategories", BindingFlags.Static | BindingFlags.NonPublic)!;
         var categories = ((IReadOnlyList<(string Key, string Name)>)build.Invoke(null, [resources])!).ToDictionary(category => category.Key, category => category.Name);
         TestSupport.Assert(categories["Item"] == "宝物图标（Item.e5）", "宝物来源没有使用项目当前真实容器");
         TestSupport.Assert(categories["Resource:Weather.e5"] == "天气图片（Weather.e5）", "天气名称缺少出处文件");
-        TestSupport.Assert(categories["Resource:Pmap.e5"] == "战场地形（Pmap.e5）", "战场图片没有改名为战场地形");
+        TestSupport.Assert(!categories.ContainsKey("Resource:Pmap.e5"), "内场景地形仍作为独立图片分类显示");
+        TestSupport.Assert(categories.TryGetValue("Resource:Mmap.e5", out var sceneLabel) && sceneLabel.Contains("Mmap.e5", StringComparison.Ordinal), "场景背景来源丢失Mmap入口");
         TestSupport.Assert(new[] { "Unit_mov.e5", "Unit_atk.e5", "Unit_spc.e5" }.All(file => categories["S"].Contains(file, StringComparison.Ordinal)),
             "S 形象组合来源丢失其中的物理文件");
         var dll = Descriptor("Itemicon.dll", ResourceKind.DllBitmap, ImageCategory.ItemIcon, "Itemicon.dll");

@@ -97,24 +97,39 @@ internal static class RsImageFileImport
                 if (append && assignments.Count(item => item.Group == assignment.Group &&
                     item.Role.Equals(role, StringComparison.OrdinalIgnoreCase)) != 1)
                     throw new InvalidDataException($"新增同一组的 {role} 必须恰好分配一张素材。");
-                var original = append ? null : archive.ReadDecoded(imageNumber);
+                // Explicit output choices inspect the same-action final template before appending.
+                // Null retains the historical API behaviour, including true-colour R appends.
+                var templateNumber = isS || role == "back" ? archive.Entries.Count : archive.Entries.Count - 1;
+                var original = !append ? archive.ReadDecoded(imageNumber) : request.OutputFormat.HasValue
+                    ? templateNumber > 0 ? archive.ReadDecoded(templateNumber)
+                        : throw new InvalidDataException("新增 R/S 缺少已确认的同动作编码模板。")
+                    : null;
                 if (original != null)
                 {
                     originalFormat = StorageKind(original);
                     if (originalFormat != "RAW8") ImageImportRasterNormalization.RequireNoUnknownTail(original);
+                    else if (original.Length != spec.Width * spec.Height && original.Length != spec.Width * spec.Height + 2)
+                        throw new InvalidDataException("目标 RAW8 长度损坏，只允许完整像素区及可选的 2 字节尾部。");
                     if (isS) ValidateSTarget(original, originalFormat, spec);
-                    before = DecodePayload(original, originalFormat, spec, request.Project, token);
+                    if (!append) before = DecodePayload(original, originalFormat, spec, request.Project, token);
                 }
                 var notes = new List<string>();
                 byte[] payload;
-                if (isS && original != null && originalFormat == "RAW8")
+                if (original != null && originalFormat == "RAW8" && (isS || request.OutputFormat.HasValue))
                 {
                     outputFormat = "RAW8";
                     payload = EncodeRaw(input, original, request.Project, notes, token);
+                    if (request.OutputFormat.HasValue) notes.Add(ImageImportFormatPolicy.GetSupport(request.Resource, true).Description);
+                }
+                else if (request.OutputFormat == ImageImportOutputFormat.Preserve)
+                {
+                    outputFormat = originalFormat;
+                    payload = EncodePreserved(input, original!, notes, token);
                 }
                 else
                 {
-                    outputFormat = isS && originalFormat == "BMP" ? "BMP32" : "PNG32";
+                    outputFormat = request.OutputFormat == ImageImportOutputFormat.Bmp ||
+                        request.OutputFormat == null && isS && originalFormat == "BMP" ? "BMP32" : "PNG32";
                     payload = EncodeTrueColor(input, outputFormat == "BMP32", notes, token);
                 }
                 // Preview the committed encoding, including quantization and BMP alpha semantics.
@@ -122,7 +137,8 @@ internal static class RsImageFileImport
                 if (append) label += isS ? $" → S_{imageNumber:000}" : $" → R{(imageNumber - 1) / 2:000}";
                 else if (isS) label += $" / Unit #{imageNumber}";
                 var row = new ImageImportPreviewRow(label, role, assignment.SourcePath, sourceSize, after.Size,
-                    originalFormat, outputFormat, string.Join("；", notes), before, after);
+                    append && request.OutputFormat.HasValue ? "新增（模板 " + originalFormat + "）" : originalFormat,
+                    outputFormat, string.Join("；", notes), before, after);
                 rows.Add(row);
                 prepared.Add(new(assignment, targetPath, imageNumber, payload, row));
                 before = null;
@@ -169,7 +185,9 @@ internal static class RsImageFileImport
                 archive.Rebuild(replacementDecoded: group.ToDictionary(item => item.ImageNumber, item => item.Payload));
             return new MutationFile(group.Key, bytes, append ? "从外部图片追加 R/S 原生动作条" : "从外部图片替换选中 R/S 动作条");
         }).ToArray();
-        warnings.Add(isS ? append ? "新增 S 使用 PNG32；mov/atk/spc 同步追加一个物理条目，不自动修改 Data 指定。" :
+        warnings.Add(request.OutputFormat.HasValue ?
+            "按预览中显示的实际格式写入；RAW8 保留原结构与项目调色板。R 正背、S 三动作保持对应物理编号，不自动修改 Data 指定。" :
+            isS ? append ? "新增 S 使用 PNG32；mov/atk/spc 同步追加一个物理条目，不自动修改 Data 指定。" :
             "只替换选中的物理 S 图号及已分配动作；RAW8 使用项目调色板，BMP/PNG 按目标种类编码。" :
             "R 外部图片按工具整合包规则编码为 PNG32；新增时成对追加正背条目。");
         return new(files, rows, warnings);
@@ -253,6 +271,26 @@ internal static class RsImageFileImport
 
     private static byte[] EncodeTrueColor(Bitmap input, bool bmp, List<string> notes, CancellationToken token)
     {
+        using var bitmap = NormalizeTrueColor(input, token, bmp);
+        using var output = new MemoryStream();
+        bitmap.Save(output, bmp ? ImageFormat.Bmp : ImageFormat.Png);
+        notes.Add(bmp ? "BMP32；不沿用源/目标索引调色板。" : "32 位 PNG；保留非键色 alpha。");
+        if (bmp) notes.Add("BI_RGB不保存alpha；完全透明转F700FF键色，其余像素按RGB实色写入。");
+        notes.Add("洋红透明阈值 R≥247/G≤8/B≥248；不缩放、不裁切。");
+        return output.ToArray();
+    }
+
+    private static byte[] EncodePreserved(Bitmap input, byte[] original, List<string> notes, CancellationToken token)
+    {
+        using var bitmap = NormalizeTrueColor(input, token);
+        var payload = ImageImportTargetEncoding.Standard(original, bitmap, token);
+        notes.Add("保留目标或末尾同动作模板的存储格式；BMP保留位深、调色板和行布局。洋红及完全透明按目标透明规则写入。");
+        if (StorageKind(original) == "JPG") notes.Add("JPG有损存储，不保存透明通道。");
+        return payload;
+    }
+
+    private static Bitmap NormalizeTrueColor(Bitmap input, CancellationToken token, bool bmp = false)
+    {
         var pixels = ImageImportRasterNormalization.ReadArgbPixels(input);
         for (var y = 0; y < input.Height; y++)
         {
@@ -261,15 +299,17 @@ internal static class RsImageFileImport
             {
                 var at = (y * input.Width + x) * 4;
                 if (pixels[at + 3] == 0 || pixels[at + 2] >= 247 && pixels[at + 1] <= 8 && pixels[at] >= 248)
-                    pixels.AsSpan(at, 4).Clear();
+                {
+                    if (!bmp) pixels.AsSpan(at, 4).Clear();
+                    else
+                    {
+                        pixels[at] = 255; pixels[at + 1] = 0; pixels[at + 2] = 247; pixels[at + 3] = 255;
+                    }
+                }
+                else if (bmp) pixels[at + 3] = 255;
             }
         }
-        using var bitmap = FromPixels(input.Size, pixels);
-        using var output = new MemoryStream();
-        bitmap.Save(output, bmp ? ImageFormat.Bmp : ImageFormat.Png);
-        notes.Add(bmp ? "保持 BMP 存储并重编码为 32 位；不沿用源/目标索引调色板。" : "32 位 PNG；保留非键色 alpha。");
-        notes.Add("洋红透明阈值 R≥247/G≤8/B≥248；不缩放、不裁切。");
-        return output.ToArray();
+        return FromPixels(input.Size, pixels);
     }
 
     private static byte[] EncodeRaw(Bitmap input, byte[] original, ProjectProfile project, List<string> notes, CancellationToken token)

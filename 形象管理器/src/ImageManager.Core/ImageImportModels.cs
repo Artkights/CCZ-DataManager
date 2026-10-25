@@ -4,12 +4,15 @@ namespace ImageManager.Core;
 
 public enum ImageImportOperation { Append, Replace }
 
+public enum ImageImportOutputFormat { Bmp, Png, Preserve }
+
 /// <summary>A source assigned to an explicit target/action, or to an ordered append group.</summary>
 public sealed record ImageImportAssignment(LogicalImageAsset? Target, string Role, string SourcePath,
     int Group = 0, bool Included = true);
 
 public sealed record ImageImportRequest(ProjectProfile Project, ImageResourceDescriptor Resource,
-    ImageImportOperation Operation, IReadOnlyList<ImageImportAssignment> Assignments);
+    ImageImportOperation Operation, IReadOnlyList<ImageImportAssignment> Assignments,
+    ImageImportOutputFormat? OutputFormat = null);
 
 /// <summary>After is decoded from the encoded candidate, including palette quantization.</summary>
 public sealed record ImageImportPreviewRow(string TargetLabel, string Role, string SourcePath,

@@ -20,7 +20,7 @@ internal static class ResourceDisplayNames
         "Mmap.e5" => "场景背景",
         "Tr.e5" => "过场图片",
         "Gate.e5" => "场景门图",
-        "Pmap.e5" => "战场地形",
+        "Pmap.e5" => "内场景地形",
         "MapPairs" => "战场地图",
         "Weather.e5" => "天气图片",
         "DT.e5" => "动态半身像",
@@ -75,7 +75,7 @@ internal static class ResourceDisplayNames
     public static string Kind(ResourceKind kind) => kind switch
     {
         ResourceKind.E5Indexed => "索引图片档案",
-        ResourceKind.PmapSpecial => "战场专用图片",
+        ResourceKind.PmapSpecial => "内场景地形数据",
         ResourceKind.WeatherSpecial => "天气专用图片",
         ResourceKind.DtAnimation => "半身像动画",
         ResourceKind.DllBitmap => "位图资源库",

@@ -20,6 +20,7 @@ public static class SpecialFileImportTests
             MapBottomImageConversion(fixture);
             DirectoryMapPairConversion(fixture);
             UnknownStructuresRemainReadOnly(fixture);
+            RequestedFormatsKeepNativeStructures(fixture);
         }
         finally { Directory.Delete(root, true); }
     }
@@ -50,6 +51,38 @@ public static class SpecialFileImportTests
         File.WriteAllBytes(source, sourceBefore.Concat(new byte[] { 17 }).ToArray());
         RejectStalePlan(fixture, replacement.Plan!, "素材变更后天气计划仍被提交。");
         File.WriteAllBytes(source, sourceBefore);
+    }
+
+    private static void RequestedFormatsKeepNativeStructures(TestFixture fixture)
+    {
+        var source = Save(fixture.Root, "format-lock.png", 19, 23, ImageFormat.Png);
+        foreach (var kind in new[] { ResourceKind.WeatherSpecial, ResourceKind.PmapSpecial, ResourceKind.MapPair })
+        {
+            var resource = fixture.Catalog.Single(item => item.Kind == kind);
+            var target = fixture.Service.ReadAssets(fixture.Project, resource).First();
+            var support = ImageImportFormatPolicy.GetSupport(resource);
+            Require(support.IsLocked && support.AllowedFormats.SequenceEqual(new[] { ImageImportOutputFormat.Preserve }),
+                "专用结构错误开放BMP/PNG存储选择。");
+            foreach (var format in Enum.GetValues<ImageImportOutputFormat>())
+            {
+                using var prepared = new ImageImportPreparationService().PrepareAsync(new(fixture.Project, resource, ImageImportOperation.Replace,
+                    [new(target, "image", source)], format)).GetAwaiter().GetResult();
+                Require(prepared.CanCommit, Errors(prepared));
+                if (kind == ResourceKind.MapPair)
+                {
+                    var payload = prepared.Plan!.Files.Single().CandidateBytes;
+                    Require(payload[0] == 255 && payload[1] == 216 && prepared.Rows.Single().OutputFormat == "JPG24",
+                        "格式选择改变了地图固定JPG编码。");
+                }
+                else
+                {
+                    var payload = Candidate(prepared, kind == ResourceKind.WeatherSpecial ? "Weather.e5" : "Pmap.e5").ReadDecoded(1);
+                    Require(kind == ResourceKind.WeatherSpecial ? payload.Length == 43200 :
+                        PmapResourceCodec.IsVerifiedPayload(payload) && PmapResourceCodec.PayloadSize(payload) == new Size(8, 6),
+                        "格式选择把专用像素结构覆盖成BMP/PNG。");
+                }
+            }
+        }
     }
 
     private static void PmapConversion(TestFixture fixture)

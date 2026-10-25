@@ -16,10 +16,11 @@ public sealed class EffectNamePoolProbe
     public EffectNamePoolProbeResult Inspect(string filePath)
     {
         if (!File.Exists(filePath)) return Failed("未找到项目 EXE，特技名称使用数字 ID。", string.Empty);
-        return Inspect(File.ReadAllBytes(filePath));
+        var count = System.Diagnostics.FileVersionInfo.GetVersionInfo(filePath).FilePrivatePart == 4 ? 180 : 255;
+        return Inspect(File.ReadAllBytes(filePath), count);
     }
 
-    public EffectNamePoolProbeResult Inspect(byte[] bytes)
+    public EffectNamePoolProbeResult Inspect(byte[] bytes, int rowCount = 255)
     {
         ArgumentNullException.ThrowIfNull(bytes);
         var hash = HashService.Sha256(bytes);
@@ -30,19 +31,20 @@ public sealed class EffectNamePoolProbe
         if (first.Count != 1 || second.Count != 1 || first[0].Address != second[0].Address)
             return Failed($"未找到唯一一致的两个特技名称消费者（A={first.Count}，B={second.Count}）；特技名称使用数字 ID。", hash);
         var va = (ulong)first[0].Address;
-        const int poolLength = 255 * 16;
+        if (rowCount is not (180 or 255)) throw new ArgumentOutOfRangeException(nameof(rowCount));
+        var poolLength = rowCount * 16;
         if (va < imageBase || va - imageBase > uint.MaxValue)
             return Failed("特技名称地址不在项目 PE 映射内，使用数字 ID。", hash);
         var rva = va - imageBase;
         var mapped = sections.Where(section => rva >= section.Rva &&
-            rva - section.Rva + poolLength <= section.MappedRawSize).ToArray();
+            rva - section.Rva + (ulong)poolLength <= section.MappedRawSize).ToArray();
         if (mapped.Length != 1)
             return Failed("特技名称池未完整落在唯一 PE 节的文件映射内，使用数字 ID。", hash);
         var offset = checked((long)mapped[0].RawStart + (long)(rva - mapped[0].Rva));
         if (offset < 0 || offset + poolLength > bytes.LongLength)
             return Failed("特技名称池超出原始文件，使用数字 ID。", hash);
         var names = new Dictionary<int, string>();
-        for (var id = 0; id < 255; id++)
+        for (var id = 0; id < rowCount; id++)
         {
             var raw = bytes.AsSpan(checked((int)offset + id * 16), 16);
             var end = raw.IndexOf((byte)0);
@@ -55,7 +57,7 @@ public sealed class EffectNamePoolProbe
             names[id] = name;
         }
         return new(true, names,
-            $"特技名称：两个独立消费者 +0x{first[0].Offset:X}/+0x{second[0].Offset:X} → VA 0x{va:X} → 文件 +0x{offset:X}；255×16 字节，严格 GBK；EXE SHA-256 {hash}。",
+            $"特技名称：两个独立消费者 +0x{first[0].Offset:X}/+0x{second[0].Offset:X} → VA 0x{va:X} → 文件 +0x{offset:X}；{rowCount}×16 字节，严格 GBK；EXE SHA-256 {hash}。",
             hash, offset, va);
     }
 

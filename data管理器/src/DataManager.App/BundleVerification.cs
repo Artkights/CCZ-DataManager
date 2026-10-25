@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using DataManager.Core.Binary;
+using DataManager.Core.Appearance;
 using DataManager.Core.Domain;
 using DataManager.Core.Editing;
 using DataManager.Core.History;
@@ -83,9 +84,10 @@ internal static class BundleVerification
                 var registry = new ProfileRegistry();
                 var embedded = typeof(ProfileRegistry).Assembly.GetManifestResourceNames()
                     .Where(name => name.EndsWith("ccz-6.5.json", StringComparison.OrdinalIgnoreCase) ||
+                                   name.EndsWith("ccz-6.4.json", StringComparison.OrdinalIgnoreCase) ||
                                    name.EndsWith("ccz-6.6.json", StringComparison.OrdinalIgnoreCase))
                     .Select(name => EmbeddedFile(typeof(ProfileRegistry).Assembly, name)).ToArray();
-                if (embedded.Length != 2) throw new InvalidDataException("未找到两份内嵌 Profile。");
+                if (embedded.Length != 3) throw new InvalidDataException("未找到三份内嵌 Profile。");
                 var profiles = registry.Profiles.Select(profile => new
                 {
                     profile.Id,
@@ -118,6 +120,7 @@ internal static class BundleVerification
             IReadOnlyList<ImageResourceDescriptor> catalog = [];
             var monitoredPaths = new[] { "Data.e5", "Star.e5", "Imsg.e5", "Ekd5.exe" }
                 .Select(name => ProjectFileLocator.Resolve(root, name)).Where(File.Exists)
+                .Concat(Directory.Exists(Path.Combine(root, "SV")) ? Directory.EnumerateFiles(Path.Combine(root, "SV")) : [])
                 .Concat(imageProject.ResourcePaths.Values.Where(File.Exists)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
             var before = monitoredPaths.ToDictionary(path => path, HashFile, StringComparer.OrdinalIgnoreCase);
             report["SourceFileCount"] = before.Count;
@@ -134,6 +137,26 @@ internal static class BundleVerification
                         workspace.ActiveProfile.ProfileId, workspace.ActiveProfile.VariantId,
                         workspace.ActiveProfile.LayoutRevision, Tables = workspace.Definitions.Count,
                         ReadableTables = workspace.Documents.Count, workspace.IsDirty
+                    };
+                });
+                Check("人物形象原生存档布局与只读同步准备", () =>
+                {
+                    var workspace = new ProjectWorkspace(); workspace.Open(root);
+                    var executable = File.ReadAllBytes(ProjectFileLocator.Resolve(root, "Ekd5.exe"));
+                    var layout = SaveAppearanceLayoutProbe.Inspect(executable, workspace.ActiveProfile.ProfileId);
+                    if (!layout.Verified) throw new InvalidDataException(layout.Evidence);
+                    var updates = new PersonAppearanceUpdate(0,
+                        RId: Convert.ToUInt16(workspace.GetDocument("person-r-assign").Data.Rows[0]["R形象ID"]),
+                        SId: Convert.ToUInt16(workspace.GetDocument("person-s-assign").Data.Rows[0]["S形象ID"]));
+                    var session = SaveAppearanceSyncService.Prepare(root, workspace.ActiveProfile.ProfileId, executable, [updates]);
+                    if (session.AppliedFiles.Count != 0) throw new InvalidDataException("只读准备阶段意外出现已写入文件。");
+                    return new
+                    {
+                        layout.Verified, layout.ROffset, layout.SOffset, layout.PrefixLength, layout.Evidence,
+                        PreparedGroups = session.PreparedGroups.Select(group => new { group.SaveRelativePath,
+                            Files = group.Files.Select(file => new { file.RelativePath, file.ExpectedFileHash }) }).ToArray(),
+                        session.Report.UnchangedSaves, session.Report.SkippedSaves, session.Report.Diagnostics,
+                        Committed = false
                     };
                 });
                 Check("精简模块与程序侧历史目录", () =>

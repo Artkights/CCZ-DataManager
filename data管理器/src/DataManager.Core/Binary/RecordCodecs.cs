@@ -49,12 +49,16 @@ public sealed class Item66RecordCodec : IRecordCodec
             {
                 throw new InvalidOperationException("6.6 辅助/道具行的宝物类型只能在类别标记 2/3 内修改；首版不自动转换记录类别。");
             }
+            if (!markerRow && encoded[0] >= 26 && originalRow[MarkerOffset] is 2 or 3)
+                throw new InvalidOperationException("该类型会把普通装备转换为辅助/道具并改变字段地址；请保留原记录类别。");
             return [new RecordPatch(markerRow ? MarkerOffset : TypeOffset, encoded)];
         }
         if (field.Name == "装备特效号")
         {
             var encoded = BinaryValueCodec.Encode(value, field);
-            if (!markerRow && encoded[0] is 2 or 3)
+            if (markerRow && encoded[0] < 26)
+                throw new InvalidOperationException("辅助/道具的实际特效号小于 26 会被引擎作为普通装备类型读取；请保留原记录类别。");
+            if (!markerRow && originalRow[TypeOffset] >= 26 && encoded[0] is 2 or 3)
             {
                 throw new InvalidOperationException("6.6 普通装备的特效号 2/3 会改变物理类别标记；首版禁止自动转换记录类别。");
             }
@@ -66,7 +70,9 @@ public sealed class Item66RecordCodec : IRecordCodec
     }
 
     private static bool IsMarkerRow(ReadOnlySpan<byte> row)
-        => row.Length > MarkerOffset && row[MarkerOffset] is 2 or 3;
+        // 40B444 first classifies +11 <20/<26 as weapon/armor. Only
+        // larger types consume the category byte (file +12 -> runtime +14).
+        => row.Length > MarkerOffset && row[TypeOffset] >= 26 && row[MarkerOffset] is 2 or 3;
 }
 
 public sealed class RecordCodecRegistry
@@ -126,5 +132,5 @@ internal static class RecordCodecWriteFootprints
     }
 
     private static bool IsItemMarker(ReadOnlySpan<byte> row)
-        => row.Length > 0x12 && row[0x12] is 2 or 3;
+        => row.Length > 0x12 && row[0x11] >= 26 && row[0x12] is 2 or 3;
 }

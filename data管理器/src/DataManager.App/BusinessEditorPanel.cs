@@ -58,7 +58,6 @@ public sealed partial class BusinessEditorPanel : UserControl
     private int _id;
     private bool _binding;
     private int _editRevision;
-    private ItemCategoryBoundary _itemBoundary = new();
     private Action? _refreshItemPermissions;
     private Action? _itemSemanticRefresh;
     private ExtendDataEditorPanel? _extendEditor;
@@ -109,7 +108,6 @@ public sealed partial class BusinessEditorPanel : UserControl
             _compactLayoutSignature = null;
             _kind = kind;
             _id = id;
-            if (kind == BusinessPageKind.Items) _itemBoundary = ItemCategoryBoundary.Read(_workspace.RootPath);
             _errors.Clear();
             _status.Visible = false;
             _refreshItemPermissions = null;
@@ -322,7 +320,9 @@ public sealed partial class BusinessEditorPanel : UserControl
         var options = GetOptions(document, rowIndex, field);
         if (options != null)
         {
-            var combo = new SearchableIdComboBox { Dock = DockStyle.Fill, Enabled = editable };
+            var idOnly = ResourceKindForField(document.Definition.Key, field.Name) is
+                ResourceBindingKind.Portrait or ResourceBindingKind.CharacterR or ResourceBindingKind.CharacterS;
+            var combo = new SearchableIdComboBox { Dock = DockStyle.Fill, Enabled = editable, IdOnly = idOnly };
             combo.SetOptions(options);
             var isRangeField = field.Name is "攻击范围" or "施法范围" or "穿透" or "穿透范围";
             RangePreviewPicker? rangePicker = isRangeField ? new RangePreviewPicker(combo) : null;
@@ -361,7 +361,8 @@ public sealed partial class BusinessEditorPanel : UserControl
                                 .Select(value => new IdNameOption(value.Id, value.Name)), preserveEditSelection: true);
                             combo.SetBoundValue(text, preserveEditSelection: true);
                             if (text == beforeText && combo.TryGetSelectedId(out var selectedId))
-                                combo.SetBoundValue(combo.Options.FirstOrDefault(value => value.Id == selectedId)?.Display ?? text,
+                                combo.SetBoundValue(combo.Options.FirstOrDefault(value => value.Id == selectedId) is { } option
+                                    ? combo.GetDisplayText(option) : text,
                                     preserveEditSelection: true);
                         });
                     }
@@ -391,8 +392,9 @@ public sealed partial class BusinessEditorPanel : UserControl
                     var context = $"{_workspace.RootPath}|{resourceKind}|{job}|{turn}|{_resources.Revision}";
                     if (previewContext == context) return;
                     previewContext = context;
-                    SetPreviewLoader((id, token) => _resources.DecodeBindingThumbnailAsync(_workspace.RootPath,
-                        resourceKind, id, new Size(48, 48), job, turn, token));
+                    if (!idOnly)
+                        SetPreviewLoader((id, token) => _resources.DecodeBindingThumbnailAsync(_workspace.RootPath,
+                            resourceKind, id, new Size(48, 48), job, turn, token));
                     LoadResourceOptions(resourceKind, job, turn);
                     return;
                 }
@@ -405,7 +407,11 @@ public sealed partial class BusinessEditorPanel : UserControl
             }
             var number = Convert.ToInt32(current ?? 0, CultureInfo.InvariantCulture);
             var selected = options.FirstOrDefault(item => item.Id == number);
-            combo.SetBoundValue(selected?.Display ?? $"{number}：未确认");
+            string EquipmentDisplay(int value, IReadOnlyList<IdNameOption> choices)
+                => idOnly ? value.ToString(CultureInfo.InvariantCulture) : choices.FirstOrDefault(item => item.Id == value)?.Display ??
+                    (document.Definition.Key == "persons" && PersonEquipmentService.CategoryForField(field.Name).HasValue
+                        ? $"{value}：原值（类别不匹配）" : $"{value}：未确认");
+            combo.SetBoundValue(EquipmentDisplay(number, options));
             RefreshRangeLoader();
             if (ResourceKindForField(document.Definition.Key, field.Name) != null) _resourcePickerRefreshers.Add(RefreshRangeLoader);
             bool SaveCombo()
@@ -434,7 +440,7 @@ public sealed partial class BusinessEditorPanel : UserControl
                 // only this combo's thumbnails so its next draw uses the new file.
                 number = Convert.ToInt32(current ?? 0, CultureInfo.InvariantCulture);
                 selected = options.FirstOrDefault(item => item.Id == number);
-                combo.SetBoundValue(selected?.Display ?? $"{number}：未确认");
+                combo.SetBoundValue(EquipmentDisplay(number, options));
                 RefreshRangeLoader();
                 rangePicker?.RefreshPreview();
             });
@@ -594,14 +600,14 @@ public sealed partial class BusinessEditorPanel : UserControl
         {
             var typeTab = NewTab("装备类型"); var typeLayout = FormLayout(); typeTab.Controls.Add(typeLayout);
             AddFormRow(typeLayout, ItemFieldLabel(item.document, item.match.Value.Index, typeField.Name) ?? "装备类型", CreateEditor(item.document, item.match.Value.Row, item.match.Value.Index, typeField));
-            AddFormRow(typeLayout, "类型语义", Notice(ItemTypeService.Resolve(item.document, item.match.Value.Index, _itemBoundary).Description));
+            AddFormRow(typeLayout, "类型语义", Notice(ItemTypeService.Resolve(item.document, item.match.Value.Index).Description));
             AddFormRow(typeLayout, "共享许可", Notice("普通武器/防具按类型码直接关联许可槽；辅助/道具不使用此许可。修改类型后进入可装备部队子页会按当前草稿刷新。"));
         }
         var tab = NewTab("可装备部队");
         string? loadedSignature = null;
         void RenderPermissions()
         {
-            var semantics = ItemTypeService.Resolve(item.document, item.match.Value.Index, _itemBoundary);
+            var semantics = ItemTypeService.Resolve(item.document, item.match.Value.Index);
             var signature = $"{semantics.Category}|{semantics.TypeValue}|{semantics.PermissionColumn}";
             if (loadedSignature == signature) return;
             loadedSignature = signature;
@@ -858,7 +864,7 @@ public sealed partial class BusinessEditorPanel : UserControl
             Animated("小动画", () => _resources.DecodeStrategyAnimation(_workspace.RootPath, false, small));
             Animated("大动画", () => _resources.DecodeStrategyAnimation(_workspace.RootPath, true, large));
         }
-        flow.Controls.Add(new Label { Text = "资源新增、替换、删除在形象设定页完成。关联预览按当前字段 ID 读取。", Width = 560, Height = 44, Margin = new Padding(10) });
+        flow.Controls.Add(new Label { Text = "资源新增、替换、删除在图片设定页完成。关联预览按当前字段 ID 读取。", Width = 560, Height = 44, Margin = new Padding(10) });
         }
     }
 
@@ -872,10 +878,13 @@ public sealed partial class BusinessEditorPanel : UserControl
     {
         var tableKey = document.Definition.Key;
         if (ResourceKindForField(tableKey, field.Name) != null) return [];
+        if (tableKey == "persons" && PersonEquipmentService.CategoryForField(field.Name).HasValue)
+            return PersonEquipmentService.GetOptions(_workspace.Documents, field.Name, field.Minimum, field.Maximum)
+                .Select(option => new IdNameOption(option.Id, option.Name)).ToArray();
         if (tableKey == "job-series-attributes") return JobAttributeOptions(rowIndex);
         if (tableKey is "items-low" or "items-high" or "items-extended")
         {
-            var semantics = ItemTypeService.Resolve(document, rowIndex, _itemBoundary);
+            var semantics = ItemTypeService.Resolve(document, rowIndex);
             if (semantics.Category == ItemCategory.Accessory && field.Name == "能力成长")
                 return OptionsFor("job-series").Where(option => option.Id < 255).Concat([new IdNameOption(255, "所有兵种")]).ToArray();
             var legacyAuxiliary = !semantics.IsCategoryMarker && semantics.Category is not (ItemCategory.Weapon or ItemCategory.Armor);
@@ -926,7 +935,7 @@ public sealed partial class BusinessEditorPanel : UserControl
     private string? ItemFieldLabel(TableDocument document, int rowIndex, string field)
     {
         if (document.Definition.Key is not ("items-low" or "items-high" or "items-extended")) return null;
-        var semantics = ItemTypeService.Resolve(document, rowIndex, _itemBoundary);
+        var semantics = ItemTypeService.Resolve(document, rowIndex);
         if (field == "宝物图鉴") return "宝物图鉴";
         if (field == "初始能力") return semantics.Category switch
         {

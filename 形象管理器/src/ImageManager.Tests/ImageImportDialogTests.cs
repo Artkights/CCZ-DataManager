@@ -26,6 +26,7 @@ internal static class ImageImportDialogTests
                     Console.WriteLine("[IMAGE_IMPORT_UI] 多格式发现与自动转换说明"); MultiFormatDiscoveryAndRules(root);
                     Console.WriteLine("[IMAGE_IMPORT_UI] Face0逐表情文件分配"); FaceExpressionSlots(root);
                     Console.WriteLine("[IMAGE_IMPORT_UI] 候选生命周期与逐帧"); LatestPreparationAndPreview(root);
+                    Console.WriteLine("[IMAGE_IMPORT_UI] 写入格式切换、限制与候选失效"); OutputFormatSelection(root);
                     Console.WriteLine("[IMAGE_IMPORT_UI] 裁切范围与源图变化"); CropAndSourceChanges(root);
                     Console.WriteLine("[IMAGE_IMPORT_UI] 追加顺序与可选小图"); AppendOrderAndPairSlots(root);
                     Console.WriteLine("[IMAGE_IMPORT_UI] 150%/200%模拟缩放布局"); ScaledLayout(root);
@@ -184,6 +185,78 @@ internal static class ImageImportDialogTests
             "Pmap模板追加/替换没有开放，或删除/重命名/像素编辑边界丢失。");
         ConfigureUiResource(page, resource);
         Require(!pairButton.Visible, "普通静态资源错误显示了地图与地形专用导入按钮。");
+    }
+
+    private static void OutputFormatSelection(string root)
+    {
+        var resource = Resource(root, ResourceKind.SComposite);
+        var service = new ControlledPreparation();
+        using var dialog = new ImageImportDialog(Project(root), resource, ImageImportOperation.Replace, [Target(resource, 242)], service);
+        Show(dialog);
+        var format = Field<ComboBox>(dialog, "_outputFormat");
+        Require(format.Enabled && format.Items.Count == 3 && format.SelectedIndex == 0 && format.Text.Contains("BMP"),
+            "可转换资源没有默认BMP或格式选项不完整。");
+        Call(dialog, "Assign", Slots(dialog)[0], Path.Combine(root, "format.png"));
+        var initialTask = (Task)Call(dialog, "PrepareAsync")!;
+        Require(service.Pending[0].Request.OutputFormat == ImageImportOutputFormat.Bmp, "默认BMP没有传入实际导入请求。");
+        var initial = Prepared(root, "format-bmp", "format.png");
+        initial.Rows[0].After!.SetPixel(0, 0, Color.FromArgb(255, 247, 0, 255));
+        service.Pending[0].Completion.SetResult(initial); Await(initialTask);
+        Require(Field<PictureBox>(dialog, "_after").Image is Bitmap transparent && transparent.GetPixel(0, 0).A == 0 &&
+            initial.Rows[0].After!.GetPixel(0, 0).A == 255, "BMP候选没有按图库透明键展示，或展示过程修改了实际候选。");
+        Field<ComboBox>(dialog, "_previewMode").SelectedIndex = 1;
+        Field<NumericUpDown>(dialog, "_frame").Value = 10;
+        Require(!Field<TextBox>(dialog, "_folder").Visible, "转换预览仍显示素材目录工具。");
+        format.SelectedIndex = 1;
+        Require(!initial.CanCommit && !Field<Button>(dialog, "_confirm").Enabled &&
+            service.Pending[1].Request.OutputFormat == ImageImportOutputFormat.Png, "切换PNG没有废弃旧候选并自动重新转换。");
+        var oldTask = Field<Task>(dialog, "_formatPreparationTask");
+        format.SelectedIndex = 2;
+        var latestTask = Field<Task>(dialog, "_formatPreparationTask");
+        Require(service.Pending[1].Token.IsCancellationRequested && service.Pending[2].Request.OutputFormat == ImageImportOutputFormat.Preserve,
+            "快速切换保留原格式没有取消旧任务或没有传递真实选择。");
+        var latest = Prepared(root, "format-preserve", "format.png");
+        service.Pending[2].Completion.SetResult(latest); Await(latestTask);
+        var stale = Prepared(root, "format-stale", "format.png");
+        service.Pending[1].Completion.SetResult(stale); Await(oldTask);
+        Require(ReferenceEquals(dialog.PreparedResult, latest) && !stale.CanCommit && Field<Button>(dialog, "_confirm").Enabled,
+            "过期格式转换覆盖新候选或错误开放确认。");
+        Require(Field<NumericUpDown>(dialog, "_frame").Value == 10, "切换格式丢失逐帧预览位置。");
+        Snapshot(dialog, "写入格式-预览-1280x720");
+        dialog.Size = new Size(1920, 1080); Application.DoEvents();
+        Snapshot(dialog, "写入格式-预览-1920x1080");
+        dialog.Close();
+
+        foreach (var kind in new[] { ResourceKind.DllBitmap, ResourceKind.WeatherSpecial, ResourceKind.PmapSpecial, ResourceKind.MapPair })
+        {
+            using var locked = new ImageImportDialog(Project(root), Resource(root, kind), ImageImportOperation.Append, preparation: new ControlledPreparation());
+            var selector = Field<ComboBox>(locked, "_outputFormat");
+            Require(!selector.Enabled && selector.Items.Count == 1 && selector.Text == "保留原格式" &&
+                Field<Label>(locked, "_formatInfo").Text.Length > 0, $"{kind}固定结构未锁定格式或缺少原因。");
+        }
+
+        foreach (var hasCompanion in new[] { false, true })
+        {
+            var rawResource = Resource(root, hasCompanion ? ResourceKind.FaceComposite : ResourceKind.E5Indexed);
+            var rawService = new ControlledPreparation();
+            using var rawDialog = new ImageImportDialog(Project(root), rawResource, ImageImportOperation.Append, preparation: rawService);
+            Show(rawDialog);
+            Call(rawDialog, "Assign", Slots(rawDialog)[0], Path.Combine(root, "raw-append.png"));
+            var rawTask = (Task)Call(rawDialog, "PrepareAsync")!;
+            var rows = new List<ImageImportPreviewRow>
+            {
+                new("新增", "image", Path.Combine(root, "raw-append.png"), new Size(64, 80), new Size(64, 80),
+                    "无（新增）", "RAW8", "保留原结构", null, new Bitmap(64, 80))
+            };
+            if (hasCompanion) rows.Add(new("Tou", "Tou", Path.Combine(root, "raw-append.png"), new Size(64, 80), new Size(64, 80),
+                "DIB32", "DIB32", "保留DIB", null, new Bitmap(64, 80)));
+            var plan = new MutationPlan("raw-append", MutationKind.Append, "test", [new MutationFile(Path.Combine(root, "raw.e5"), [1], "test")], [], false);
+            rawService.Pending[0].Completion.SetResult(new PreparedImageImport(plan, rows)); Await(rawTask);
+            var selector = Field<ComboBox>(rawDialog, "_outputFormat");
+            Require(!selector.Enabled && selector.Items.Count == 1 && selector.Text == "保留原格式",
+                "新增RAW模板或RAW头像与Tou配套行没有正确锁定格式。");
+            rawDialog.Close();
+        }
     }
 
     private static void ConfigureUiResource(ImageGridPage page, ImageResourceDescriptor resource)
@@ -351,7 +424,7 @@ internal static class ImageImportDialogTests
     private static void ScaledLayout(string root)
     {
         var path = Path.Combine(root, "缩放预览.png"); SaveSource(path, Color.LightGreen);
-        foreach (var scale in new[] { 1.5F, 2F })
+        foreach (var scale in new[] { 1.25F, 1.5F, 2F })
         {
             var service = new ControlledPreparation(); var resource = Resource(root, ResourceKind.FaceComposite);
             using var dialog = new ImageImportDialog(Project(root), resource, ImageImportOperation.Replace, [Target(resource, 0)], service);
@@ -363,8 +436,8 @@ internal static class ImageImportDialogTests
             dialog.PerformLayout(); Application.DoEvents();
             Snapshot(dialog, $"统一导入-映射-模拟缩放{scale * 100:0}%-1280x720");
             AssertControlsFit(dialog, scale);
-            Require(Field<DataGridView>(dialog, "_mapping").Height >= 56 && Field<ListBox>(dialog, "_pending").Height >= 24,
-                $"{scale:P0}模拟缩放后的映射表或待分配列表不可用。");
+            Require(Field<DataGridView>(dialog, "_mapping").Height >= 56 && Field<SplitContainer>(dialog, "_mappingSplit").Panel2Collapsed,
+                $"{scale:P0}模拟缩放后的映射表不可用，或空的待分配列表没有收起。");
             Call(dialog, "Assign", Slots(dialog)[0], path); Call(dialog, "PopulateMapping");
             var task = (Task)Call(dialog, "PrepareAsync")!;
             service.Pending[0].Completion.SetResult(CroppedPreparation(root, path, new Rectangle(16, 8, 64, 64), Color.Gold));
@@ -372,6 +445,8 @@ internal static class ImageImportDialogTests
             AssertControlsFit(dialog, scale);
             var resultGrid = Field<DataGridView>(dialog, "_results");
             AssertReachable(dialog, resultGrid, new Size(160, 80), $"{scale:P0} 转换结果表");
+            var selector = Field<ComboBox>(dialog, "_outputFormat");
+            AssertReachable(dialog, selector, new Size(100, 20), $"{scale:P0} 写入格式");
             Snapshot(dialog, $"统一导入-结果表-模拟缩放{scale * 100:0}%-1280x720");
             foreach (var name in new[] { "_before", "_sourcePreview", "_after" })
             {
@@ -452,7 +527,7 @@ internal static class ImageImportDialogTests
             { using var brush = new SolidBrush(Color.FromArgb(100 + frame, 20, 30)); graphics.FillRectangle(brush, 0, frame * 48, 48, 48); }
         var plan = new MutationPlan(id, MutationKind.Replace, id, [new MutationFile(Path.Combine(root, "fake.e5"), [1], "test")], [], false);
         return new PreparedImageImport(plan, [new ImageImportPreviewRow("将领/S_242 → Unit #242", "mov", Path.Combine(root, file),
-            image.Size, image.Size, "RAW", "RAW", "量化到目标调色板", new Bitmap(image), image)]);
+            image.Size, image.Size, "PNG", "BMP32", "候选编码预览", new Bitmap(image), image)]);
     }
     private static ProjectProfile Project(string root) => new(root, "UI夹具", ProjectVersion.Ccz65, false, new Dictionary<string, string>(), []);
     private static ImageResourceDescriptor Resource(string root, ResourceKind kind) => new("fixture.e5", "UI测试资源", ImageCategory.Scene,

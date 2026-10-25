@@ -5,7 +5,7 @@ namespace ImageManager.Core;
 /// <summary>Detailed job names use job IDs 0..79, independently of physical Unit slots.</summary>
 public static class JobSDisplayService
 {
-    // Same 80 × 9-byte detailed-jobs table used by the 6.5/6.6 Data profiles.
+    // Same 80 × 9-byte table, also checked against the 洗隋 6.4 sample.
     private const int NameOffset = 0xD18D0;
     private const int NameSize = 9;
     private const int JobCount = 80;

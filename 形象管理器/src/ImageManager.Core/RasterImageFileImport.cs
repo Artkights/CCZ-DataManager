@@ -180,26 +180,33 @@ internal static class RasterImageFileImport
                     throw new InvalidDataException("普通 RAW 静态图仅支持已登记几何的像素区，以及0或2字节合法尾部；专用结构请使用对应入口。");
                 format = "RAW8";
             }
+            var outputFormat = format;
+            if (standard && request.OutputFormat is ImageImportOutputFormat.Bmp) outputFormat = "BMP24";
+            if (standard && request.OutputFormat is ImageImportOutputFormat.Png) outputFormat = "PNG32";
             using var normalized = ImageImportRasterNormalization.Canvas(source.Bitmap, size);
-            var payload = standard ? ImageImportTargetEncoding.Standard(original, normalized, token)
+            var payload = standard ? request.OutputFormat is { } selected
+                    ? ImageImportTargetEncoding.Selected(original, normalized, selected, token)
+                    : ImageImportTargetEncoding.Standard(original, normalized, token)
                 : ImageImportTargetEncoding.Raw8(original, size.Width, size.Height, normalized,
                     new PaletteService().RequireWritePalette(request.Project), token);
             if (existing) Replace(work, frame.ImageNumber, payload);
             else work.Appends.Add(payload);
-            var notes = $"按{(existing ? "目标" : "末尾已验证同类模板")} {size.Width}×{size.Height} 画布缩放填满，转换为 {format}；未自动修改游戏引用。";
+            var notes = $"按{(existing ? "目标" : "末尾已验证同类模板")} {size.Width}×{size.Height} 画布缩放填满，转换为 {outputFormat}；未自动修改游戏引用。";
             if (format == "RAW8")
             {
                 notes += " 按项目调色板量化，完全透明使用索引0，非零半透明按RGB实色量化，并保留合法尾部。";
                 _warnings.Add("普通 RAW 静态图按项目调色板量化，请检查候选预览颜色。");
+                if (request.OutputFormat.HasValue) notes += " " + ImageImportFormatPolicy.GetSupport(request.Resource, true).Description;
             }
-            if (format == "JPG") { notes += " JPG 为有损存储且不保存透明通道。"; _warnings.Add("目标 JPG 为有损存储且没有透明通道，请检查候选预览。"); }
-            if (format == "BMP") notes += " 保留目标位深、调色板与行布局；完全透明转为目标透明索引或洋红键色，非零半透明按RGB实色写入。";
+            if (outputFormat == "JPG") { notes += " JPG 为有损存储且不保存透明通道。"; _warnings.Add("目标 JPG 为有损存储且没有透明通道，请检查候选预览。"); }
+            if (outputFormat == "BMP") notes += " 保留目标位深、调色板与行布局；完全透明转为目标透明索引或洋红键色，非零半透明按RGB实色写入。";
+            if (outputFormat == "BMP24") notes += " 24位BMP不依赖外部调色板；完全透明转为F700FF键色，非零半透明按RGB实色写入。";
             var before = !existing ? null : standard ? ImageImportRasterNormalization.DecodeArgb(original)
                 : ImageRendering.DecodeIndexed(original, size.Width, size.Height, new PaletteService().Load(request.Project));
             var after = standard ? ImageImportRasterNormalization.DecodeArgb(payload)
                 : ImageRendering.DecodeIndexed(payload, size.Width, size.Height, new PaletteService().Load(request.Project));
             _rows.Add(new ImageImportPreviewRow(label, "image", assignment.SourcePath, source.Bitmap.Size,
-                size, existing ? format : "无（新增）", format, notes, before, after)
+                size, existing ? format : "无（新增）", outputFormat, notes, before, after)
                 { SourceCrop = new Rectangle(Point.Empty, source.Bitmap.Size) });
         }
 
@@ -251,17 +258,28 @@ internal static class RasterImageFileImport
             }
             var standard = ImageRendering.IsStandardImage(original);
             if (standard) ImageImportRasterNormalization.RequireNoUnknownTail(original);
-            var size = standard ? new Size(120, 120) : FacePayloadService.GetSize(original);
+            var size = standard && request.OutputFormat != ImageImportOutputFormat.Preserve
+                ? new Size(120, 120) : FacePayloadService.GetSize(original);
+            var outputFormat = !standard ? "RAW8" : request.OutputFormat switch
+            {
+                ImageImportOutputFormat.Bmp => "BMP24",
+                ImageImportOutputFormat.Preserve => ImageImportRasterNormalization.Format(original),
+                _ => "PNG32"
+            };
             using var fitted = ImageImportRasterNormalization.Portrait(source.Bitmap, size);
-            var payload = standard ? ImageImportRasterNormalization.Png(fitted)
+            var payload = standard ? request.OutputFormat is { } selected
+                    ? ImageImportTargetEncoding.Selected(original, fitted, selected, token)
+                    : ImageImportRasterNormalization.Png(fitted)
                 : ImageImportTargetEncoding.Raw8(original, size.Width, size.Height, fitted,
                     new PaletteService().RequireWritePalette(request.Project), token);
             if (request.Operation == ImageImportOperation.Replace) Replace(work, number, payload);
             else work.Appends.Add(payload);
             _rows.Add(new ImageImportPreviewRow(label, assignment.Role.StartsWith("expression:", StringComparison.OrdinalIgnoreCase) ? assignment.Role : "Face", assignment.SourcePath, source.Bitmap.Size, size,
                 standard ? ImageImportRasterNormalization.Format(original) : "RAW8",
-                standard ? "PNG32" : "RAW8", standard ? "居中正方形裁切，120×120 高质量双三次；输出 PNG32。"
-                    : "按已确认旧版头像实际尺寸居中裁切；按项目调色板量化，保留合法容器尾部。",
+                outputFormat, standard ? $"居中裁切，{size.Width}×{size.Height} 高质量双三次；输出 {outputFormat}。" +
+                    (outputFormat == "BMP24" ? "完全透明转为F700FF键色，非零半透明按RGB实色写入。" : "")
+                    : "按已确认旧版头像实际尺寸居中裁切；按项目调色板量化，保留合法容器尾部。" +
+                      (request.OutputFormat.HasValue ? ImageImportFormatPolicy.GetSupport(request.Resource, true).Description : ""),
                 request.Operation == ImageImportOperation.Replace ? standard ? ImageImportRasterNormalization.DecodeArgb(original)
                     : FacePayloadService.Decode(request.Project, original) : null,
                 standard ? ImageImportRasterNormalization.DecodeArgb(payload) : FacePayloadService.Decode(request.Project, payload))
@@ -379,7 +397,10 @@ internal static class RasterImageFileImport
             using var large = ImageImportRasterNormalization.Icon(largeSource.Bitmap, oldLarge.Size, false, token);
             using var small = smallSource == null ? ImageImportRasterNormalization.SmallIcon(large, oldSmall.Size, false)
                 : ImageImportRasterNormalization.Icon(smallSource.Bitmap, oldSmall.Size, false, token);
-            var payloads = new[] { ImageImportRasterNormalization.E5Icon(small), ImageImportRasterNormalization.E5Icon(large) };
+            var preserve = request.OutputFormat == ImageImportOutputFormat.Preserve;
+            var payloads = preserve
+                ? new[] { ImageImportTargetEncoding.Standard(originals[0], small, token), ImageImportTargetEncoding.Standard(originals[1], large, token) }
+                : new[] { ImageImportRasterNormalization.E5Icon(small), ImageImportRasterNormalization.E5Icon(large) };
             if (request.Operation == ImageImportOperation.Replace)
                 for (var index = 0; index < 2; index++) Replace(work, numbers[index], payloads[index]);
             else work.Appends.AddRange(payloads);
@@ -390,11 +411,17 @@ internal static class RasterImageFileImport
                 var role = index == 0 ? "small" : "large";
                 var crop = ImageImportRasterNormalization.IconCrop(source.Bitmap,
                     index == 0 && smallSource != null ? oldSmall.Size : oldLarge.Size, false, token);
+                var notes = index == 0 && smallSource == null
+                    ? "由规范化大图的完整画布最近邻生成目标小图。"
+                    : "非标准尺寸裁有效区后等比居中最近邻；标准尺寸保留留白。";
+                notes += preserve ? "按目标或新增模板的原编码及透明规则写入。"
+                    : "完全透明转游戏洋红键，半透明按RGB实色写入。";
+                if (request.OutputFormat == ImageImportOutputFormat.Png) notes += "此图标资源固定使用BMP24。";
                 _rows.Add(new ImageImportPreviewRow($"{label} #{numbers[index]}", role, assignment.SourcePath,
                     source.Bitmap.Size, index == 0 ? small.Size : large.Size,
-                    request.Operation == ImageImportOperation.Append ? "无（新增）" : ImageImportRasterNormalization.Format(originals[index]), "BMP24",
-                    index == 0 && smallSource == null ? "由规范化大图的完整画布最近邻生成目标小图；完全透明转游戏洋红键，半透明按 RGB 实色写入。"
-                        : "非标准尺寸裁有效区后等比居中最近邻；标准尺寸保留留白；完全透明转游戏洋红键，半透明按 RGB 实色写入。",
+                    request.Operation == ImageImportOperation.Append ? "无（新增）" : ImageImportRasterNormalization.Format(originals[index]),
+                    preserve ? ImageImportRasterNormalization.Format(payloads[index]) : "BMP24",
+                    notes,
                     request.Operation == ImageImportOperation.Append ? null : BmpPayloadService.Decode(originals[index]), BmpPayloadService.Decode(payloads[index]))
                     { SourceCrop = crop });
             }
@@ -459,6 +486,7 @@ internal static class RasterImageFileImport
         private void AddDll(string path, DllBitmapRecord variant, int id, Bitmap bitmap,
             ImageImportAssignment assignment, string role, bool iconKeys, string notes, bool existing, Size sourceSize, Rectangle sourceCrop)
         {
+            if (request.OutputFormat.HasValue) notes += " 格式锁定：DLL保留各语言变体的原生DIB结构。";
             var payload = DllImportEncoding.Encode(variant.Dib, bitmap, iconKeys, token);
             var outputFormat = DllImportEncoding.Format(payload);
             if (outputFormat == "DIB8")

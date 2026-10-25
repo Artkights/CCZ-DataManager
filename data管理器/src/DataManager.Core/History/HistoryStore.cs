@@ -154,9 +154,10 @@ public sealed class HistoryStore
             {
                 try
                 {
-                    var hash = HashService.Sha256(Path.Combine(projectRoot, file.RelativePath));
-                    var originalHash = redo ? file.BeforeHash : file.AfterHash;
-                    if (hash.Equals(originalHash, StringComparison.OrdinalIgnoreCase)) continue;
+                    // A failed create/delete can already be at its original
+                    // existence state. Otherwise Write checks the exact state
+                    // produced by this operation before restoring anything.
+                    if (BinaryTableWriter.MatchesState(file, projectRoot, useAfter: !redo)) continue;
                     writer.Write(file, projectRoot, useNewBytes: !redo);
                 }
                 catch (Exception rollback) { failures.Add($"{file.RelativePath}：{rollback.Message}"); }
@@ -177,13 +178,7 @@ public sealed class HistoryStore
     {
         foreach (var file in files)
         {
-            var path = ProjectHistoryPaths.ResolveInside(projectRoot, file.RelativePath);
-            if (!File.Exists(path)) throw new IOException($"历史记录冲突：{file.RelativePath} 不存在。");
-            var expected = useNewBytes ? file.BeforeHash : file.AfterHash;
-            if (!string.Equals(HashService.Sha256(path), expected, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new IOException($"历史记录冲突：{file.RelativePath} 当前文件已被外部修改。");
-            }
+            BinaryTableWriter.VerifyState(file, projectRoot, useAfter: !useNewBytes);
         }
     }
 

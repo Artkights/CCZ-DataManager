@@ -1,11 +1,49 @@
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Runtime.InteropServices;
 
 namespace ImageManager.Core;
 
 /// <summary>External file conversion does not inherit unchanged pixel-editor indexes or RGB rounding.</summary>
 internal static class ImageImportTargetEncoding
 {
+    internal static byte[] Selected(byte[] original, Bitmap image, ImageImportOutputFormat format, CancellationToken token = default)
+        => format switch
+        {
+            ImageImportOutputFormat.Bmp => Bmp24(image, token),
+            ImageImportOutputFormat.Png => ImageImportRasterNormalization.Png(image),
+            ImageImportOutputFormat.Preserve => Standard(original, image, token),
+            _ => throw new ArgumentOutOfRangeException(nameof(format))
+        };
+
+    internal static byte[] Bmp24(Bitmap image, CancellationToken token = default)
+    {
+        using var bitmap = new Bitmap(image.Width, image.Height, PixelFormat.Format24bppRgb);
+        var pixels = ImageImportRasterNormalization.ReadArgbPixels(image);
+        var data = bitmap.LockBits(new Rectangle(Point.Empty, bitmap.Size), ImageLockMode.WriteOnly, PixelFormat.Format24bppRgb);
+        try
+        {
+            var row = new byte[Math.Abs(data.Stride)];
+            for (var y = 0; y < image.Height; y++)
+            {
+                token.ThrowIfCancellationRequested();
+                for (var x = 0; x < image.Width; x++)
+                {
+                    var at = (y * image.Width + x) * 4;
+                    var transparent = pixels[at + 3] == 0;
+                    row[x * 3] = transparent ? (byte)255 : pixels[at];
+                    row[x * 3 + 1] = transparent ? (byte)0 : pixels[at + 1];
+                    row[x * 3 + 2] = transparent ? (byte)247 : pixels[at + 2];
+                }
+                Marshal.Copy(row, 0, IntPtr.Add(data.Scan0, y * data.Stride), row.Length);
+            }
+        }
+        finally { bitmap.UnlockBits(data); }
+        using var stream = new MemoryStream();
+        bitmap.Save(stream, ImageFormat.Bmp);
+        return stream.ToArray();
+    }
+
     internal static byte[] Standard(byte[] original, Bitmap image, CancellationToken token = default)
     {
         if (original.Length >= 2 && original[0] == 'B' && original[1] == 'M')

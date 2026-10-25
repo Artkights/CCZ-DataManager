@@ -21,6 +21,7 @@ internal static class RasterFileImportTests
             E5Icons(root);
             DllImports(root);
             Dll32RowOrderAndAlpha(root);
+            SelectedOutputFormats(root);
         }
         finally { Directory.Delete(root, true); }
     }
@@ -398,6 +399,108 @@ internal static class RasterFileImportTests
         return new ImageImportPreparationService().PrepareAsync(new(project, resource, operation, assignments)).GetAwaiter().GetResult();
     }
 
+    private static void SelectedOutputFormats(string parent)
+    {
+        var root = Path.Combine(parent, "selected-output"); Directory.CreateDirectory(root);
+        var path = Path.Combine(root, "FormatLogo.e5");
+        var neighbor = Png(3, 2, Color.Blue);
+        var original = Archive(Png(5, 4, Color.Red), neighbor);
+        File.WriteAllBytes(path, original);
+        var resource = Resource(path, ImageCategory.Interface, ResourceKind.E5Indexed);
+        var target = Asset(resource, [Frame(path, 1, "image", 5, 4)]);
+        var project = new ProjectProfile(root, "format fixture", ProjectVersion.Ccz65, false, new Dictionary<string, string>(), []);
+        using var sourceImage = new Bitmap(5, 4, PixelFormat.Format32bppArgb);
+        var partial = Color.FromArgb(128, 240, 40, 80);
+        sourceImage.SetPixel(2, 2, partial);
+        var source = Save(root, "format-source.png", ImageBytes(sourceImage, ImageFormat.Png));
+        PreparedImageImport Selected(ImageImportOutputFormat format, ImageImportOperation operation = ImageImportOperation.Replace)
+            => new ImageImportPreparationService().PrepareAsync(new(project, resource, operation,
+                [new(operation == ImageImportOperation.Replace ? target : null, "image", source)], format)).GetAwaiter().GetResult();
+        using (var bmp = Selected(ImageImportOutputFormat.Bmp))
+        {
+            Require(bmp.CanCommit, Errors(bmp));
+            var payload = E5Archive.Parse(path, bmp.Plan!.Files.Single().CandidateBytes).ReadDecoded(1);
+            Require(payload[0] == 'B' && payload[1] == 'M' && BinaryPrimitives.ReadUInt16LittleEndian(payload.AsSpan(28)) == 24,
+                "显式 BMP 没有生成真正的 BMP24 载荷。");
+            Require(bmp.Rows.Single().OriginalFormat == "PNG" && bmp.Rows.Single().OutputFormat == "BMP24",
+                "显式格式把原始格式与最终输出格式混淆。");
+            Require(bmp.Rows.Single().After!.GetPixel(0, 0).ToArgb() == Color.FromArgb(247, 0, 255).ToArgb() &&
+                    bmp.Rows.Single().After!.GetPixel(2, 2).ToArgb() == Color.FromArgb(240, 40, 80).ToArgb(),
+                "BMP24 未把完全透明转为游戏键色，或半透明RGB实色被改变。");
+            var history = new HistoryService(Path.Combine(root, "history"));
+            var result = new ImageMutationService(history).Commit(project, bmp.Plan!);
+            Require(result.Success, string.Join("；", result.Diagnostics));
+            using var reread = BmpPayloadService.Decode(E5Archive.OpenFresh(path).ReadDecoded(1));
+            Require(reread.GetPixel(2, 2).ToArgb() == bmp.Rows.Single().After!.GetPixel(2, 2).ToArgb(), "BMP落盘回读与候选预览不同。");
+            Require(E5Archive.OpenFresh(path).ReadDecoded(2).SequenceEqual(neighbor), "选择输出格式改动了相邻条目。");
+            var committed = File.ReadAllBytes(path);
+            Require(history.Undo(project, result.HistoryId!).Success && File.ReadAllBytes(path).SequenceEqual(original), "格式转换撤回没有逐字节恢复。");
+            Require(history.Redo(project, result.HistoryId!).Success && File.ReadAllBytes(path).SequenceEqual(committed), "格式转换重做未恢复候选。");
+            Require(history.Undo(project, result.HistoryId!).Success, "格式转换测试未恢复原资源。");
+        }
+        File.WriteAllBytes(path, Archive(Bmp(5, 4, Color.Blue), neighbor));
+        using (var png = Selected(ImageImportOutputFormat.Png))
+        {
+            Require(png.CanCommit, Errors(png));
+            var payload = E5Archive.Parse(path, png.Plan!.Files.Single().CandidateBytes).ReadDecoded(1);
+            Require(payload[0] == 137 && png.Rows.Single().After!.GetPixel(2, 2).ToArgb() == partial.ToArgb() &&
+                    png.Rows.Single().After!.GetPixel(0, 0).A == 0, "显式PNG没有真实PNG签名或丢失透明通道。");
+        }
+        File.WriteAllBytes(path, Archive(Jpg(5, 4, Color.Blue)));
+        foreach (var operation in new[] { ImageImportOperation.Replace, ImageImportOperation.Append })
+        {
+            using var preserved = Selected(ImageImportOutputFormat.Preserve, operation);
+            Require(preserved.CanCommit, Errors(preserved));
+            var payload = E5Archive.Parse(path, preserved.Plan!.Files.Single().CandidateBytes).ReadDecoded(operation == ImageImportOperation.Append ? 2 : 1);
+            Require(payload[0] == 255 && payload[1] == 216 && preserved.Rows.Single().OutputFormat == "JPG", "保留原格式没有遵循目标或新增模板JPG编码。");
+        }
+        var facePath = Path.Combine(root, "Face.e5");
+        File.WriteAllBytes(facePath, Archive(Png(120, 120, Color.Blue)));
+        var faceResource = Resource(facePath, ImageCategory.Portrait, ResourceKind.FaceComposite);
+        var face = Asset(faceResource, [Frame(facePath, 1, "image", 120, 120, "Face.e5")]);
+        using (var bmpFace = new ImageImportPreparationService().PrepareAsync(new(project, faceResource, ImageImportOperation.Replace,
+                   [new(face, "image", source)], ImageImportOutputFormat.Bmp)).GetAwaiter().GetResult())
+        {
+            Require(bmpFace.CanCommit, Errors(bmpFace));
+            var payload = E5Archive.Parse(facePath, bmpFace.Plan!.Files.Single().CandidateBytes).ReadDecoded(1);
+            Require(payload[0] == 'B' && BinaryPrimitives.ReadUInt16LittleEndian(payload.AsSpan(28)) == 24 &&
+                    bmpFace.Rows.Single().After!.Size == new Size(120, 120), "Face显式BMP没有使用BMP24及原120画布规则。");
+        }
+        var rawPath = Path.Combine(root, "Logo.e5");
+        var raw = new byte[48 * 48 + 2]; raw[^2] = 0x5a; raw[^1] = 0xa5;
+        File.WriteAllBytes(rawPath, Archive(raw));
+        File.WriteAllBytes(Path.Combine(root, "tsb"), new byte[1024]);
+        var rawResource = Resource(rawPath, ImageCategory.Scene, ResourceKind.E5Indexed);
+        var rawTarget = Asset(rawResource, [Frame(rawPath, 1, "image", 48, 48)]);
+        using (var locked = new ImageImportPreparationService().PrepareAsync(new(project, rawResource, ImageImportOperation.Replace,
+                   [new(rawTarget, "image", source)], ImageImportOutputFormat.Png)).GetAwaiter().GetResult())
+        {
+            Require(locked.CanCommit, Errors(locked));
+            var payload = E5Archive.Parse(rawPath, locked.Plan!.Files.Single().CandidateBytes).ReadDecoded(1);
+            Require(payload.Length == raw.Length && payload[^2] == 0x5a && payload[^1] == 0xa5 &&
+                    locked.Rows.Single().OutputFormat == "RAW8" && locked.Rows.Single().Notes.Contains("不能改写"),
+                "RAW格式选择覆盖了原生结构或未说明限制。");
+        }
+        Require(ImageImportFormatPolicy.GetSupport(resource).AllowedFormats.Contains(ImageImportOutputFormat.Bmp) &&
+                ImageImportFormatPolicy.GetSupport(rawResource, true).IsLocked &&
+                ImageImportFormatPolicy.GetSupport(resource with { Kind = ResourceKind.DllBitmap }).IsLocked,
+            "格式能力描述与标准图片、RAW、DLL的实际限制不一致。");
+        var iconPath = Path.Combine(root, "FormatItem.e5");
+        File.WriteAllBytes(iconPath, Archive(Png(16, 16, Color.Red), Png(32, 32, Color.Blue)));
+        var iconResource = Resource(iconPath, ImageCategory.ItemIcon, ResourceKind.E5Indexed);
+        var icon = Asset(iconResource, [Frame(iconPath, 1, "small", 16, 16), Frame(iconPath, 2, "large", 32, 32)]);
+        foreach (var format in new[] { ImageImportOutputFormat.Preserve, ImageImportOutputFormat.Png })
+        {
+            using var prepared = new ImageImportPreparationService().PrepareAsync(new(project, iconResource, ImageImportOperation.Replace,
+                [new(icon, "large", source)], format)).GetAwaiter().GetResult();
+            Require(prepared.CanCommit, Errors(prepared));
+            var payload = E5Archive.Parse(iconPath, prepared.Plan!.Files.Single().CandidateBytes).ReadDecoded(1);
+            Require(format == ImageImportOutputFormat.Preserve ? payload[0] == 137 :
+                    payload[0] == 'B' && BinaryPrimitives.ReadUInt16LittleEndian(payload.AsSpan(28)) == 24 && prepared.Rows.All(row => row.Notes.Contains("固定使用BMP24")),
+                "大小图保留原格式未遵循各自编码或图标PNG限制未正确显示。");
+        }
+    }
+
     private static void Dll32RowOrderAndAlpha(string root)
     {
         var path = Path.Combine(root, "RowOrder32.dll");
@@ -425,6 +528,10 @@ internal static class RasterFileImportTests
                 "32bpp导入改变了目标高度符号。");
         }
         var project = new ProjectProfile(root, "row order fixture", ProjectVersion.Ccz65, false, new Dictionary<string, string>(), []);
+        using (var locked = new ImageImportPreparationService().PrepareAsync(new(project, resource, ImageImportOperation.Replace,
+                   [new(positive, "image", source)], ImageImportOutputFormat.Png)).GetAwaiter().GetResult())
+            Require(locked.CanCommit && locked.Rows.Single().OutputFormat == "DIB32" && locked.Rows.Single().Notes.Contains("格式锁定"),
+                "DLL格式选择未保留DIB编码或未说明限制。");
         var codec = new DllBitmapResourceCodec();
         var candidateResource = resource with { Paths = [candidate] };
         foreach (var asset in codec.ReadAssets(project, candidateResource).Where(asset => asset.LogicalId is 201 or 202))

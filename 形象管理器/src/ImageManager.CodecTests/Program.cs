@@ -11,6 +11,15 @@ var temporary = Path.Combine(Path.GetTempPath(), "CczCodecTests-" + Guid.NewGuid
 Directory.CreateDirectory(temporary);
 try
 {
+    if (args.Contains("--ccz66-palette-only", StringComparer.Ordinal))
+    {
+        var repositoryRoot = args.FirstOrDefault(argument => !argument.StartsWith("--", StringComparison.Ordinal))
+            ?? Directory.GetCurrentDirectory();
+        checks += Ccz66PaletteChecks.Run(temporary, repositoryRoot,
+            args.Contains("--ccz66-palette-evidence", StringComparer.Ordinal));
+        Console.WriteLine($"全部通过：{checks} 个断言。");
+        return 0;
+    }
     if (args.Contains("--raw-icon-investigation", StringComparer.Ordinal))
     {
         var sampleRoot = Path.Combine(Directory.GetCurrentDirectory(), "基底", "厚黑6.6测（7.9水杯版）");
@@ -82,6 +91,9 @@ try
 
     checks += RepresentativeFrameChecks.Run(temporary);
     if (args.Contains("--representative-only", StringComparer.Ordinal)) return 0;
+
+    checks += Ccz66PaletteChecks.Run(temporary,
+        args.FirstOrDefault(argument => !argument.StartsWith("--", StringComparison.Ordinal)) ?? Directory.GetCurrentDirectory());
 
     var codec = new StrategyAnimationPackageCodec();
     var raw = AnimationHeader(2, 1, 2, 1);
@@ -210,7 +222,13 @@ try
         foreach (var asset in catalog.ReadAssets(project, resource))
         {
             var descriptor = asset.Frames.Single();
-            var original = descriptor.ImageNumber == 0 ? File.ReadAllBytes(descriptor.SourcePath) : E5Archive.Open(descriptor.SourcePath).ReadDecoded(descriptor.ImageNumber);
+            if (asset.Status.Contains("保留的 Meff 尾部条目不是可播放动画", StringComparison.Ordinal))
+            {
+                Check(resource.Key.Equals("Meff.e5", StringComparison.OrdinalIgnoreCase) && descriptor.ImageNumber > 60,
+                    "只有已诊断的旧版Meff保留尾部条目允许跳过播放矩阵");
+                continue;
+            }
+            var original = StrategyAnimationResourceCodec.ReadPackageBytes(descriptor);
             using var package = codec.Decode(project, original);
             if (args.Contains("--diagnostics", StringComparer.Ordinal) && (package.UsesSecondaryLayer || package.SecondaryPlaneCount > 0 || package.TailBytes.Length >= 768))
             {

@@ -17,6 +17,34 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        if (args.Contains("--image-import-acceptance", StringComparer.Ordinal))
+        {
+            Run("真实头像格式切换、新增/替换预览与原基底SHA", ImageImportAcceptanceScreenshots.Run);
+            Console.WriteLine($"结果：通过 {_passed}，失败 {_failed}，跳过 {_skipped}。");
+            return _failed == 0 ? 0 : 1;
+        }
+        if (args.FirstOrDefault() == "--scene-terrain")
+        {
+            Run("内场景Pmap格式、菱形命中、笔画、联动事务与三版本基底", () => SceneTerrainTests.Run(args.Length > 1 ? args[1] : Directory.GetCurrentDirectory()));
+            Console.WriteLine($"结果：通过 {_passed}，失败 {_failed}。");
+            return _failed == 0 ? 0 : 1;
+        }
+        if (args.Contains("--pixel-editor", StringComparer.Ordinal))
+        {
+            Run("换色底图取色、取消、只读配置与调色板", PixelColorPickingTests.Run);
+            Run("编辑与播放窗口高 DPI 布局", TestDialogLayout);
+            Console.WriteLine($"结果：通过 {_passed}，失败 {_failed}，跳过 {_skipped}。");
+            return _failed == 0 ? 0 : 1;
+        }
+        if (args.Contains("--ccz64", StringComparer.Ordinal))
+        {
+            Run("6.4 身份、实际容器、R/S验签与副本事务", Ccz64CompatibilityTests.Run);
+            Run("6.5 实际样本只读回归", TestSample65);
+            Run("6.6 实际样本只读回归", TestSample66);
+            Run("六个本地 6.6 Profile 指定表回归", TestSix66Profiles);
+            Console.WriteLine($"结果：通过 {_passed}，失败 {_failed}，跳过 {_skipped}。");
+            return _failed == 0 ? 0 : 1;
+        }
         if (args.Contains("--job-s-labels", StringComparer.Ordinal))
         {
             Run("兵种S详细名称、零基ID与阵营标签", JobSLabelTests.Run);
@@ -96,6 +124,7 @@ internal static class Program
             Console.WriteLine($"结果：通过 {_passed}，失败 {_failed}。");
             return _failed == 0 ? 0 : 1;
         }
+        Run("6.4 身份、实际容器、R/S验签与副本事务", Ccz64CompatibilityTests.Run);
         Run("多格式首帧解码与目标规格事务", ImageImportSourceDecoderTests.Run);
         Run("天气、Pmap与地图静态素材自动适配", SpecialFileImportTests.Run);
         Run("素材准备、指纹、事务与像素编辑边界", ImageImportPreparationTests.Run);
@@ -135,6 +164,7 @@ internal static class Program
         Run("战场 JPG/Hexzmap 成对事务", TestMapPairTransaction);
         Run("6.6 实际样本只读验收", TestSample66);
         Run("WinForms 主界面离屏烟测", TestUiSmoke);
+        Run("换色底图取色、取消、只读配置与调色板", PixelColorPickingTests.Run);
         Run("编辑与播放窗口高 DPI 布局", TestDialogLayout);
         Run("资源分类实际写回矩阵", () => ResourceWritebackMatrixTests.Run());
         Console.WriteLine($"\n结果：通过 {_passed}，失败 {_failed}，跳过 {_skipped}。");
@@ -1250,8 +1280,21 @@ internal static class Program
 
         using var replacement = new PixelColorReplaceDialog(_ => 12,
             Enumerable.Range(0, 256).Select(value => Color.FromArgb(value, value, value)).ToArray());
-        ValidateDialogAtScale(replacement, 1f);
-        ValidateDialogAtScale(replacement, 2f);
+        replacement.ShowInTaskbar = false;
+        replacement.Opacity = 0;
+        replacement.StartPosition = FormStartPosition.Manual;
+        replacement.Location = new Point(0, 0);
+        replacement.Show();
+        Application.DoEvents();
+        ValidateDialogAtScale(replacement, 1f, preserveAutoSize: true);
+        SettlePixelReplacementLayout(replacement);
+        SavePixelReplacementSnapshot(replacement, "换色窗口-100pct.png");
+        ValidatePixelReplacementVisibleBounds(replacement);
+        ValidateDialogAtScale(replacement, 2f, preserveAutoSize: true);
+        SettlePixelReplacementLayout(replacement);
+        SavePixelReplacementSnapshot(replacement, "换色窗口-200pct.png");
+        ValidatePixelReplacementVisibleBounds(replacement);
+        replacement.Close();
 
         using var scope = TempScope.Create();
         var profile = new ProjectProfile(scope.Path, "layout", ProjectVersion.Ccz65, false,
@@ -1298,9 +1341,9 @@ internal static class Program
         finally { foreach (var atlasFrame in atlasFrames) atlasFrame.Dispose(); }
     }
 
-    private static void ValidateDialogAtScale(Form form, float scale)
+    private static void ValidateDialogAtScale(Form form, float scale, bool preserveAutoSize = false)
     {
-        form.ClientSize = new Size(1280, 720);
+        if (!preserveAutoSize) form.ClientSize = new Size(1280, 720);
         if (Math.Abs(scale - 1f) > .001f) form.Scale(new SizeF(scale, scale));
         form.PerformLayout();
         using var bitmap = new Bitmap(form.ClientSize.Width, form.ClientSize.Height);
@@ -1312,6 +1355,48 @@ internal static class Program
             if (button.Parent is FlowLayoutPanel parent && !parent.AutoScroll)
                 True(button.Right <= parent.ClientSize.Width + 2 && button.Bottom <= parent.ClientSize.Height + 2,
                     $"{form.Text} 按钮超出自适应按钮栏：{button.Text}");
+        }
+    }
+
+    private static void SavePixelReplacementSnapshot(Form form, string name)
+    {
+        var output = Environment.GetEnvironmentVariable("IMAGEMANAGER_PIXEL_TEST_OUTPUT");
+        if (string.IsNullOrWhiteSpace(output)) return;
+        Directory.CreateDirectory(output);
+        using var bitmap = new Bitmap(form.Width, form.Height);
+        form.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
+        var path = Path.Combine(output, name);
+        bitmap.Save(path, ImageFormat.Png);
+        Console.WriteLine($"PIXEL_REPLACEMENT_LAYOUT {name} {bitmap.Width}x{bitmap.Height}");
+        var geometry = new List<string> { $"Form Bounds={form.Bounds}; Client={form.ClientSize}; Preferred={form.PreferredSize}; Visible={form.Visible}" };
+        foreach (var control in Descendants(form).Where(control => control is Button or Panel or TableLayoutPanel))
+            geometry.Add($"{control.GetType().Name}/{control.Name}/{control.Text}: Bounds={control.Bounds}; Client={control.ClientSize}; Preferred={control.PreferredSize}; Visible={control.Visible}; Parent={control.Parent?.GetType().Name}/{control.Parent?.Bounds}; Grandparent={control.Parent?.Parent?.GetType().Name}/{control.Parent?.Parent?.Bounds}");
+        File.WriteAllLines(Path.Combine(output, Path.GetFileNameWithoutExtension(name) + "-几何.txt"), geometry);
+    }
+
+    private static void SettlePixelReplacementLayout(Form form)
+    {
+        Application.DoEvents();
+        form.PerformLayout();
+        Application.DoEvents();
+        form.PerformLayout();
+        Application.DoEvents();
+    }
+
+    private static void ValidatePixelReplacementVisibleBounds(Form form)
+    {
+        foreach (var button in Descendants(form).OfType<Button>())
+        {
+            True(button.Visible, $"换色按钮不可见：{button.Name}/{button.Text}; bounds={button.Bounds}; parent={button.Parent!.Bounds}; form={form.ClientSize}");
+            var bounds = form.RectangleToClient(button.RectangleToScreen(button.ClientRectangle));
+            True(form.ClientRectangle.Contains(bounds),
+                $"换色按钮被窗口裁切：{button.Name}/{button.Text}; bounds={bounds}; client={form.ClientSize}; parent={button.Parent!.Bounds}; grandparent={button.Parent.Parent?.Bounds}");
+            for (var ancestor = button.Parent; ancestor != null && ancestor != form; ancestor = ancestor.Parent)
+            {
+                var childBounds = ancestor.RectangleToClient(button.RectangleToScreen(button.ClientRectangle));
+                True(ancestor.ClientRectangle.Contains(childBounds),
+                    $"换色按钮被容器裁切：{button.Name}/{button.Text}; bounds={childBounds}; ancestor={ancestor.GetType().Name}/{ancestor.ClientSize}");
+            }
         }
     }
 

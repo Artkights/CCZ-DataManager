@@ -62,9 +62,13 @@ public sealed class ProjectProfileService : IProjectProfileService
             diagnostics.Add("未找到 Tou.dll，人物头像使用小头像降级模式。");
         if (version != ProjectVersion.Unknown && resources.TryGetValue("Ekd5.exe", out var executablePath))
         {
-            var layout = CharacterAssignmentLayoutProfile.For(version);
+            var layout = version == ProjectVersion.Ccz64
+                ? Ccz64AssignmentLayoutProbe.Inspect(File.ReadAllBytes(executablePath))
+                : CharacterAssignmentLayoutProfile.For(version);
             var length = new FileInfo(executablePath).Length;
-            if (length < layout.RequiredExecutableLength)
+            if (!layout.CanWrite)
+                diagnostics.Add("人物指定表未验证，指定页拒绝读写：" + layout.Evidence);
+            else if (length < layout.RequiredExecutableLength)
                 diagnostics.Add($"人物指定表越界：Ekd5.exe 长度 {length}，至少需要 {layout.RequiredExecutableLength}；指定页将拒绝读写。");
             else
                 diagnostics.Add($"人物指定表已验证：R@0x{layout.ROffset:X}、S@0x{layout.SOffset:X}、{layout.RowCount} 行（{layout.Evidence}）。");
@@ -88,9 +92,9 @@ public sealed class ProjectProfileService : IProjectProfileService
             // The localized FileVersion text can be stale (for example
             // 1,0,0,1). Read VS_FIXEDFILEINFO's numeric private part instead.
             var privatePart = System.Diagnostics.FileVersionInfo.GetVersionInfo(path).FilePrivatePart;
-            if (privatePart is not (5 or 6)) return ProjectVersion.Unknown;
+            if (privatePart is not (4 or 5 or 6)) return ProjectVersion.Unknown;
             diagnostics.Add($"Ekd5.exe PE 固定版本资源 FilePrivatePart={privatePart}，识别为 6.{privatePart}；资源容器独立探测。");
-            return privatePart == 6 ? ProjectVersion.Ccz66 : ProjectVersion.Ccz65;
+            return privatePart switch { 4 => ProjectVersion.Ccz64, 6 => ProjectVersion.Ccz66, _ => ProjectVersion.Ccz65 };
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
         {

@@ -7,8 +7,8 @@ internal static class ProfileTests
     public static void Run()
     {
         var registry = new ProfileRegistry();
-        TestSupport.Assert(registry.Profiles.Count == 2, "必须且只能公开 6.5/6.6 两个 Profile");
-        TestSupport.Assert(registry.Profiles.Select(profile => profile.Version).SequenceEqual(["6.5", "6.6"]), "Profile 显示顺序或版本错误");
+        TestSupport.Assert(registry.Profiles.Count == 3, "必须公开 6.4/6.5/6.6 三个 Profile");
+        TestSupport.Assert(registry.Profiles.Select(profile => profile.Version).SequenceEqual(["6.4", "6.5", "6.6"]), "Profile 显示顺序或版本错误");
 
         var profile65 = registry.Resolve("ccz-6.5", "65-standard-v1");
         var standard66 = registry.Resolve("ccz-6.6", "66-standard-v1");

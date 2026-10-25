@@ -21,9 +21,9 @@ public sealed class ProfileRegistry
     {
     }
 
-    internal ProfileRegistry(bool useLegacyExtensionManifest, bool usePreSimplificationManifest = false)
+    internal ProfileRegistry(bool useLegacyExtensionManifest, bool usePreSimplificationManifest = false, bool usePreConfiguration64Manifest = false)
     {
-        _configs = LoadEmbeddedConfigs(useLegacyExtensionManifest, usePreSimplificationManifest);
+        _configs = LoadEmbeddedConfigs(useLegacyExtensionManifest, usePreSimplificationManifest, usePreConfiguration64Manifest);
         Profiles = _configs.Values
             .OrderBy(config => config.Version, StringComparer.Ordinal)
             .Select(ToProfile)
@@ -85,17 +85,20 @@ public sealed class ProfileRegistry
         };
     }
 
-    private Dictionary<string, ProfileConfig> LoadEmbeddedConfigs(bool useLegacyExtensionManifest, bool usePreSimplificationManifest)
+    private Dictionary<string, ProfileConfig> LoadEmbeddedConfigs(bool useLegacyExtensionManifest, bool usePreSimplificationManifest, bool usePreConfiguration64Manifest)
     {
         var result = new Dictionary<string, ProfileConfig>(StringComparer.OrdinalIgnoreCase);
         var assembly = typeof(ProfileRegistry).Assembly;
         var suffix65 = usePreSimplificationManifest ? "ccz-6.5.before-simplification.json" : useLegacyExtensionManifest ? "ccz-6.5.extenddata-v1.json" : "ccz-6.5.json";
         var suffix66 = usePreSimplificationManifest ? "ccz-6.6.before-simplification.json" : useLegacyExtensionManifest ? "ccz-6.6.extenddata-v1.json" : "ccz-6.6.json";
+        var suffix64 = usePreConfiguration64Manifest ? "ccz-6.4.before-configuration.json" : "ccz-6.4.json";
         var names = assembly.GetManifestResourceNames()
-            .Where(name => name.EndsWith(suffix65, StringComparison.OrdinalIgnoreCase) || name.EndsWith(suffix66, StringComparison.OrdinalIgnoreCase))
+            .Where(name => name.EndsWith(suffix65, StringComparison.OrdinalIgnoreCase) || name.EndsWith(suffix66, StringComparison.OrdinalIgnoreCase) ||
+                !useLegacyExtensionManifest && !usePreSimplificationManifest && name.EndsWith(suffix64, StringComparison.OrdinalIgnoreCase))
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToArray();
-        if (names.Length != 2) throw new InvalidDataException($"应嵌入两个 Profile 配置，实际找到 {names.Length} 个。");
+        var expectedCount = useLegacyExtensionManifest || usePreSimplificationManifest ? 2 : 3;
+        if (names.Length != expectedCount) throw new InvalidDataException($"应嵌入 {expectedCount} 个 Profile 配置，实际找到 {names.Length} 个。");
         foreach (var name in names)
         {
             using var stream = assembly.GetManifestResourceStream(name) ?? throw new InvalidDataException($"无法读取嵌入配置：{name}");

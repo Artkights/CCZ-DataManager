@@ -35,10 +35,9 @@ public sealed record ItemSemanticSnapshot(
 /// </summary>
 public static class ItemSemanticResolver
 {
-    public static ItemSemanticSnapshot Resolve(TableDocument document, int rowIndex,
-        ItemCategoryBoundary? boundary = null)
+    public static ItemSemanticSnapshot Resolve(TableDocument document, int rowIndex)
     {
-        var semantics = ItemTypeService.Resolve(document, rowIndex, boundary);
+        var semantics = ItemTypeService.Resolve(document, rowIndex);
         var offset = checked((int)(document.Definition.DataOffset + (long)rowIndex * document.Definition.RowSize));
         var raw = document.OriginalFileBytes.AsSpan(offset, document.Definition.RowSize).ToArray();
         var codec = new RecordCodecRegistry().Get(document.Definition.RecordCodecKey);

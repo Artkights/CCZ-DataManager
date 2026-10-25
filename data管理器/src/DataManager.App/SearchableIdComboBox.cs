@@ -25,6 +25,7 @@ public sealed class SearchableIdComboBox : ComboBox
     private bool _bindingSelectionQueued;
     private bool _boundValueUntouched;
     private int _interactionRevision;
+    private bool _idOnly;
 
     public SearchableIdComboBox()
     {
@@ -37,7 +38,23 @@ public sealed class SearchableIdComboBox : ComboBox
 
     public IReadOnlyList<IdNameOption> Options => _options;
 
+    /// <summary>Show only the numeric ID while retaining names for filtering.</summary>
+    public bool IdOnly
+    {
+        get => _idOnly;
+        set { _idOnly = value; FormattingEnabled = value; }
+    }
+
+    public string GetDisplayText(IdNameOption option)
+        => IdOnly ? option.Id.ToString(CultureInfo.InvariantCulture) : option.Display;
+
     public event EventHandler<int>? UnknownValueSubmitted;
+
+    protected override void OnFormat(ListControlConvertEventArgs e)
+    {
+        base.OnFormat(e);
+        if (IdOnly && e.ListItem is IdNameOption option) e.Value = GetDisplayText(option);
+    }
 
     /// <summary>The loader returns a caller-owned thumbnail; painting never performs file I/O.</summary>
     public void SetPreviewLoader(Func<int, CancellationToken, Task<Bitmap?>>? loader)
@@ -156,7 +173,7 @@ public sealed class SearchableIdComboBox : ComboBox
 
     public bool TryGetSelectedId(out int value)
     {
-        if (SelectedItem is IdNameOption option && string.Equals(Text.Trim(), option.Display, StringComparison.Ordinal))
+        if (SelectedItem is IdNameOption option && string.Equals(Text.Trim(), GetDisplayText(option), StringComparison.Ordinal))
         {
             value = option.Id;
             return true;
@@ -198,7 +215,7 @@ public sealed class SearchableIdComboBox : ComboBox
         // Owner-drawn editable combos can still expose the previous typed
         // text when the native selection changes. Commit listeners parse
         // Text, so synchronize it before notifying them of the new selection.
-        if (SelectedItem is IdNameOption option) SetBoundValue(option.Display);
+        if (SelectedItem is IdNameOption option) SetBoundValue(GetDisplayText(option));
         base.OnSelectionChangeCommitted(e);
     }
 
@@ -206,7 +223,7 @@ public sealed class SearchableIdComboBox : ComboBox
     {
         // The selected display text is not a new search. Opening an already
         // selected value must expose all choices again.
-        if (_options.Any(option => option.Display.Equals(Text, StringComparison.Ordinal)))
+        if (_options.Any(option => GetDisplayText(option).Equals(Text, StringComparison.Ordinal)))
             RebuildItems(string.Empty, Text);
         base.OnDropDown(e);
     }
@@ -249,7 +266,7 @@ public sealed class SearchableIdComboBox : ComboBox
             textBounds.X += 54;
             textBounds.Width = Math.Max(0, textBounds.Width - 54);
         }
-        TextRenderer.DrawText(e.Graphics, option.Display, Font, textBounds, e.ForeColor,
+        TextRenderer.DrawText(e.Graphics, GetDisplayText(option), Font, textBounds, e.ForeColor,
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
         e.DrawFocusRectangle();
     }

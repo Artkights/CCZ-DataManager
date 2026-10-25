@@ -138,9 +138,8 @@ public sealed class StrategyAnimationPackageCodec : IStrategyAnimationPackageCod
         }
         else
         {
-            var palette = selector != 255 && (long)(selector + 1) * 768 <= tailLength
-                ? ReadExtraPalette(bytes.AsSpan(tailOffset + selector * 768, 768))
-                : new PaletteService().Load(project);
+            var palette = ResolveRawPalette(project, new PaletteService().Load(project),
+                bytes.AsSpan(tailOffset), selector);
             cancellationToken.ThrowIfCancellationRequested();
             source = DecodeRawPlane(bytes.AsSpan(layout.RecordLength + reference * layout.PlaneSize,
                 layout.PlaneSize).ToArray(), layout, palette);
@@ -148,7 +147,7 @@ public sealed class StrategyAnimationPackageCodec : IStrategyAnimationPackageCod
         using (source)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var frame = ComposePlaybackRecord(source, records, record, tailLength, canvas);
+            var frame = ComposePlaybackRecord(project, source, records, record, tailLength, canvas);
             if (!cancellationToken.IsCancellationRequested) return frame;
             frame.Dispose();
             cancellationToken.ThrowIfCancellationRequested();
@@ -182,8 +181,8 @@ public sealed class StrategyAnimationPackageCodec : IStrategyAnimationPackageCod
                 {
                     var selectors = Enumerable.Range(1, layout.RecordCount - 1).Where(record => records[record * RecordSize] == i)
                         .Select(record => records[record * RecordSize + 1]).Distinct().ToArray();
-                    var planePalette = selectors.Length == 1 && selectors[0] != 255 && (long)(selectors[0] + 1) * 768 <= tail.Length
-                        ? ReadExtraPalette(tail, selectors[0]) : palette;
+                    var planePalette = ResolveRawPalette(project, palette, tail,
+                        selectors.Length == 1 ? selectors[0] : 255);
                     planes.Add(DecodeRawPlane(payload.AsSpan(i * layout.PlaneSize, layout.PlaneSize).ToArray(), layout, planePalette));
                 }
             }
@@ -193,14 +192,17 @@ public sealed class StrategyAnimationPackageCodec : IStrategyAnimationPackageCod
             {
                 var reference = records[record * RecordSize]; sequence.Add(reference);
                 var selector = records[record * RecordSize + 1];
-                using var source = !layout.Standard && selector != 255 && (long)(selector + 1) * 768 <= tail.Length
-                    ? DecodeRawPlane(payload.AsSpan(reference * layout.PlaneSize, layout.PlaneSize).ToArray(), layout, ReadExtraPalette(tail, selector))
+                using var source = !layout.Standard && UsesExtraPalette(project, selector, tail.Length)
+                    ? DecodeRawPlane(payload.AsSpan(reference * layout.PlaneSize, layout.PlaneSize).ToArray(), layout,
+                        ResolveRawPalette(project, palette, tail, selector))
                     : new Bitmap(planes[reference]);
-                playback.Add(ComposePlaybackRecord(source, records, record, tail.Length, canvas));
+                playback.Add(ComposePlaybackRecord(project, source, records, record, tail.Length, canvas));
             }
             return new StrategyAnimationData(playback, planes, sequence, records,
                 layout.Standard ? [] : payload, tail, layout.Interval, layout.Width, layout.Height,
-                layout.RecordCount, layout.PrimaryCount, layout.ActualCount, layout.Flags, layout.Sound, Describe(layout, bytes.Length))
+                layout.RecordCount, layout.PrimaryCount, layout.ActualCount, layout.Flags, layout.Sound,
+                Describe(layout, bytes.Length) + (!layout.Standard && project.Version == ProjectVersion.Ccz66
+                    ? "；6.6 RAW8 使用项目调色板，遗留尾部色表仅保留" : ""))
             {
                 OriginalBytes = (byte[])bytes.Clone(), EncodedImageBytes = layout.Standard ? payload : [],
                 PayloadFormat = layout.Format, SecondaryPlaneCount = layout.SecondaryCount,
@@ -231,12 +233,14 @@ public sealed class StrategyAnimationPackageCodec : IStrategyAnimationPackageCod
         return bounds;
     }
 
-    private static Bitmap ComposePlaybackRecord(Bitmap source, byte[] records, int record, int tailLength, Rectangle canvas)
+    private static Bitmap ComposePlaybackRecord(ProjectProfile project, Bitmap source, byte[] records, int record,
+        int tailLength, Rectangle canvas)
     {
         var at = record * RecordSize;
         var selector = records[at + 1];
         var needsBlend = BinaryPrimitives.ReadInt32LittleEndian(records.AsSpan(at + 4, 4)) != 0 || records[at + 2] != 0 ||
-                         selector < 40 && (long)(selector + 1) * 768 <= tailLength;
+                         project.Version != ProjectVersion.Ccz66 && selector < 40 &&
+                         UsesExtraPalette(project, selector, tailLength);
         var weight = needsBlend && records[at + 3] <= 16 ? 4 + records[at + 3] * 6 : 100;
         var x = BinaryPrimitives.ReadInt32LittleEndian(records.AsSpan(at + 8, 4));
         var y = BinaryPrimitives.ReadInt32LittleEndian(records.AsSpan(at + 12, 4));
@@ -259,8 +263,18 @@ public sealed class StrategyAnimationPackageCodec : IStrategyAnimationPackageCod
         return output;
     }
 
-    private static IReadOnlyList<Color> ReadExtraPalette(byte[] tail, int selector)
-        => ReadExtraPalette(tail.AsSpan(selector * 768, 768));
+    // The verified 6.6 loader (402879) takes predecoded RGB planes and never
+    // loads record[1]'s tail palette. Its RAW converter (40E81C) uses the project
+    // palette. Mcall00 still carries a 768-byte BRG table with 0..15 channels;
+    // treating that legacy table as RGB8 makes the otherwise intact image black.
+    private static bool UsesExtraPalette(ProjectProfile project, int selector, int tailLength)
+        => project.Version != ProjectVersion.Ccz66 && selector != 255 &&
+           (long)(selector + 1) * 768 <= tailLength;
+
+    private static IReadOnlyList<Color> ResolveRawPalette(ProjectProfile project,
+        IReadOnlyList<Color> projectPalette, ReadOnlySpan<byte> tail, int selector)
+        => UsesExtraPalette(project, selector, tail.Length)
+            ? ReadExtraPalette(tail.Slice(selector * 768, 768)) : projectPalette;
 
     private static IReadOnlyList<Color> ReadExtraPalette(ReadOnlySpan<byte> bytes)
     {
@@ -308,11 +322,11 @@ public sealed class StrategyAnimationPackageCodec : IStrategyAnimationPackageCod
             {
                 var selectors = Enumerable.Range(1, layout.RecordCount - 1).Where(record => package.RecordBytes[record * RecordSize] == index)
                     .Select(record => package.RecordBytes[record * RecordSize + 1]).Distinct().ToArray();
-                var usable = selectors.Where(selector => selector != 255 && (long)(selector + 1) * 768 <= package.TailBytes.Length).ToArray();
-                IReadOnlyList<Color> targetPalette = palette;
+                var usable = selectors.Where(selector => UsesExtraPalette(project, selector, package.TailBytes.Length)).ToArray();
                 if (usable.Length > 1 || usable.Length == 1 && selectors.Length > 1)
                     throw new InvalidDataException("该动画平面使用多套调色板，无法唯一确定写入颜色；原始数据保持不变。");
-                if (usable.Length == 1) targetPalette = ReadExtraPalette(package.TailBytes, usable[0]);
+                var targetPalette = ResolveRawPalette(project, palette, package.TailBytes,
+                    usable.Length == 1 ? usable[0] : 255);
                 var original = package.PlaneBytes.AsSpan(index * layout.PlaneSize, layout.PlaneSize).ToArray();
                 BmpPayloadService.RebuildRaw8(original, layout.Width, layout.Height, bitmap, targetPalette)
                     .CopyTo(payload, index * layout.PlaneSize);

@@ -28,7 +28,7 @@ internal static class AtomicItemMigrationMapper
         var targetIndex = target.Data.Rows.IndexOf(targetRow);
         if (source.Definition.Capability != TableCapability.Editable || target.Definition.Capability != TableCapability.Editable ||
             !IsUnusedSlot(target, targetIndex)) return false;
-        var semantics = ItemTypeService.Resolve(source, sourceIndex, ItemCategoryBoundary.Read(sourceWorkspace.RootPath));
+        var semantics = ItemTypeService.Resolve(source, sourceIndex);
         if (semantics.Category is not (ItemCategory.Accessory or ItemCategory.Consumable)) return false;
         var sourceRaw = RawRow(source, sourceIndex);
         if (sourceRaw[0x12] is not (2 or 3)) return false;
@@ -134,6 +134,7 @@ internal static class AtomicItemMigrationMapper
             throw new InvalidDataException("完整宝物记录的可写字段集合不匹配。");
         var original = RawRow(document, index); var output = original.ToArray();
         var marker = BinaryValueCodec.ParseInteger(payload.Values["宝物类型"], 2, 3, "宝物类别标记");
+        output[0x11] = checked((byte)BinaryValueCodec.ParseInteger(payload.Values["装备特效号"], 26, 255, "辅助/道具实际特效号"));
         output[0x12] = checked((byte)marker);
         var codec = new Item66RecordCodec();
         foreach (var field in fields)

@@ -22,6 +22,7 @@ public static class RsFileImportTests
             RejectUnknownStandardTargetTails(fixture);
             CompatibilityDirectoryImports(fixture);
             PaletteChangesPreservingFileMetadata(fixture);
+            SelectedOutputFormats(root);
         }
         finally { Directory.Delete(root, true); }
     }
@@ -84,6 +85,84 @@ public static class RsFileImportTests
         using var duplicates = Prepare(fixture, fixture.SResource, ImageImportOperation.Replace,
             new(fixture.S, "mov", mov), new(fixture.S, "mov", mov));
         Require(!duplicates.CanCommit && duplicates.Rows.All(row => row.Error != null), "重复目标素材未逐行报错。");
+    }
+
+    private static void SelectedOutputFormats(string parent)
+    {
+        var root = Path.Combine(parent, "selected-output"); Directory.CreateDirectory(root);
+        var fixture = Fixture(root);
+        var atk = Save(root, "format-atk.png", 64, 768, ImageFormat.Png, bitmap =>
+        {
+            bitmap.SetPixel(0, 0, Color.FromArgb(128, 240, 40, 80));
+            bitmap.SetPixel(1, 0, Color.FromArgb(247, 0, 255));
+        });
+        PreparedImageImport Selected(ImageResourceDescriptor resource, ImageImportOperation operation,
+            ImageImportOutputFormat format, params ImageImportAssignment[] assignments)
+            => new ImageImportPreparationService().PrepareAsync(new(fixture.Project, resource, operation, assignments, format)).GetAwaiter().GetResult();
+        using (var png = Selected(fixture.SResource, ImageImportOperation.Replace, ImageImportOutputFormat.Png, new ImageImportAssignment(fixture.S, "atk", atk)))
+        {
+            Require(png.CanCommit, Errors(png));
+            var payload = Candidate(png, "Unit_atk.e5").ReadDecoded(242);
+            Require(IsPng(payload) && png.Rows.Single().OutputFormat == "PNG32" &&
+                    png.Rows.Single().After!.GetPixel(0, 0).ToArgb() == Color.FromArgb(128, 240, 40, 80).ToArgb() &&
+                    png.Rows.Single().After!.GetPixel(1, 0).A == 0, "S显式PNG编码、半透明或键色处理不符。");
+        }
+        using (var bmp = Selected(fixture.SResource, ImageImportOperation.Replace, ImageImportOutputFormat.Bmp, new ImageImportAssignment(fixture.S, "atk", atk)))
+        {
+            Require(bmp.CanCommit, Errors(bmp));
+            var payload = Candidate(bmp, "Unit_atk.e5").ReadDecoded(242);
+            Require(payload[0] == 'B' && payload[1] == 'M' && BinaryPrimitives.ReadUInt16LittleEndian(payload.AsSpan(28)) == 32,
+                "S显式BMP未按现有动作条路径写入BMP32。");
+            var topSecondPixel = BinaryPrimitives.ReadInt32LittleEndian(payload.AsSpan(10)) + (768 - 1) * 64 * 4 + 4;
+            Require(payload[topSecondPixel] == 255 && payload[topSecondPixel + 1] == 0 && payload[topSecondPixel + 2] == 247 &&
+                    bmp.Rows.Single().After!.GetPixel(1, 0).ToArgb() == Color.FromArgb(247, 0, 255).ToArgb() &&
+                    bmp.Rows.Single().After!.GetPixel(0, 0).ToArgb() == Color.FromArgb(240, 40, 80).ToArgb(),
+                "BMP32把透明清零成黑色，或非零alpha像素未按RGB实色写入。");
+        }
+        using (var preserved = Selected(fixture.SResource, ImageImportOperation.Replace, ImageImportOutputFormat.Preserve, new ImageImportAssignment(fixture.S, "atk", atk)))
+        {
+            Require(preserved.CanCommit, Errors(preserved));
+            var payload = Candidate(preserved, "Unit_atk.e5").ReadDecoded(242);
+            Require(payload[0] == 'B' && BinaryPrimitives.ReadUInt16LittleEndian(payload.AsSpan(28)) == 24 &&
+                    preserved.Rows.Single().OutputFormat == "BMP", "S保留原格式未保留已有BMP24目标布局。");
+        }
+        var mov = Save(root, "format-mov.png", 48, 528, ImageFormat.Png);
+        var spc = Save(root, "format-spc.png", 48, 240, ImageFormat.Png);
+        using (var appended = Selected(fixture.SResource, ImageImportOperation.Append, ImageImportOutputFormat.Preserve,
+                   new ImageImportAssignment(null, "mov", mov), new ImageImportAssignment(null, "atk", atk), new ImageImportAssignment(null, "spc", spc)))
+        {
+            Require(appended.CanCommit, Errors(appended));
+            var raw = Candidate(appended, "Unit_mov.e5").ReadDecoded(244);
+            var bmp = Candidate(appended, "Unit_atk.e5").ReadDecoded(244);
+            Require(raw.Length == 48 * 528 + 2 && raw[^2] == 0x5a && raw[^1] == 0xa5 && raw[0] == 1 &&
+                    bmp[0] == 'B' && BinaryPrimitives.ReadUInt16LittleEndian(bmp.AsSpan(28)) == 24 &&
+                    IsPng(Candidate(appended, "Unit_spc.e5").ReadDecoded(244)), "S保留原格式新增未使用各动作的末尾模板及调色板。");
+        }
+        var front = Save(root, "format-front.png", 48, 1280, ImageFormat.Png);
+        using (var locked = Selected(fixture.RResource, ImageImportOperation.Replace, ImageImportOutputFormat.Bmp, new ImageImportAssignment(fixture.R, "front", front)))
+        {
+            Require(locked.CanCommit, Errors(locked));
+            var raw = Candidate(locked, "Pmapobj.e5").ReadDecoded(3);
+            Require(raw.Length == 48 * 1280 && raw[0] == 1 && locked.Rows.Single().OutputFormat == "RAW8" &&
+                    locked.Rows.Single().Notes.Contains("不能改写"), "R的RAW目标未保留原生结构及调色板或未说明格式限制。");
+        }
+        // A true-colour R template allows BMP/PNG selection and preserves each side independently.
+        File.WriteAllBytes(fixture.RPath, Archive([Standard(48, 1280, ImageFormat.Bmp), Standard(48, 1280, ImageFormat.Png),
+            Standard(48, 1280, ImageFormat.Bmp), Standard(48, 1280, ImageFormat.Png)]));
+        using (var bmpR = Selected(fixture.RResource, ImageImportOperation.Replace, ImageImportOutputFormat.Bmp, new ImageImportAssignment(fixture.R, "front", front)))
+        {
+            Require(bmpR.CanCommit, Errors(bmpR));
+            var payload = Candidate(bmpR, "Pmapobj.e5").ReadDecoded(3);
+            Require(payload[0] == 'B' && BinaryPrimitives.ReadUInt16LittleEndian(payload.AsSpan(28)) == 32, "标准R显式BMP未写入BMP32。");
+        }
+        using (var preservedR = Selected(fixture.RResource, ImageImportOperation.Append, ImageImportOutputFormat.Preserve,
+                   new ImageImportAssignment(null, "front", front), new ImageImportAssignment(null, "back", front)))
+        {
+            Require(preservedR.CanCommit, Errors(preservedR));
+            var candidate = Candidate(preservedR, "Pmapobj.e5");
+            Require(candidate.ReadDecoded(5)[0] == 'B' && BinaryPrimitives.ReadUInt16LittleEndian(candidate.ReadDecoded(5).AsSpan(28)) == 24 &&
+                    IsPng(candidate.ReadDecoded(6)), "R保留原格式新增未分别使用末尾正背模板。");
+        }
     }
 
     private static void ReplaceAndAppendR(TestFixture fixture)

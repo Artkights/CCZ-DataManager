@@ -77,4 +77,7 @@ public sealed record MigrationApplyResult(
     int AppliedChanges,
     int SkippedChanges,
     string? BackupPath,
-    IReadOnlyList<string> Messages);
+    IReadOnlyList<string> Messages)
+{
+    public DataManager.Core.Appearance.AppearanceSyncReport? AppearanceSync { get; init; }
+}

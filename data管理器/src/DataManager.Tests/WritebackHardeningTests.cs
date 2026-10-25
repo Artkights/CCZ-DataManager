@@ -14,7 +14,7 @@ internal static class WritebackHardeningTests
         CandidateConflictsAndDiskVerification(basePath);
         LateHistoryFailure(basePath);
         HistoryRestoreFailure(basePath);
-        ConfigurationLockPreservesDraft(basePath);
+        ObsoleteCategoryConfigurationDoesNotBlockSave(basePath);
     }
 
     private static void WithProject(string source, Action<string, ProjectWorkspace> test)
@@ -116,21 +116,18 @@ internal static class WritebackHardeningTests
         TestSupport.Assert(workspace.UndoSaved().Success, "解除历史锁后不能再次撤回");
     });
 
-    private static void ConfigurationLockPreservesDraft(string source) => WithProject(source, (root, workspace) =>
+    private static void ObsoleteCategoryConfigurationDoesNotBlockSave(string source) => WithProject(source, (root, workspace) =>
     {
         var configuration = Path.Combine(root, "System.ini");
         File.WriteAllText(configuration, "[Item]\r\nDefID=70\r\nAssID=109\r\n");
         workspace.Open(root);
         EditOrdinary(workspace);
         var person = workspace.GetDocument("persons");
-        var baseline = person.OriginalFileHash;
-        var data = File.ReadAllBytes(person.FilePath);
         using (var locked = new FileStream(configuration, FileMode.Open, FileAccess.Read, FileShare.None))
         {
             var result = workspace.Save();
-            TestSupport.Assert(!result.Saved && workspace.IsDirty && person.OriginalFileHash == baseline && File.ReadAllBytes(person.FilePath).SequenceEqual(data),
-                "配置读取失败清除了草稿或改变了保存基线");
+            TestSupport.Assert(result.Saved && !workspace.IsDirty,
+                "已取消的DefID/AssID配置仍阻断按真实类型保存");
         }
-        TestSupport.Assert(workspace.Save().Saved && !workspace.IsDirty, "配置解除锁定后不能再次保存原草稿");
     });
 }
