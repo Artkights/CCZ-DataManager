@@ -97,26 +97,10 @@ public sealed class ExtendDataService
     public IReadOnlyList<IdNameOption> GetItemOptions()
     {
         var names = Lookup("items-low", "items-high", "items-extended");
-        var result = Enumerable.Range(0, 511)
+        var result = Enumerable.Range(0, 512)
             .Select(id => new IdNameOption(id, id == 255 ? "无（空槽/保留）" :
                 SafeName(names.GetValueOrDefault(id), id >= 256 ? "未命名扩展物品" : "未命名装备")))
             .ToList();
-        // This root file is extension DATA, never the E5/Item.e5 image archive.
-        var rootItem = Directory.Exists(_workspace.RootPath) ? Directory.EnumerateFiles(_workspace.RootPath)
-            .FirstOrDefault(path => Path.GetFileName(path).Equals("Item.e5", StringComparison.OrdinalIgnoreCase)) : null;
-        if (rootItem != null && new FileInfo(rootItem).Length == 256 * 25)
-        {
-            var bytes = File.ReadAllBytes(rootItem);
-            for (var index = 0; index < 256; index++)
-            {
-                // The extension uses the same 25-byte physical item record and
-                // 17-byte name slot as the 6.5 data tables. Display only; never
-                // rotate or rewrite its three runtime loader bytes here.
-                var name = EncodingService.DecodeFixedStringPreservingInvalidBytes(bytes.AsSpan(index * 25, 17));
-                var id = 256 + index;
-                if (!names.ContainsKey(id)) result.Add(new(id, SafeName(name, "未命名扩展物品")));
-            }
-        }
         return result;
     }
 

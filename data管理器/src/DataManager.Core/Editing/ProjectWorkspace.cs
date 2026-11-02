@@ -877,19 +877,18 @@ public sealed class ProjectWorkspace
 
     private void AddParentReferenceNames()
     {
+        var presentation = new RecordPresentationService(this);
         foreach (var document in _documents.Values)
         {
             var parentKey = document.Definition.ParentKey;
-            if (string.IsNullOrWhiteSpace(parentKey) || !_documents.TryGetValue(parentKey, out var parent) || !parent.Data.Columns.Contains("名称")) continue;
+            if (string.IsNullOrWhiteSpace(parentKey) || !_documents.ContainsKey(parentKey) ||
+                document.Definition.Fields.Any(field => field.Name == "名称")) continue;
             AddDerivedColumn(document.Data, "名称");
             document.Data.Columns["名称"]!.ReadOnly = false;
-            var names = parent.Data.Rows.Cast<DataRow>().ToDictionary(
-                row => Convert.ToInt32(row["ID"], CultureInfo.InvariantCulture),
-                row => Convert.ToString(row["名称"], CultureInfo.InvariantCulture) ?? string.Empty);
             foreach (DataRow row in document.Data.Rows)
             {
                 var id = Convert.ToInt32(row["ID"], CultureInfo.InvariantCulture);
-                row["名称"] = names.GetValueOrDefault(id, string.Empty);
+                row["名称"] = presentation.GetTableRowName(document, id);
             }
             document.Data.Columns["名称"]!.SetOrdinal(1);
             document.Data.Columns["名称"]!.ReadOnly = true;
@@ -943,7 +942,8 @@ public sealed class ProjectWorkspace
             AddParentReferenceNames();
             AddDerivedItemFields();
         }
-        if (tableKey is "persons") AddParentReferenceNames();
+        else if (_documents.Values.Any(document => document.Definition.ParentKey?.Equals(tableKey, StringComparison.OrdinalIgnoreCase) == true))
+            AddParentReferenceNames();
     }
 
     private static void AddDerivedColumn(DataTable table, string name)

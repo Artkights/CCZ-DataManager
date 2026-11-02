@@ -1,4 +1,4 @@
-using System.Buffers.Binary;
+﻿using System.Buffers.Binary;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Security.Cryptography;
@@ -69,7 +69,8 @@ internal static class ItemIconAppendTests
         AssertCandidate(original, E5Archive.Parse(path, plan.Files.Single().CandidateBytes), additions, oddTail);
         TestSupport.Assert(File.ReadAllBytes(path).SequenceEqual(before), "规划Item追加时提前修改了项目文件");
         var result = mutations.Commit(profile, plan);
-        TestSupport.Assert(result.Success && result.HistoryId != null, "Item追加提交失败或没有历史记录");
+        TestSupport.Assert(result.Success && result.HistoryId != null,
+            "Item追加提交失败或没有历史记录：" + string.Join("；", result.Diagnostics));
         var committed = File.ReadAllBytes(path);
         AssertCandidate(original, E5Archive.Parse(path, committed), additions, oddTail);
         var afterDescriptor = catalog.BuildCatalog(profile).Single(resource => resource.Key.Equals(resourceName, StringComparison.OrdinalIgnoreCase));

@@ -1,11 +1,13 @@
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
+using ImageManager.Core;
 
 namespace ImageManager.App;
 
 public enum PixelSaveMode { WriteCurrent, AppendCopy }
 
-public sealed record PixelEditorSection(string Name, Rectangle Bounds, int FrameHeight, string SourceFile);
+public sealed record PixelEditorSection(string Name, Rectangle Bounds, int FrameHeight, string SourceFile,
+    IReadOnlyList<Color>? Palette = null, string Encoding = "ARGB", int? TransparentIndex = null);
 
 public sealed class PixelEditorDialog : Form
 {
@@ -15,6 +17,9 @@ public sealed class PixelEditorDialog : Form
     private readonly Button _colorButton = new() { Width = 36, Height = 30, BackColor = Color.Black, FlatStyle = FlatStyle.Flat };
     private readonly NumericUpDown _zoom = new() { Minimum = 25, Maximum = 3200, Increment = 25, Value = 100, Width = 82 };
     private readonly List<Control> _editingCommands = [];
+    private readonly ComboBox _targetSection = new() { Name = "PixelTargetSection", DropDownStyle = ComboBoxStyle.DropDownList, Width = 180 };
+    private readonly Label _encodingStatus = new() { Name = "PixelEncodingStatus", AutoSize = true, Margin = new Padding(6, 8, 2, 0) };
+    private readonly Label _editStatus = new() { Name = "PixelEditStatus", AutoSize = true, ForeColor = Color.Firebrick, MaximumSize = new Size(650, 0) };
     private readonly Label _replacementStatus = new()
     {
         Name = "ReplacementStatus", AutoSize = true, Visible = false,
@@ -38,12 +43,16 @@ public sealed class PixelEditorDialog : Form
         AutoScaleMode = AutoScaleMode.Dpi;
         KeyPreview = true;
         _replacementPalette = replacementPalette;
-        _canvas = new PixelCanvas(source, sections) { Name = "PixelCanvas", Location = Point.Empty };
+        var targets = sections.Select(section => section.Palette == null && replacementPalette != null
+            ? section with { Palette = replacementPalette, Encoding = "索引色", TransparentIndex = 0 } : section).ToArray();
+        _canvas = new PixelCanvas(source, targets) { Name = "PixelCanvas", Location = Point.Empty };
         _scroll.Controls.Add(_canvas);
         Controls.Add(_scroll);
         Controls.Add(BuildBottomBar(allowAppendCopy));
         Controls.Add(BuildToolbar());
-        _canvas.ColorPicked += color => { _colorButton.BackColor = color; _canvas.DrawingColor = color; };
+        _canvas.ColorPicked += SetDrawingColor;
+        _canvas.ActiveSectionChanged += UpdateTargetSection;
+        _canvas.EditRejected += message => _editStatus.Text = message;
         _canvas.ReplacementColorPicked += CompleteReplacementPick;
         _canvas.ReplacementPickCancelled += CancelReplacementPick;
         _canvas.ZoomChanged += zoom =>
@@ -52,6 +61,7 @@ public sealed class PixelEditorDialog : Form
             if (_zoom.Value != percent) _zoom.Value = percent;
         };
         _canvas.MouseWheel += CanvasMouseWheel;
+        UpdateTargetSection();
         Shown += (_, _) => FitInitial();
     }
 
@@ -98,6 +108,18 @@ public sealed class PixelEditorDialog : Form
         actual.Click += (_, _) => SetZoom(1, null);
         panel.Controls.Add(fit);
         panel.Controls.Add(actual);
+        foreach (var section in _canvas.Sections) _targetSection.Items.Add(section.Name);
+        _targetSection.SelectedIndexChanged += (_, _) =>
+        {
+            if (_targetSection.SelectedIndex >= 0) _canvas.ActiveSectionIndex = _targetSection.SelectedIndex;
+        };
+        panel.Controls.Add(_targetSection);
+        var sectionReplacement = new CheckBox { Name = "ReplacementCurrentSectionOnly", Text = "换色仅当前区段", AutoSize = true, Margin = new Padding(6, 7, 2, 0) };
+        sectionReplacement.CheckedChanged += (_, _) => _canvas.ReplaceCurrentSectionOnly = sectionReplacement.Checked;
+        panel.Controls.Add(sectionReplacement);
+        _editingCommands.Add(sectionReplacement);
+        panel.Controls.Add(_encodingStatus);
+        panel.Controls.Add(_editStatus);
         panel.Controls.Add(_replacementStatus);
         return panel;
     }
@@ -131,7 +153,7 @@ public sealed class PixelEditorDialog : Form
             existing.Activate();
             return;
         }
-        var dialog = new PixelColorReplaceDialog(_canvas.CountColor, _replacementPalette);
+        var dialog = new PixelColorReplaceDialog(_canvas.CountColor, EditorPalette(_canvas.ActiveSection));
         _replacementDialog = dialog;
         dialog.PickRequested += (row, field) =>
         {
@@ -253,10 +275,38 @@ public sealed class PixelEditorDialog : Form
 
     private void ChooseColor(Button button)
     {
+        if (EditorPalette(_canvas.ActiveSection) is { } palette)
+        {
+            using var picker = new PalettePickerDialog(palette, _canvas.DrawingColor);
+            if (picker.ShowDialog(this) == DialogResult.OK) SetDrawingColor(picker.SelectedColor);
+            return;
+        }
         using var dialog = new ColorDialog { Color = button.BackColor, FullOpen = true, AnyColor = true };
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
-        button.BackColor = dialog.Color;
-        if (button == _colorButton) _canvas.DrawingColor = dialog.Color;
+        SetDrawingColor(dialog.Color);
+    }
+
+    private void SetDrawingColor(Color color)
+    {
+        _canvas.DrawingColor = color;
+        _colorButton.Tag = color;
+        _colorButton.BackColor = color.A == 0 ? Color.White : Color.FromArgb(color.R, color.G, color.B);
+        _colorButton.Text = color.A == 0 ? "透明" : string.Empty;
+        _editStatus.Text = string.Empty;
+    }
+
+    private static IReadOnlyList<Color>? EditorPalette(PixelEditorSection section)
+        => section.Palette?.Select((color, index) => index == section.TransparentIndex ? Color.Transparent : color).ToArray();
+
+    private void UpdateTargetSection()
+    {
+        if (_targetSection.SelectedIndex != _canvas.ActiveSectionIndex)
+            _targetSection.SelectedIndex = _canvas.ActiveSectionIndex;
+        var section = _canvas.ActiveSection;
+        _encodingStatus.Text = section.Palette == null ? section.Encoding :
+            $"{section.Encoding} · {section.Palette.Count}色 · {(section.TransparentIndex is { } key ? "透明索引" + key : "无透明键色")}";
+        _editStatus.Text = _canvas.CanRepresent(section, _canvas.DrawingColor) ? string.Empty :
+            "当前颜色不在本区段色表中，请重新选色；不同色表请分区操作。";
     }
 
     protected override void Dispose(bool disposing)
@@ -322,7 +372,7 @@ public sealed class PixelColorReplaceDialog : Form
         root.SetColumnSpan(help, 7);
         if (_palette != null)
         {
-            var note = new Label { Text = "索引资源：目标色取色会匹配项目调色板；也可取透明色。",
+            var note = new Label { Text = "索引资源：目标色使用当前区段的实际色表；不同色表无法表达同一颜色时，请分区操作。",
                 AutoSize = true, ForeColor = Color.DarkSlateBlue, Margin = new Padding(0, 0, 0, 8) };
             root.Controls.Add(note, 0, 1);
             root.SetColumnSpan(note, 7);
@@ -520,15 +570,11 @@ internal sealed class PixelCanvas : Control
     private Point _start;
     private Point _last;
     private Rectangle _activeBounds;
+    private int _activeSectionIndex;
 
     public PixelCanvas(Bitmap source, IReadOnlyList<PixelEditorSection> sections)
     {
-        _bitmap = new Bitmap(source.Width, source.Height, PixelFormat.Format32bppArgb);
-        using (var graphics = Graphics.FromImage(_bitmap))
-        {
-            graphics.Clear(Color.Transparent);
-            graphics.DrawImageUnscaled(source, 0, 0);
-        }
+        _bitmap = BmpPayloadService.CopyArgb(source);
         _sections = sections.Count == 0
             ? [new PixelEditorSection("图片", new Rectangle(Point.Empty, source.Size), 0, string.Empty)]
             : sections;
@@ -542,6 +588,20 @@ internal sealed class PixelCanvas : Control
     public event Action<Color>? ReplacementColorPicked;
     public event Action? ReplacementPickCancelled;
     public event Action<double>? ZoomChanged;
+    public event Action? ActiveSectionChanged;
+    public event Action<string>? EditRejected;
+    public IReadOnlyList<PixelEditorSection> Sections => _sections;
+    public PixelEditorSection ActiveSection => _sections[_activeSectionIndex];
+    public int ActiveSectionIndex
+    {
+        get => _activeSectionIndex;
+        set
+        {
+            if (value < 0 || value >= _sections.Count || value == _activeSectionIndex) return;
+            _activeSectionIndex = value;
+            ActiveSectionChanged?.Invoke();
+        }
+    }
     public PixelTool Tool { get; set; }
     public bool ReplacementPickActive { get; set; }
     public bool EditingEnabled
@@ -564,11 +624,11 @@ internal sealed class PixelCanvas : Control
     }
     public bool ShowGrid { get => _showGrid; set { _showGrid = value; Invalidate(); } }
 
-    public Bitmap Snapshot() => new(_bitmap);
+    public Bitmap Snapshot() => BmpPayloadService.CopyArgb(_bitmap);
     public int CountColor(Color color)
     {
         var count = 0;
-        foreach (var section in _sections)
+        foreach (var section in ReplacementSections())
         for (var y = section.Bounds.Top; y < section.Bounds.Bottom; y++)
         for (var x = section.Bounds.Left; x < section.Bounds.Right; x++)
             if (ColorKey(_bitmap.GetPixel(x, y)) == ColorKey(color)) count++;
@@ -579,7 +639,7 @@ internal sealed class PixelCanvas : Control
     {
         if (!EditingEnabled) return;
         if (_undo.Count == 0) return;
-        _redo.Push(new Bitmap(_bitmap));
+        _redo.Push(BmpPayloadService.CopyArgb(_bitmap));
         _bitmap.Dispose();
         _bitmap = _undo.Pop();
         Invalidate();
@@ -589,7 +649,7 @@ internal sealed class PixelCanvas : Control
     {
         if (!EditingEnabled) return;
         if (_redo.Count == 0) return;
-        _undo.Push(new Bitmap(_bitmap));
+        _undo.Push(BmpPayloadService.CopyArgb(_bitmap));
         _bitmap.Dispose();
         _bitmap = _redo.Pop();
         Invalidate();
@@ -600,8 +660,18 @@ internal sealed class PixelCanvas : Control
         if (!EditingEnabled || pairs.Count == 0) return;
         var replacements = new Dictionary<int, Color>();
         foreach (var pair in pairs) replacements.TryAdd(ColorKey(pair.From), pair.To.A == 0 ? Color.Transparent : pair.To);
+        // Validate every affected section before changing any pixel. A colour
+        // chosen in one BMP palette must not be approximated in another one.
+        foreach (var section in ReplacementSections())
+        for (var y = section.Bounds.Top; y < section.Bounds.Bottom; y++)
+        for (var x = section.Bounds.Left; x < section.Bounds.Right; x++)
+            if (replacements.TryGetValue(ColorKey(_bitmap.GetPixel(x, y)), out var target) && !CanRepresent(section, target))
+            {
+                RejectColor(section);
+                return;
+            }
         PushUndo();
-        foreach (var section in _sections)
+        foreach (var section in ReplacementSections())
         for (var y = section.Bounds.Top; y < section.Bounds.Bottom; y++)
         for (var x = section.Bounds.Left; x < section.Bounds.Right; x++)
         {
@@ -610,6 +680,17 @@ internal sealed class PixelCanvas : Control
         }
         Invalidate();
     }
+
+    public bool ReplaceCurrentSectionOnly { get; set; }
+    private IEnumerable<PixelEditorSection> ReplacementSections()
+        => ReplaceCurrentSectionOnly ? [ActiveSection] : _sections;
+
+    public bool CanRepresent(PixelEditorSection section, Color color)
+        => section.Palette == null || color.A == 0 && section.TransparentIndex != null || color.A == 255 &&
+            section.Palette.Any(candidate => candidate.R == color.R && candidate.G == color.G && candidate.B == color.B);
+
+    private void RejectColor(PixelEditorSection section)
+        => EditRejected?.Invoke($"“{section.Name}”的色表无法保存该颜色，请选择该区段的颜色并分区操作。未应用本次操作。");
 
     protected override void OnPaint(PaintEventArgs e)
     {
@@ -673,12 +754,18 @@ internal sealed class PixelCanvas : Control
             ReplacementColorPicked?.Invoke(_bitmap.GetPixel(point.X, point.Y));
             return;
         }
+        ActiveSectionIndex = Enumerable.Range(0, _sections.Count).First(index => ReferenceEquals(_sections[index], section));
         if (!EditingEnabled) return;
         _activeBounds = section.Bounds;
         if (Tool == PixelTool.Eyedropper)
         {
             DrawingColor = _bitmap.GetPixel(point.X, point.Y);
             ColorPicked?.Invoke(DrawingColor);
+            return;
+        }
+        if (!CanRepresent(section, Tool == PixelTool.Eraser ? Color.Transparent : DrawingColor))
+        {
+            RejectColor(section);
             return;
         }
         PushUndo();
@@ -716,7 +803,7 @@ internal sealed class PixelCanvas : Control
 
     private void PushUndo()
     {
-        _undo.Push(new Bitmap(_bitmap));
+        _undo.Push(BmpPayloadService.CopyArgb(_bitmap));
         foreach (var bitmap in _redo) bitmap.Dispose();
         _redo.Clear();
     }

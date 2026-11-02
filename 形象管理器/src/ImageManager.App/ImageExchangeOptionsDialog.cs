@@ -22,7 +22,7 @@ internal sealed class ImageExchangeOptionsDialog : Form
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
-        ClientSize = new Size(460, referenceAtlas ? 190 : 150);
+        ClientSize = new Size(560, referenceAtlas ? 228 : 150);
         var content = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown,
@@ -30,7 +30,7 @@ internal sealed class ImageExchangeOptionsDialog : Form
         };
         content.Controls.Add(new Label
         {
-            Text = referenceAtlas ? "只导出当前预览的一套动作，格位和物理绑定保持一致。" : $"默认仅处理当前预览的第 {turn} 转。",
+            Text = referenceAtlas ? "导出当前形象的干净主图、布局清单、动作对照图和提示词。" : $"默认仅处理当前预览的第 {turn} 转。",
             AutoSize = true, Margin = new Padding(0, 0, 0, 12)
         });
         if (referenceAtlas)
@@ -38,10 +38,15 @@ internal sealed class ImageExchangeOptionsDialog : Form
             var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
             row.Controls.Add(new Label { Text = "像素倍率", AutoSize = true, Margin = new Padding(0, 6, 10, 0) });
             _scale.Items.AddRange(["1 倍（原始）", "2 倍", "4 倍"]);
-            _scale.SelectedIndex = 0;
+            _scale.SelectedIndex = 2;
             row.Controls.Add(_scale);
             content.Controls.Add(row);
             content.Controls.Add(_transparent);
+            content.Controls.Add(new Label
+            {
+                Text = "默认 4 倍像素参考；给 AI 使用主图，编号对照图供人工检查。",
+                AutoSize = true, Margin = new Padding(0, 8, 0, 0)
+            });
         }
         else content.Controls.Add(_allTurns);
         var buttons = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.RightToLeft, Dock = DockStyle.Bottom, Padding = new Padding(8) };

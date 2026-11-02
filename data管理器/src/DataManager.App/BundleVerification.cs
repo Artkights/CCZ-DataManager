@@ -308,6 +308,73 @@ internal static class BundleVerification
                         Font = form.Font.Name, FontPoints = form.Font.SizeInPoints, form.DeviceDpi,
                         AutoScaleMode = form.AutoScaleMode.ToString() };
                 });
+                Check("引擎扫描页签 1280×720 与 1920×1080", () =>
+                {
+                    using var form = new MainForm(openDefaultProject: false)
+                    {
+                        StartPosition = FormStartPosition.Manual,
+                        Location = new Point(-30000, -30000),
+                        ShowInTaskbar = false
+                    };
+                    form.Show();
+                    form.LoadProjectForSmokeTest(root);
+                    form.SelectModuleForSmokeTest("__engine");
+                    var scanDeadline = DateTime.UtcNow.AddSeconds(60);
+                    while (form.EngineScanPendingForSmokeTest && DateTime.UtcNow < scanDeadline)
+                    {
+                        Application.DoEvents();
+                        Thread.Sleep(10);
+                    }
+                    Application.DoEvents();
+                    if (form.EngineScanPendingForSmokeTest)
+                        throw new InvalidDataException("发布程序的后台引擎扫描未在60秒内完成。");
+                    var screenshots = new List<object>();
+                    foreach (var size in new[] { new Size(1280, 720), new Size(1920, 1080) })
+                    {
+                        form.Size = size;
+                        if (form.Size != size)
+                            SetWindowPos(form.Handle, IntPtr.Zero, -30000, -30000, size.Width, size.Height, 0x0010 | 0x0004 | 0x0400);
+                        form.PerformLayout();
+                        Application.DoEvents();
+                        if (form.Size != size)
+                            throw new InvalidDataException($"实际窗口 {form.Size} 未达到要求的 {size}。");
+                        var detail = form.EngineDetailForSmokeTest;
+                        if (!detail.Visible || form.PhysicalGridForSmokeTest.Visible)
+                            throw new InvalidDataException("引擎扫描页没有显示双窗格详情，或旧表格仍然可见。");
+                        var items = form.EntityListForSmokeTest.Items;
+                        if (items.Count == 0 || items[0]?.ToString()?.Contains('：') != true)
+                            throw new InvalidDataException("引擎扫描左侧列表为空或不是 ID：名称 格式。");
+                        // 6.4 uses a register aggregator rather than the four-argument
+                        // entry classified as an internal call in 6.5/6.6.
+                        var internalRowsValid = form.WorkspaceForSmokeTest.ActiveProfile.Profile.Version == "6.4"
+                            ? detail.InternalGridForSmokeTest.Rows.Count == 0
+                            : detail.InternalGridForSmokeTest.Rows.Count > 0;
+                        if (detail.CallRowCountForSmokeTest == 0 || detail.CallsGridForSmokeTest.Columns.Count != 9 ||
+                            detail.CallsTabsForSmokeTest.TabPages.Count != 7 ||
+                            detail.UnassignedGridForSmokeTest.Rows.Count == 0 ||
+                            !internalRowsValid ||
+                            detail.ReferenceGridForSmokeTest.Columns.Count != 6 ||
+                            string.IsNullOrWhiteSpace(detail.ReferenceSummaryForSmokeTest) ||
+                            detail.CallPathsGridForSmokeTest.Columns.Count != 5 ||
+                            detail.CallPathsGridForSmokeTest.Rows.Count == 0 ||
+                            !detail.EvidenceBoxForSmokeTest.Text.Contains("调用点", StringComparison.Ordinal))
+                            throw new InvalidDataException("引擎扫描详情没有调用点行、七页签、未归属/内部/派生/跨文件引用/调用链或证据面板。");
+                        if (form.EngineOnlyWithCallsForSmokeTest.Parent?.Visible != true)
+                            throw new InvalidDataException("引擎扫描缺少“仅显示有调用点”筛选。");
+                        var output = Path.Combine(Path.GetDirectoryName(reportPath)!,
+                            "发布程序引擎扫描-" + $"{size.Width}x{size.Height}.png");
+                        using var bitmap = new Bitmap(form.Width, form.Height);
+                        form.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
+                        bitmap.Save(output, ImageFormat.Png);
+                        screenshots.Add(new { Path = output, WindowWidth = form.Width, WindowHeight = form.Height,
+                            ClientWidth = form.ClientSize.Width, ClientHeight = form.ClientSize.Height, Sha256 = HashFile(output) });
+                    }
+                    if (form.WorkspaceForSmokeTest.IsDirty) throw new InvalidDataException("引擎扫描页签意外产生修改草稿。");
+                    var status = form.StatusForSmokeTest;
+                    if (!status.Contains("引擎", StringComparison.Ordinal)) throw new InvalidDataException("引擎扫描状态栏缺少扫描摘要。");
+                    form.Close();
+                    return new { Screenshots = screenshots.ToArray(), form.WorkspaceForSmokeTest.IsDirty, Status = status };
+                });
             }
             finally
             {
@@ -437,7 +504,7 @@ internal static class BundleVerification
                 using var preview = adapter.DecodeCharacterS(root, sId, 59, turn);
                 if (!info.PhysicalImageNumbers.SequenceEqual([imageNumber]) || preview.Frames.Count != 1 ||
                     preview.Frames[0].Size != new Size(48, 48) ||
-                    !BmpPayloadService.ReadPixels(preview.Frames[0]).AsSpan().SequenceEqual(BmpPayloadService.ReadPixels(expected)))
+                    !SameVisibleArgb(preview.Frames[0], expected))
                     throw new InvalidDataException($"人物紧凑S{sId}未固定预览Unit_mov #{imageNumber}第一转第0帧。");
             }
             characterFirstFrames.Add(new { SId = sId, ImageNumber = imageNumber, FirstFrameSha256 = HashBitmap(expected) });
@@ -478,7 +545,7 @@ internal static class BundleVerification
             using var strip = ImageRendering.IsStandardImage(bytes) ? ImageRendering.DecodeStandardImage(bytes) :
                 ImageRendering.DecodeIndexed(bytes, 48, 48 * 11, new PaletteService().Load(project));
             using var expected = ImageRendering.Crop(strip, new Rectangle(0, 0, 48, 48));
-            if (!BmpPayloadService.ReadPixels(preview.Frames[0]).AsSpan().SequenceEqual(BmpPayloadService.ReadPixels(expected)))
+            if (!SameVisibleArgb(preview.Frames[0], expected))
                 throw new InvalidDataException($"兵种 {job} 阵营{faction}的预览像素不等于Unit_mov #{imageNumber}第0帧。");
             jobFirstFrames.Add(new { JobId = job, FactionIndex = faction, ImageNumber = imageNumber, FirstFrameSha256 = HashBitmap(preview.Frames[0]) });
         }
@@ -576,6 +643,22 @@ internal static class BundleVerification
         using var stream = new MemoryStream();
         bitmap.Save(stream, ImageFormat.Png);
         return Convert.ToHexString(SHA256.HashData(stream.ToArray()));
+    }
+
+    private static bool SameVisibleArgb(Bitmap actual, Bitmap expected)
+    {
+        if (actual.Size != expected.Size) return false;
+        var left = BmpPayloadService.ReadPixels(actual);
+        var right = BmpPayloadService.ReadPixels(expected);
+        // Fully transparent PNG pixels can retain arbitrary hidden RGB. The
+        // thumbnail GDI path clears those values, without changing appearance.
+        // Every non-zero-alpha channel is still compared exactly.
+        for (var at = 0; at < left.Length; at += 4)
+        {
+            if (left[at + 3] != right[at + 3]) return false;
+            if (left[at + 3] != 0 && !left.AsSpan(at, 3).SequenceEqual(right.AsSpan(at, 3))) return false;
+        }
+        return true;
     }
 
     private static EmbeddedFileResult EmbeddedFile(Assembly assembly, string name)

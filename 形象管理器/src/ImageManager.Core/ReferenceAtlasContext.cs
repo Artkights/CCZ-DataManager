@@ -36,6 +36,6 @@ public sealed record ReferenceAtlasContext(
 
 public sealed record ReferenceAtlasExportOptions
 {
-    public int Scale { get; init; } = 1;
+    public int Scale { get; init; } = 4;
     public bool IncludeTransparent { get; init; }
 }

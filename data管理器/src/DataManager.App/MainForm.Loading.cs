@@ -1,4 +1,4 @@
-using System.Data;
+﻿using System.Data;
 using DataManager.Core.Domain;
 using DataManager.Core.Models;
 
@@ -9,14 +9,30 @@ public sealed partial class MainForm
     private readonly Dictionary<string, Dictionary<string, int>> _columnWidths = new(StringComparer.Ordinal);
     private readonly Dictionary<string, GridViewState> _gridViewStates = new(StringComparer.Ordinal);
     private string? _gridLayoutKey;
+    private readonly Dictionary<string, Dictionary<string, int>> _gridContentWidths = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Dictionary<string, int>> _gridManualWidths = new(StringComparer.Ordinal);
+    private bool _arrangingGridWidths;
+    private bool _gridLayoutEventsInstalled;
+    private readonly HashSet<DataTable> _gridWidthSources = [];
+    private void InvalidateGridWidthCache(object? sender, DataColumnChangeEventArgs args)
+    {
+        _gridContentWidths.Clear();
+        _columnWidths.Clear();
+    }
+    private void ReleaseGridWidthSources()
+    {
+        foreach (var table in _gridWidthSources) table.ColumnChanged -= InvalidateGridWidthCache;
+        _gridWidthSources.Clear();
+    }
     private sealed record GridViewState(object? CurrentId, string? Column, object? FirstId, int HorizontalOffset);
 
     private BusinessEditorPanel CreateBusinessEditor()
     {
         var panel = new BusinessEditorPanel(_workspace, _resourceAdapter ??= new()) { Visible = false };
-        panel.Edited += (_, _) => RefreshDirtyState();
+        panel.Edited += (_, _) => { RefreshDirtyState(); QueueQueryRefresh(); };
         panel.PendingChangesChanged += (_, _) => RefreshDirtyState();
         panel.SaveRequested += (_, _) => SaveProject();
+        panel.SImageLocationRequested += LocatePersonSImage;
         panel.ExtendCategoryChanged += (_, _) => { if (ReferenceEquals(panel, _businessEditor)) RefreshExtendEntityList(); };
         return panel;
     }
@@ -55,6 +71,9 @@ public sealed partial class MainForm
         _moduleTables.Clear();
         _activeModuleKey = null;
         _columnWidths.Clear();
+        _gridContentWidths.Clear();
+        _gridManualWidths.Clear();
+        ReleaseGridWidthSources();
         _gridViewStates.Clear();
         _gridLayoutKey = null;
     }
@@ -62,6 +81,9 @@ public sealed partial class MainForm
     private void DiscardAllEditorInputs()
     {
         foreach (var panel in _businessEditors.Values) panel.DiscardPendingChanges();
+        _engineDetail.DiscardPendingChanges();
+        _battleFormulaPanel.DiscardPendingChanges();
+        DiscardEngineAssignmentChanges();
         _workspace.DiscardNativeDrafts();
     }
 
@@ -81,29 +103,119 @@ public sealed partial class MainForm
 
     private void ApplyGridWidths(string key)
     {
+        EnsureGridLayoutEvents();
+        _arrangingGridWidths = true;
+        try
+        {
         _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
-        if (_columnWidths.TryGetValue(key, out var saved))
+        foreach (var table in _workspace.Documents.Values.Select(document => document.Data))
+            if (_gridWidthSources.Add(table)) table.ColumnChanged += InvalidateGridWidthCache;
+        var contentChanged = !_gridContentWidths.ContainsKey(key);
+        if (contentChanged) _gridContentWidths[key] = MeasureGridContentWidths();
+        if (!contentChanged && _columnWidths.TryGetValue(key, out var saved))
         {
             foreach (DataGridViewColumn column in _grid.Columns)
                 if (saved.TryGetValue(column.Name, out var width)) column.Width = width;
         }
         else
         {
-            // Measure a fixed sample once, never on every scroll. Sampling via
-            // the bound view avoids realizing every DataGridViewRow.
-            var view = (_grid.DataSource as DataTable)?.DefaultView;
             foreach (DataGridViewColumn column in _grid.Columns)
-            {
-                var width = TextRenderer.MeasureText(column.HeaderText, _grid.Font).Width + 32;
-                if (view != null && view.Table!.Columns.Contains(column.DataPropertyName))
-                    for (var i = 0; i < Math.Min(view.Count, 24); i++)
-                        width = Math.Max(width, TextRenderer.MeasureText(Convert.ToString(view[i][column.DataPropertyName]) ?? string.Empty,
-                            _grid.Font, new Size(300, 24), TextFormatFlags.SingleLine).Width + 32);
-                column.Width = Math.Clamp(width, 68, 340);
-            }
+                if (_gridContentWidths[key].TryGetValue(column.Name, out var width)) column.Width = width;
         }
         _gridLayoutKey = key;
+        if (_gridManualWidths.TryGetValue(key, out var manual))
+            foreach (DataGridViewColumn column in _grid.Columns)
+                if (manual.TryGetValue(column.Name, out var width)) column.Width = width;
+        FillGridRemainingWidth();
         RestoreGridView(key);
+        }
+        finally { _arrangingGridWidths = false; }
+    }
+
+    private void EnsureGridLayoutEvents()
+    {
+        if (_gridLayoutEventsInstalled) return;
+        _gridLayoutEventsInstalled = true;
+        _grid.ColumnWidthChanged += (_, args) =>
+        {
+            if (_arrangingGridWidths || _suppressGridEvents || _gridLayoutKey == null) return;
+            if (!_gridManualWidths.TryGetValue(_gridLayoutKey, out var widths)) _gridManualWidths[_gridLayoutKey] = widths = new(StringComparer.Ordinal);
+            widths[args.Column.Name] = args.Column.Width;
+        };
+        _grid.SizeChanged += (_, _) => ReflowGridWidths(false);
+        _grid.FontChanged += (_, _) => ReflowGridWidths(true);
+        _grid.DpiChangedAfterParent += (_, _) => ReflowGridWidths(true);
+    }
+
+    private Dictionary<string, int> MeasureGridContentWidths()
+    {
+        var result = new Dictionary<string, int>(StringComparer.Ordinal);
+        var table = _grid.DataSource as DataTable;
+        var scale = _grid.DeviceDpi / 96f;
+        foreach (DataGridViewColumn column in _grid.Columns)
+        {
+            if (!column.Visible) continue;
+            var padding = (int)Math.Ceiling(28 * scale) + (column is DataGridViewComboBoxColumn ? SystemInformation.VerticalScrollBarWidth : 0);
+            var width = TextRenderer.MeasureText(column.HeaderText, _grid.Font, Size.Empty, TextFormatFlags.SingleLine).Width + padding;
+            var texts = new HashSet<string>(StringComparer.Ordinal);
+            if (table != null && table.Columns.Contains(column.DataPropertyName))
+                foreach (DataRow row in table.Rows) texts.Add(Convert.ToString(row[column.DataPropertyName], System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty);
+            if (column is DataGridViewComboBoxColumn { DataSource: ReferenceChoice[] choices })
+            {
+                foreach (var choice in choices) texts.Add(choice.Display);
+                if (column.CellTemplate is EquipmentReferenceCell)
+                    foreach (var value in texts.ToArray())
+                        if (int.TryParse(value, out var id) && choices.All(choice => choice.Value != id)) texts.Add($"{id}：原值（类别不匹配）");
+            }
+            if (column.Tag is ProjectedField projected && _workspace.Documents.TryGetValue(projected.TableKey, out var source))
+                foreach (DataRow row in source.Data.Rows) texts.Add(Convert.ToString(row[projected.FieldName], System.Globalization.CultureInfo.InvariantCulture) ?? string.Empty);
+            foreach (var text in texts)
+                width = Math.Max(width, TextRenderer.MeasureText(text.Replace('\r', ' ').Replace('\n', ' '), _grid.Font, Size.Empty, TextFormatFlags.SingleLine).Width + padding);
+            // DataGridView permits up to 65536 pixels. Long descriptions remain
+            // readable through horizontal scrolling instead of a narrow sample cap.
+            result[column.Name] = Math.Clamp(width, (int)Math.Ceiling(64 * scale), 65536);
+        }
+        return result;
+    }
+
+    private void ReflowGridWidths(bool remeasure)
+    {
+        if (_arrangingGridWidths || _suppressGridEvents || _gridLayoutKey == null ||
+            _currentDocument?.Definition.Key != _gridLayoutKey || !_grid.Visible) return;
+        _arrangingGridWidths = true;
+        try
+        {
+            var key = _gridLayoutKey;
+            if (remeasure || !_gridContentWidths.ContainsKey(key)) _gridContentWidths[key] = MeasureGridContentWidths();
+            _gridManualWidths.TryGetValue(key, out var manual);
+            foreach (DataGridViewColumn column in _grid.Columns)
+            {
+                if (manual != null && manual.TryGetValue(column.Name, out var chosen)) column.Width = chosen;
+                else if (_gridContentWidths[key].TryGetValue(column.Name, out var content)) column.Width = content;
+            }
+            FillGridRemainingWidth();
+        }
+        finally { _arrangingGridWidths = false; }
+    }
+
+    private void FillGridRemainingWidth()
+    {
+        var columns = _grid.Columns.Cast<DataGridViewColumn>().Where(column => column.Visible).ToArray();
+        if (columns.Length == 0) return;
+        var available = Math.Max(0, _grid.ClientSize.Width - (_grid.RowHeadersVisible ? _grid.RowHeadersWidth : 0) - SystemInformation.VerticalScrollBarWidth - 3);
+        var remaining = available - columns.Sum(column => column.Width);
+        if (remaining <= 0) return;
+        _gridManualWidths.TryGetValue(_gridLayoutKey ?? string.Empty, out var manual);
+        var stretch = columns.Where(column => !column.Frozen && (manual == null || !manual.ContainsKey(column.Name))).ToArray();
+        if (stretch.Length == 0) return;
+        var total = stretch.Sum(column => column.Width);
+        for (var index = 0; index < stretch.Length; index++)
+        {
+            var extra = index == stretch.Length - 1 ? remaining : Math.Min(remaining, (int)((long)remaining * stretch[index].Width / Math.Max(1, total)));
+            total -= stretch[index].Width;
+            stretch[index].Width = Math.Min(65536, stretch[index].Width + extra);
+            remaining -= extra;
+        }
     }
 
     private void RestoreGridView(string key)
@@ -134,7 +246,7 @@ public sealed partial class MainForm
     }
 
     private static string NonEmptyRowFilter(DataTable table)
-        => string.Join(" OR ", table.Columns.Cast<DataColumn>().Where(column => column.ColumnName != "ID")
+        => string.Join(" OR ", table.Columns.Cast<DataColumn>().Where(column => column.ColumnName != "ID" && !column.ExtendedProperties.Contains("Derived"))
             .Select(column => "ISNULL(CONVERT([" + column.ColumnName.Replace("\\", "\\\\", StringComparison.Ordinal)
                 .Replace("]", "\\]", StringComparison.Ordinal) + "], 'System.String'), '')")
             .Select(value => $"(TRIM({value}) <> '' AND {value} <> '0')").DefaultIfEmpty("false"));

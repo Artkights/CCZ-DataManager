@@ -82,17 +82,17 @@ public sealed class BusinessDataService
             return new ExtendDataService(_workspace).GetEntityOptions(ExtendDataCategory.Effects);
         var keys = GetAvailableTableKeys(kind).Where(_workspace.Documents.ContainsKey).ToArray();
         var primary = keys.Where(key => IsPrimaryTableForPage(kind, key)).ToArray();
-        if (primary.Length == 0) primary = keys.Take(1).ToArray();
+        if (primary.Length == 0) return [];
+        var presentation = new RecordPresentationService(_workspace);
         var names = new Dictionary<int, string>();
         foreach (var key in primary.Concat(keys.Where(key => key is "scenario-names" or "effect-names")).Distinct())
         {
             var table = _workspace.GetDocument(key).Data;
-            var nameColumn = table.Columns.Cast<DataColumn>().FirstOrDefault(column => IsNameField(column.ColumnName));
             foreach (DataRow row in table.Rows)
             {
                 var id = Convert.ToInt32(row["ID"], CultureInfo.InvariantCulture);
                 if (!names.ContainsKey(id) && !primary.Contains(key)) continue;
-                var name = nameColumn == null ? string.Empty : Convert.ToString(row[nameColumn], CultureInfo.InvariantCulture) ?? string.Empty;
+                var name = presentation.GetTableRowName(_workspace.GetDocument(key), id);
                 if (!names.TryGetValue(id, out var current) || string.IsNullOrWhiteSpace(current)) names[id] = name;
             }
         }

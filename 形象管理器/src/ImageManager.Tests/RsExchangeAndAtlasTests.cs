@@ -108,9 +108,9 @@ internal static class RsExchangeAndAtlasTests
             var service = new ReferenceAtlasService();
             var destination = Path.Combine(root, "参考图");
             var exported = service.Export(destination, context, Color.Magenta);
-            Require(exported.TransparentPngPath.Length == 0 && Directory.GetFiles(Path.GetDirectoryName(exported.PngPath)!).Length == 2,
-                "默认参考图必须只导出 PNG 和提示词。");
-            using (var bitmap = new Bitmap(exported.PngPath)) Require(bitmap.Size == new Size(348, 348), "单套 S 参考图尺寸错误。");
+            Require(exported.TransparentPngPath.Length == 0 && Directory.GetFiles(Path.GetDirectoryName(exported.PngPath)!).Length == 4 &&
+                File.Exists(exported.ManifestPath) && File.Exists(exported.GuidePath), "默认参考包必须包含主图、清单、动作对照和提示词。");
+            using (var bitmap = new Bitmap(exported.PngPath)) Require(bitmap.Size == new Size(1392, 1392), "默认四倍单套 S 参考图尺寸错误。");
             using (var normalized = service.Normalize(exported.PngPath, context, new AiAtlasNormalizationOptions()))
             {
                 Require(normalized.Frames.Count == 28 && normalized.Frames.All(frame => frame.Descriptor.Turn == 1 && frame.Descriptor.ImageNumber == 2),
@@ -175,7 +175,8 @@ internal static class RsExchangeAndAtlasTests
         {
             var context = ReferenceAtlasContext.Create(asset, frames, 2);
             var service = new ReferenceAtlasService();
-            var files = service.Export(Path.Combine(root, "像素占位"), context, Color.Magenta);
+            var files = service.Export(Path.Combine(root, "像素占位"), context, Color.Magenta,
+                new ReferenceAtlasExportOptions { Scale = 1 });
             var layout = new ReferenceAtlasLayoutPlanner().Plan(asset, frames);
             using (var bitmap = new Bitmap(files.PngPath))
             {
@@ -203,7 +204,8 @@ internal static class RsExchangeAndAtlasTests
                 enlarged.Save(repairedPath, ImageFormat.Png);
             }
             using var repaired = service.Normalize(repairedPath, context, new AiAtlasNormalizationOptions());
-            Require(!repaired.HasBlockingIssues && repaired.Diagnostics.Any(text => text.Contains("自动语义行配准", StringComparison.Ordinal)),
+            Require(!repaired.HasBlockingIssues && repaired.SourceMapping?.FrameRectangles.Count == 28 &&
+                repaired.FrameDiagnostics.All(item => item.SourceBounds.Width > 0 && item.SourceBounds.Height > 0),
                 "非整数 AI 图应自动配准而非直接拒绝。");
             foreach (var frame in repaired.Frames)
             for (var y = 0; y < frame.Bitmap.Height; y++)

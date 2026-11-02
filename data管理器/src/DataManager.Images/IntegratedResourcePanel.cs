@@ -98,6 +98,20 @@ public sealed class IntegratedResourcePanel : UserControl
             sAssignmentReferencesProvider: _sAssignmentReferencesProvider);
     }
 
+    public async Task<bool> LocateSPhysicalImageAsync(int physicalImageNumber)
+    {
+        var revision = _projectRevision;
+        await _loadingTask;
+        if (IsDisposed || revision != _projectRevision || _project == null) return false;
+        ShowCategory("S");
+        RestoreSearch(string.Empty);
+        if (_pages.TryGetValue("S", out var cached)) cached.Search = string.Empty;
+        var page = _page;
+        if (page == null) return false;
+        var located = await page.LocateSPhysicalImageAsync(physicalImageNumber);
+        return !IsDisposed && revision == _projectRevision && ReferenceEquals(page, _page) && located;
+    }
+
     public void ClearProject()
     {
         ++_projectRevision;
@@ -168,6 +182,10 @@ public sealed class IntegratedResourcePanel : UserControl
             "Resource:Pmap.e5" or "Pmap.e5" => "Resource:Mmap.e5",
             _ => category
         };
+        _search.PlaceholderText = category == "S" ? "人物名 / 人物:7 / S:1 / Unit:242 / 阵营" : "输入编号或名称筛选资源";
+        _search.AccessibleDescription = category == "S"
+            ? "人物名和人物编号按当前草稿检索；S:1是人物紧凑S编号，Unit:242或S_242是物理图号。可用空格组合筛选。"
+            : "输入编号或名称筛选资源";
         if (_project == null) { _category = category; return; }
         if (_category == category && _page != null) { _page.ActivateGallery(); return; }
         if (_page != null)

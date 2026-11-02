@@ -33,7 +33,7 @@ internal static class PreviewLoader
                 return ImageRendering.Crop(strip, new Rectangle(0, selected.FrameIndex * selected.Height, selected.Width, selected.Height));
             }
             var frames = catalog.DecodeFrames(project, asset);
-            try { return frames.Count == 0 ? null : new Bitmap(frames[0].Bitmap); }
+            try { return frames.Count == 0 ? null : BmpPayloadService.CopyArgb(frames[0].Bitmap); }
             finally { foreach (var frame in frames) frame.Dispose(); }
         }
         catch { return null; }
@@ -52,7 +52,7 @@ internal static class PreviewLoader
                 var frame = frames.FirstOrDefault(item => item.Descriptor.SourceKey == descriptor.SourceKey &&
                                                           item.Descriptor.ImageNumber == descriptor.ImageNumber &&
                                                           item.Descriptor.Action == descriptor.Action);
-                return frame == null ? null : new Bitmap(frame.Bitmap);
+                return frame == null ? null : BmpPayloadService.CopyArgb(frame.Bitmap);
             }
             finally { foreach (var frame in frames) frame.Dispose(); }
         }

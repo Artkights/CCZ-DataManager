@@ -14,7 +14,7 @@ internal static class ItemMigrationMapper
         List<MigrationChange> changes, out IReadOnlyDictionary<string, object?> mappedValues)
     {
         mappedValues = new Dictionary<string, object?>();
-        if (source.Definition.Key is not ("items-low" or "items-high")) return false;
+        if (source.Definition.Key is not ("items-low" or "items-high" or "items-extended")) return false;
         var sourceDynamic = source.Definition.RecordCodecKey.Equals("item-66-15-v1", StringComparison.OrdinalIgnoreCase);
         var targetDynamic = target.Definition.RecordCodecKey.Equals("item-66-15-v1", StringComparison.OrdinalIgnoreCase);
         if (sourceDynamic == targetDynamic) return false;

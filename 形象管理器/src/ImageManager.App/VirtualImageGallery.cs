@@ -114,6 +114,18 @@ public sealed class VirtualImageGallery : UserControl
         SelectionChanged?.Invoke();
     }
 
+    public void SelectItem(string stablePhysicalId)
+    {
+        if (!_items.Any(item => item.StablePhysicalId == stablePhysicalId))
+            throw new ArgumentException("目标形象不在当前图库中。", nameof(stablePhysicalId));
+        _selected.Clear();
+        _selected.Add(stablePhysicalId);
+        foreach (var card in _realized.Values)
+            SetCardChecked(card, card.Tag is LogicalImageAsset asset && asset.StablePhysicalId == stablePhysicalId);
+        FocusedAssetId = stablePhysicalId;
+        SelectionChanged?.Invoke();
+    }
+
     private void SetCardChecked(Control card, bool value)
     {
         if (Selector(card) is not { } check) return;

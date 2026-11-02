@@ -24,7 +24,6 @@ public sealed class ByteTextInputGuard : NativeWindow, IDisposable
     {
         _box = box ?? throw new ArgumentNullException(nameof(box));
         box.HandleCreated += HandleCreated;
-        box.HandleDestroyed += HandleDestroyed;
         box.TextChanged += TextChanged;
         box.Disposed += BoxDisposed;
         _submitted = box.Text; _accepted = Capture();
@@ -100,8 +99,9 @@ public sealed class ByteTextInputGuard : NativeWindow, IDisposable
         StateChanged?.Invoke(this, EventArgs.Empty); return true;
     }
 
+    // NativeWindow automatically releases its subclass after WM_NCDESTROY.
+    // Unsubclassing from Control.HandleDestroyed interrupts that native chain.
     private void HandleCreated(object? sender, EventArgs e) { if (!_disposed) AssignHandle(_box.Handle); }
-    private void HandleDestroyed(object? sender, EventArgs e) { if (Handle != IntPtr.Zero) ReleaseHandle(); }
     private void BoxDisposed(object? sender, EventArgs e) => Dispose();
 
     protected override void WndProc(ref Message m)
@@ -252,7 +252,7 @@ public sealed class ByteTextInputGuard : NativeWindow, IDisposable
     public void Dispose()
     {
         if (_disposed) return; _disposed = true;
-        _box.HandleCreated -= HandleCreated; _box.HandleDestroyed -= HandleDestroyed;
+        _box.HandleCreated -= HandleCreated;
         _box.TextChanged -= TextChanged; _box.Disposed -= BoxDisposed;
         if (Handle != IntPtr.Zero) ReleaseHandle();
     }
@@ -269,6 +269,14 @@ public sealed class ByteLimitedTextBox : TextBox
     public ByteTextInputGuard InputGuard { get; }
     public ByteLimitedTextBox() { InputGuard = new ByteTextInputGuard(this); AllowDrop = false; MaxLength = 0; }
     public void SetBoundText(TextFieldConstraint constraint, string? text) => InputGuard.Bind(constraint, text);
+    protected override void Dispose(bool disposing)
+    {
+        // Detach the native subclass before TextBox starts destroying its HWND.
+        // Releasing it from HandleDestroyed can interrupt the remaining native
+        // teardown and leave a stale handle on an inactive editor.
+        if (disposing) InputGuard.Dispose();
+        base.Dispose(disposing);
+    }
 }
 
 /// <summary>A regular textbox with an always-visible byte budget beneath it.</summary>
@@ -280,8 +288,20 @@ public sealed class ByteTextEditor : UserControl
     private readonly ToolTip _tips = new() { AutoPopDelay = 20000 };
     private bool _compactBudget;
     private bool _arrangingBudget;
+    private bool _showEncodingHint = true;
     private string _evidence = string.Empty;
     public ByteLimitedTextBox Editor { get; } = new() { Dock = DockStyle.Fill };
+    public bool ShowEncodingHint
+    {
+        get => _showEncodingHint;
+        set
+        {
+            if (_showEncodingHint == value) return;
+            _showEncodingHint = value;
+            _encodingHint.Visible = value;
+            PerformLayout();
+        }
+    }
     public bool CompactBudget
     {
         get => _compactBudget;
@@ -330,7 +350,7 @@ public sealed class ByteTextEditor : UserControl
                 var width = Math.Max(1, ClientSize.Width);
                 int WrappedHeight(Label label) => Math.Max(Font.Height + 4,
                     TextRenderer.MeasureText(label.Text, Font, new Size(width, int.MaxValue), TextFormatFlags.WordBreak).Height + 4);
-                _encodingHint.Height = WrappedHeight(_encodingHint);
+                _encodingHint.Height = _showEncodingHint ? WrappedHeight(_encodingHint) : 0;
                 _budget.Height = _compactBudget ? Editor.PreferredHeight : WrappedHeight(_budget);
                 MinimumSize = new Size(_compactBudget ? TextRenderer.MeasureText("夏侯惇", Font).Width + _budget.Width + 12 : 0,
                     Editor.PreferredHeight + _encodingHint.Height + (_compactBudget ? 0 : _budget.Height));
@@ -345,7 +365,8 @@ public sealed class ByteTextEditor : UserControl
         var width = Math.Max(1, proposedSize.Width is > 0 and < int.MaxValue ? proposedSize.Width : Width);
         int WrappedHeight(Label label) => Math.Max(Font.Height + 4,
             TextRenderer.MeasureText(label.Text, Font, new Size(width, int.MaxValue), TextFormatFlags.WordBreak).Height + 4);
-        return new Size(Math.Max(MinimumSize.Width, width), Editor.PreferredHeight + WrappedHeight(_encodingHint) +
+        return new Size(Math.Max(MinimumSize.Width, width), Editor.PreferredHeight +
+            (_showEncodingHint ? WrappedHeight(_encodingHint) : 0) +
             (_compactBudget ? 0 : WrappedHeight(_budget)));
     }
     protected override void Dispose(bool disposing) { if (disposing) _tips.Dispose(); base.Dispose(disposing); }

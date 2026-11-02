@@ -56,10 +56,10 @@ internal static class PageLoadingTests
                 }
             TestSupport.Assert(!form.WorkspaceForSmokeTest.IsDirty, "重复模块导航产生了草稿");
             TestSupport.Assert(panels.Values.All(panel => !panel.IsDisposed), "缓存中的业务面板被意外释放");
-            Console.WriteLine($"UI_MODULE_SWITCH_40 total={times.Sum():F0}ms p95={times.Order().ElementAt(37):F0}ms panels={panels.Count} reused=true");
+            Console.WriteLine($"UI_MODULE_SWITCH_{times.Count} total={times.Sum():F0}ms p95={times.Order().ElementAt(Math.Max(0, (int)Math.Ceiling(times.Count * 0.95) - 1)):F0}ms panels={panels.Count} reused=true");
             TestSupport.Assert(eventDelays.Count == times.Count, "缓存切页期间投递的 UI 事件未处理完成");
             GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect(); measuredProcess.Refresh();
-            Console.WriteLine($"UI_EVENT_DELAY_40 p95={eventDelays.Order().ElementAt(37):F2}ms max={eventDelays.Max():F2}ms private-bytes={privateMemoryBefore}->{measuredProcess.PrivateMemorySize64}");
+            Console.WriteLine($"UI_EVENT_DELAY_{eventDelays.Count} p95={eventDelays.Order().ElementAt(Math.Max(0, (int)Math.Ceiling(eventDelays.Count * 0.95) - 1)):F2}ms max={eventDelays.Max():F2}ms private-bytes={privateMemoryBefore}->{measuredProcess.PrivateMemorySize64}");
 
             form.SelectModuleForSmokeTest("人物");
             form.ShowPhysicalTableForSmokeTest("persons");

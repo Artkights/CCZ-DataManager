@@ -121,7 +121,9 @@ internal static class IntegratedResourcePanelTests
     }
 
     private static TextBox Search(Control panel)
-        => Descendants(panel).OfType<TextBox>().Single(box => box.PlaceholderText == "输入编号或名称筛选资源");
+        => Descendants(panel).OfType<TextBox>().Single(box =>
+            box.PlaceholderText is "输入编号或名称筛选资源" or
+                "人物名 / 人物:7 / S:1 / Unit:242 / 阵营");
 
     private static void AssertUnverified(IntegratedResourcePanel panel, string context)
     {

@@ -26,13 +26,15 @@ public sealed class ThumbnailCache : IThumbnailCache
             if (!_entries.TryGetValue(key, out var entry)) return null;
             _lru.Remove(entry.Node);
             _lru.AddFirst(entry.Node);
-            return new Bitmap(entry.Bitmap);
+            // GDI+'s Bitmap copy zeroes the hidden RGB of fully transparent
+            // pixels; clone raw ARGB so a cached preview matches a fresh decode.
+            return BmpPayloadService.CopyArgb(entry.Bitmap);
         }
     }
 
     public void Store(string key, Bitmap bitmap, string sourcePath)
     {
-        var copy = new Bitmap(bitmap);
+        var copy = BmpPayloadService.CopyArgb(bitmap);
         var bytes = checked((long)copy.Width * copy.Height * 4);
         lock (_sync)
         {
@@ -198,7 +200,7 @@ public sealed class ImagePreviewService : IImagePreviewService
                 using var decoded = DecodeOne(project, catalog, asset, descriptor, cancellationToken);
                 if (decoded == null) return null;
                 using var display = showBackground
-                    ? new Bitmap(decoded.Bitmap)
+                    ? BmpPayloadService.CopyArgb(decoded.Bitmap)
                     : ImageRendering.ApplyKeyTransparency(decoded.Bitmap, false, asset.Kind == ResourceKind.DllBitmap);
                 return Resize(display, size);
             }, cancellationToken).ConfigureAwait(false);
@@ -249,6 +251,11 @@ public sealed class ImagePreviewService : IImagePreviewService
         scale = Math.Min(1, scale);
         var width = Math.Max(1, (int)Math.Round(source.Width * scale));
         var height = Math.Max(1, (int)Math.Round(source.Height * scale));
+        // GDI+ DrawImage composites source-over: fully transparent source pixels
+        // (A=0) keep the destination's zeroed RGB, so a 1:1 "resize" silently
+        // rewrote hidden colour channels. Copy the ARGB rows directly whenever
+        // no scaling is needed; only genuinely resized previews use DrawImage.
+        if (width == source.Width && height == source.Height) return BmpPayloadService.CopyArgb(source);
         var result = new Bitmap(width, height);
         using var graphics = Graphics.FromImage(result);
         graphics.InterpolationMode = InterpolationMode.NearestNeighbor;

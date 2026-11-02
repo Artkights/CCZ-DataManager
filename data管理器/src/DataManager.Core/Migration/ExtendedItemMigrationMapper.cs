@@ -50,6 +50,14 @@ internal static class ExtendedItemMigrationMapper
                     "目标缺少本扩展 DLL 及匹配的引擎消费接口。单独迁移物理数据可供管理器编辑和保存，但不能证明目标游戏会读取或执行这些特技/学习/锻造设置；不能通过覆盖 DLL 或注入代码自动补足运行时能力。"));
             }
         }
+        if (target.Documents.TryGetValue("items-extended", out var starItems) &&
+            starItems.Definition.FileName.Equals("Star.e5", StringComparison.OrdinalIgnoreCase) && starItems.Definition.IsWriteSupported)
+        {
+            changes.Add(new MigrationChange("extended-item-storage", "扩展物品物理来源", "独立文件复制", -1,
+                "根Item.e5/Itemmsg.e5", "Star.e5/Imsg.e5", MigrationChangeKind.Ignored,
+                "目标已经验证Star内嵌扩展消费者；可兼容字段按物品ID、目标Codec和说明偏移进行逻辑迁移。根Item/Itemmsg文件不整体复制，不覆盖图标档案，也不注入加载器。"));
+            return;
+        }
         if (!loaderVerified || !targetSupported)
         {
             if (loaderVerified && !targetSupported)

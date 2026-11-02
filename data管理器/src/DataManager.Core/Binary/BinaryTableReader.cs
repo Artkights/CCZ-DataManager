@@ -14,7 +14,9 @@ public sealed class BinaryTableReader
 
     public TableValidation Validate(string rootPath, TableDefinition definition)
     {
-        if (definition.Key is "items-extended" or "item-description-extended")
+        if (definition.Capability != TableCapability.Unavailable &&
+            (definition.Key == "items-extended" && definition.FileName.Equals("Item.e5", StringComparison.OrdinalIgnoreCase) ||
+             definition.Key == "item-description-extended" && definition.FileName.Equals("Itemmsg.e5", StringComparison.OrdinalIgnoreCase)))
             return ValidateRootExtensionTable(rootPath, definition);
         var path = ProjectFileLocator.Resolve(rootPath, definition.FileName);
         if (definition.Capability == TableCapability.Unavailable)

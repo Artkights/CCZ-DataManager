@@ -18,6 +18,7 @@ internal static class ResourcePreviewTests
     public static void Run(string basePath)
     {
         CheckResourceSelectionCommit();
+        DraftPreviewTests.CheckRangePicker();
         TestProject(basePath);
         var standard66 = Path.Combine(TestSupport.RepositoryRootFromBase(basePath), "基底", "曹操传6.6-V7.16 解压密码：66");
         if (Directory.Exists(standard66)) TestProject(standard66);
@@ -148,6 +149,7 @@ internal static class ResourcePreviewTests
         CheckJobFirstFrames(panel, workspace, adapter);
         CheckRapidEntitySwitch(panel, workspace, adapter, () => edits);
         CheckPersonEditRefresh(panel, workspace, adapter);
+        DraftPreviewTests.CheckProject(panel, workspace, adapter, strategyIndex);
         var closedPictures = Descendants(panel).OfType<PictureBox>().ToArray();
         host.Close();
         TestSupport.Assert(closedPictures.Length > 0 && closedPictures.All(picture => picture.IsDisposed && picture.Image == null),
@@ -464,7 +466,7 @@ internal static class ResourcePreviewTests
         var archive = E5Archive.Open(profile.TryGetResource("Unit_mov.e5")!);
         using var expectedS = ReadMovementFrame(profile, archive, physical);
         AssertSamePixels(PreviewPicture(panel, sVerified ? "S " : "默认S").Image!, expectedS,
-            "人物S预览没有显示最终实体紧凑编号第一转的mov第0帧");
+            $"人物{id}（S形象{sId} 兵种{job} 物理{physical}）S预览没有显示第一转mov第0帧");
 
         void CheckStill(string key, int logicalId, string prefix)
         {

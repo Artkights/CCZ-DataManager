@@ -31,8 +31,6 @@ public sealed class WorkspaceBinaryTransaction
             {
                 var path = ValidatePath(workspace.RootPath, candidate.FilePath);
                 if (!seenPaths.Add(path)) throw new InvalidOperationException($"同一文件不能有多个候选：{path}");
-                if (candidate.BeforeBytes.Length != candidate.AfterBytes.Length)
-                    throw new InvalidOperationException("专用数据事务只允许保持文件长度的字节补丁。");
                 var beforeHash = HashService.Sha256(candidate.BeforeBytes);
                 var baselines = workspace.Documents.Values
                     .Where(document => Path.GetFullPath(document.FilePath).Equals(path, StringComparison.OrdinalIgnoreCase))
@@ -42,8 +40,13 @@ public sealed class WorkspaceBinaryTransaction
                 VerifyHash(path, beforeHash);
                 var afterHash = HashService.Sha256(candidate.AfterBytes);
                 if (beforeHash.Equals(afterHash, StringComparison.OrdinalIgnoreCase)) continue;
+                var resized = candidate.BeforeBytes.Length != candidate.AfterBytes.Length;
+                IReadOnlyList<ByteChunk> chunks = resized
+                    ? [new ByteChunk(0, candidate.BeforeBytes, candidate.AfterBytes)]
+                    : BuildChunks(candidate.BeforeBytes, candidate.AfterBytes);
                 changes.Add((candidate, new FileByteChange(Path.GetRelativePath(workspace.RootPath, path), beforeHash,
-                    afterHash, candidate.AfterBytes.Length, BuildChunks(candidate.BeforeBytes, candidate.AfterBytes))));
+                    afterHash, candidate.AfterBytes.Length, chunks)
+                    { WholeFileReplacement = resized, BeforeLength = resized ? candidate.BeforeBytes.Length : null }));
             }
         }
         catch (Exception ex) { return new SaveResult(false, 0, 0, 0, null, [$"专用数据保存中止：{ex.Message}"]); }

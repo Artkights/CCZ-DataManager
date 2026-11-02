@@ -127,7 +127,7 @@ public static class EmbeddedEngineLayoutProbe
         return false;
     }
 
-    private sealed class PeImage(byte[] bytes, uint imageBase, List<Section> sections)
+    internal sealed class PeImage(byte[] bytes, uint imageBase, List<Section> sections)
     {
         private const uint Executable = 0x20000000;
         private const uint Writable = 0x80000000;
@@ -205,5 +205,5 @@ public static class EmbeddedEngineLayoutProbe
             catch (Exception ex) when (ex is ArgumentException or OverflowException) { return false; }
         }
     }
-    private sealed record Section(uint Rva, uint Size, uint Raw, uint Flags);
+    internal sealed record Section(uint Rva, uint Size, uint Raw, uint Flags);
 }

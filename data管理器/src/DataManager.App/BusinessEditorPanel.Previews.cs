@@ -10,7 +10,12 @@ public sealed partial class BusinessEditorPanel
     private CancellationTokenSource _previewCancellation = new();
     private long _previewGeneration;
     private Control? _compactPreviewHost;
-    private readonly Dictionary<(string Table, string Field), Func<int?>> _personPreviewInputs = [];
+    private sealed class PreviewInput(Func<int?> read)
+    {
+        public Func<int?> Read { get; } = read;
+        public int? LastValid { get; set; } = read();
+    }
+    private readonly Dictionary<(string Table, string Field), PreviewInput> _previewInputs = [];
 
     private void BeginPreviewBinding(bool preserveHost = false)
     {
@@ -19,7 +24,7 @@ public sealed partial class BusinessEditorPanel
         if (!preserveHost)
         {
             _compactPreviewHost = null;
-            _personPreviewInputs.Clear();
+            _previewInputs.Clear();
         }
     }
 
@@ -46,23 +51,32 @@ public sealed partial class BusinessEditorPanel
         return definition == null ? fallback : NumericValue(ReadFieldValue(document, match.Index, definition) ?? string.Empty, fallback, definition.Kind == FieldKind.RawBytes);
     }
 
-    private int PersonPreviewNumber(string key, string field, int fallback = 0)
-        => !_binding && _personPreviewInputs.TryGetValue((key, field), out var readInput) && readInput() is { } number
-            ? number : EntityNumber(key, field, fallback);
+    private int PreviewNumber(string key, string field, int fallback = 0)
+        => !_binding && _previewInputs.TryGetValue((key, field), out var input) &&
+            (input.Read() ?? input.LastValid) is { } number ? number : EntityNumber(key, field, fallback);
 
-    private void RegisterPersonPreviewInput(FieldBinding binding, Control editor)
+    private bool RegisterPreviewInput(string tableKey, string fieldName, Control editor, Func<int?> readInput)
     {
-        if (editor is not SearchableIdComboBox combo) return;
-        int? ReadInput() => combo.Enabled && combo.TryGetSelectedId(out var number) &&
-            number >= binding.Field.Minimum && number <= binding.Field.Maximum ? number : null;
-        _personPreviewInputs[(binding.Document.Definition.Key, binding.Field.Name)] = ReadInput;
+        if ((tableKey, fieldName) is not (("persons", "头像" or "兵种") or
+            ("person-r-assign", "R形象ID") or ("person-s-assign", "S形象ID") or
+            ("items-low" or "items-high" or "items-extended", "图标") or
+            ("strategies", "策略图标") or ("strategy-small-animation" or "strategy-big-animation", "动画ID"))) return false;
+        var input = new PreviewInput(readInput);
+        _previewInputs[(tableKey, fieldName)] = input;
         // Preview valid input immediately. Text entry still uses the normal
         // Enter/validation transaction, so browsing images creates no edits.
-        combo.TextChanged += (_, _) =>
+        editor.TextChanged += (_, _) =>
         {
-            if (!_binding && _kind == BusinessPageKind.Persons && !combo.IsDisposed && ReadInput() != null)
-                RefreshCompactPreviews();
+            if (editor.IsDisposed) return;
+            var value = readInput();
+            if (_binding) { input.LastValid = value; return; }
+            // Keep the last valid value while typing an incomplete/invalid ID,
+            // including when a different preview field changes meanwhile.
+            if (value is not { } number) return;
+            input.LastValid = number;
+            RefreshCompactPreviews();
         };
+        return true;
     }
 
     private Control CreateCompactPreviewSurface()
@@ -105,11 +119,30 @@ public sealed partial class BusinessEditorPanel
                 Text = binding.Label ?? FieldLabel(binding.Document.Definition.Key, binding.Field.Name),
                 Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter, Margin = Padding.Empty
             };
+            Button? locationButton = null;
+            if (binding.Document.Definition.Key == "person-s-assign")
+            {
+                var locate = new Button { Name = "LocatePersonSImage", Text = "定位 S", AutoSize = true,
+                    Dock = DockStyle.Right, Margin = Padding.Empty, Padding = Padding.Empty, TabStop = true };
+                locate.Click += (_, _) =>
+                {
+                    if (Flush()) SImageLocationRequested?.Invoke(_id,
+                        EntityNumber("person-s-assign", "S形象ID", -1), EntityNumber("persons", "兵种", -1));
+                };
+                _diagnosticTips.SetToolTip(locate, "按当前草稿指定定位实际 Unit 图号；三转人物或默认兵种可选择阶段/阵营。图片导入会即时保存。\n存档同步仍使用磁盘上已保存的人物指定。");
+                form.ColumnCount = 2;
+                form.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+                locationButton = locate;
+            }
             var editor = CreateEditor(binding.Document, binding.Row, binding.RowIndex, binding.Field);
-            RegisterPersonPreviewInput(binding, editor);
             editor.Dock = DockStyle.None; editor.Anchor = AnchorStyles.Left | AnchorStyles.Right;
             editor.Margin = new Padding(0, 1, 0, 1);
             form.Controls.Add(label, 0, 0); form.Controls.Add(editor, 0, 1);
+            if (locationButton != null)
+            {
+                form.SetColumnSpan(label, 2);
+                form.Controls.Add(locationButton, 1, 1);
+            }
             header.Controls.Add(form); table.Controls.Add(header, column, 0); table.SetColumnSpan(header, span);
             void ArrangeHeader()
             {
@@ -186,10 +219,10 @@ public sealed partial class BusinessEditorPanel
         switch (kind)
         {
             case BusinessPageKind.Persons:
-                var face = PersonPreviewNumber("persons", "头像");
-                var job = EntityNumber("persons", "兵种");
-                var rId = PersonPreviewNumber("person-r-assign", "R形象ID", -1);
-                var sId = PersonPreviewNumber("person-s-assign", "S形象ID", -1);
+                var face = PreviewNumber("persons", "头像");
+                var job = PreviewNumber("persons", "兵种");
+                var rId = PreviewNumber("person-r-assign", "R形象ID", -1);
+                var sId = PreviewNumber("person-s-assign", "S形象ID", -1);
                 var verifiedR = _workspace.Documents.TryGetValue("person-r-assign", out var r) && r.Definition.Capability == TableCapability.Editable;
                 var verifiedS = _workspace.Documents.TryGetValue("person-s-assign", out var s) && s.Definition.Capability == TableCapability.Editable;
                 Card($"Face:{face}", $"头像 {face}", cancellation => Still("Face", face, cancellation));
@@ -212,13 +245,13 @@ public sealed partial class BusinessEditorPanel
                 break;
             case BusinessPageKind.Items:
                 var itemKey = new[] { "items-low", "items-high", "items-extended" }.FirstOrDefault(key => Fields(key).Any());
-                var itemIcon = itemKey == null ? 0 : EntityNumber(itemKey, "图标");
+                var itemIcon = itemKey == null ? 0 : PreviewNumber(itemKey, "图标");
                 Card($"ItemIcon:{itemIcon}", $"宝物图标 {itemIcon}", cancellation => Icon(false, itemIcon, cancellation));
                 break;
             case BusinessPageKind.Strategies:
-                var strategyIcon = EntityNumber("strategies", "策略图标");
-                var small = EntityNumber("strategy-small-animation", "动画ID", 255);
-                var large = EntityNumber("strategy-big-animation", "动画ID", 255);
+                var strategyIcon = PreviewNumber("strategies", "策略图标");
+                var small = PreviewNumber("strategy-small-animation", "动画ID", 255);
+                var large = PreviewNumber("strategy-big-animation", "动画ID", 255);
                 Card($"StrategyIcon:{strategyIcon}", $"策略图标 {strategyIcon}", cancellation => Icon(true, strategyIcon, cancellation));
                 Card($"Small:{small}", $"小动画 {small}", cancellation => _resources.DecodeStrategyAnimationAsync(root, false, small, cancellation), true);
                 Card($"Large:{large}", $"大动画 {large}", cancellation => _resources.DecodeStrategyAnimationAsync(root, true, large, cancellation), true);

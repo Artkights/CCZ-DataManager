@@ -199,7 +199,18 @@ public sealed record MutationPlan(
     IReadOnlyList<string> Warnings,
     bool RequiresRiskConfirmation,
     IReadOnlyDictionary<string, string>? Metadata = null,
-    IReadOnlyDictionary<string, MutationSourceSnapshot>? SourceSnapshots = null);
+    IReadOnlyDictionary<string, MutationSourceSnapshot>? SourceSnapshots = null)
+{
+    /// <summary>Independent editor output, checked against the candidate and the reopened physical target.</summary>
+    public IReadOnlyList<MutationImageExpectation> ExpectedImages { get; init; } = [];
+}
+
+public enum MutationOutcome
+{
+    Applied,
+    NoChange,
+    Failed
+}
 
 public sealed record MutationResult(
     string OperationId,
@@ -207,7 +218,17 @@ public sealed record MutationResult(
     string Summary,
     string? HistoryId,
     IReadOnlyList<string> WrittenPaths,
-    IReadOnlyList<string> Diagnostics);
+    IReadOnlyList<string> Diagnostics)
+{
+    // Keep the existing bool constructor and deconstruction contract for hosts.
+    // Outcome is authoritative, so a NoChange result can never be reported as saved.
+    public MutationOutcome Outcome { get; init; } = Success ? MutationOutcome.Applied : MutationOutcome.Failed;
+    public bool Success
+    {
+        get => Outcome == MutationOutcome.Applied;
+        init => Outcome = value ? MutationOutcome.Applied : MutationOutcome.Failed;
+    }
+}
 
 public sealed class ReferenceAtlasSection
 {
@@ -233,7 +254,11 @@ public sealed record ReferenceAtlasLayoutPlan(
 public sealed record ReferenceAtlasExportResult(
     string PngPath,
     string TransparentPngPath,
-    string PromptPath);
+    string PromptPath)
+{
+    public string ManifestPath { get; init; } = string.Empty;
+    public string GuidePath { get; init; } = string.Empty;
+}
 
 public enum AtlasResamplingKernel
 {
@@ -276,6 +301,8 @@ public sealed class AiAtlasNormalizationOptions
     public int BackgroundTolerance { get; set; } = 12;
     public int AlphaThreshold { get; set; } = 128;
     public Point? BackgroundSample { get; set; }
+    public List<Point> BackgroundSamples { get; } = [];
+    public AtlasSourceMapping? SourceMapping { get; set; }
     public bool OrderedDither { get; set; }
     public bool AutomaticQualityGate { get; set; }
     public List<AtlasMaskStroke> MaskStrokes { get; } = [];
@@ -290,10 +317,12 @@ public sealed class AiAtlasNormalizationOptions
             BackgroundTolerance = BackgroundTolerance,
             AlphaThreshold = AlphaThreshold,
             BackgroundSample = BackgroundSample,
+            SourceMapping = SourceMapping?.Clone(),
             OrderedDither = OrderedDither,
             AutomaticQualityGate = AutomaticQualityGate
         };
         clone.MaskStrokes.AddRange(MaskStrokes);
+        clone.BackgroundSamples.AddRange(BackgroundSamples);
         foreach (var pair in Adjustments) clone.Adjustments[pair.Key] = pair.Value;
         return clone;
     }
@@ -369,6 +398,7 @@ public sealed class AiAtlasFinalFrame : IDisposable
 
 public sealed class AiAtlasNormalizationResult : IDisposable
 {
+    public AtlasSourceMapping? SourceMapping { get; init; }
     public required string SourcePath { get; init; }
     public required Size SourceSize { get; init; }
     public required int TargetCanvasSize { get; init; }

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Buffers.Binary;
 using System.Drawing.Imaging;
 using ImageManager.Core;
 
@@ -34,6 +35,7 @@ public sealed class ImageGridPage : UserControl
     private ProjectProfile? _project;
     private List<ImageResourceDescriptor> _resources = [];
     private List<LogicalImageAsset> _assets = [];
+    private SImageSearchIndex _sSearch = new([]);
     private string _search = string.Empty;
     private string? _lastCommitStatus;
     private CancellationTokenSource? _renderCancellation;
@@ -146,6 +148,28 @@ public sealed class ImageGridPage : UserControl
         if (_search == search) return;
         _search = search;
         RenderGallery();
+    }
+
+    public async Task<bool> LocateSPhysicalImageAsync(int physicalImageNumber)
+    {
+        if (!Has(ImagePageCapabilities.SPreviewSelector) || physicalImageNumber < 1 || _project == null) return false;
+        var project = _project;
+        _search = string.Empty;
+        _idle.Checked = false;
+        var mode = physicalImageNumber <= 240 ? 1 : 0;
+        if (_sMode.SelectedIndex != mode) _sMode.SelectedIndex = mode;
+        var revision = _loadRevision;
+        await _loadingTask;
+        if (IsDisposed || !ReferenceEquals(project, _project) || revision != _loadRevision || _sMode.SelectedIndex != mode) return false;
+        var asset = _assets.FirstOrDefault(item => item.Kind == ResourceKind.SComposite &&
+            SResourceExchangeNaming.PhysicalId(item) == physicalImageNumber);
+        if (asset == null) { _status.Text = $"未找到完整的 Unit #{physicalImageNumber}；请检查三个动作资源。"; return false; }
+        RenderGallery(preserveSelection: false);
+        _gallery.SelectItem(asset.StablePhysicalId);
+        ActivatePreview(asset);
+        _gallery.ScrollToItem(FilteredAssets().FindIndex(item => item.StablePhysicalId == asset.StablePhysicalId));
+        _status.Text = $"已定位 Unit #{physicalImageNumber}（三个动作文件的同一图号）" + _sSearch.DescribeReferences(asset);
+        return true;
     }
 
     public void ActivateGallery()
@@ -395,6 +419,8 @@ public sealed class ImageGridPage : UserControl
     private void RenderGallery(bool preserveSelection = true, bool refreshThumbnails = false)
     {
         if (_project == null) return;
+        try { _sSearch = new(SAssignmentReferencesProvider?.Invoke() ?? []); }
+        catch { _sSearch = new([]); }
         if (_renderCancellation == null) _renderCancellation = new CancellationTokenSource();
         if (refreshThumbnails)
         {
@@ -415,9 +441,7 @@ public sealed class ImageGridPage : UserControl
         => _assets.Where(asset => (!Has(ImagePageCapabilities.SPreviewSelector) ||
                                   asset.SMode == (_sMode.SelectedIndex == 1 ? SImageMode.Job : SImageMode.Person)) &&
                                  (!_idle.Checked || !_usedIds.Contains(asset.LogicalId)) &&
-                                  (_search.Length == 0 || asset.DisplayName.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
-                                   asset.Kind == ResourceKind.SComposite && $"S_{SResourceExchangeNaming.PhysicalId(asset):000}".Contains(_search, StringComparison.OrdinalIgnoreCase) ||
-                                   asset.LogicalId.ToString().Contains(_search, StringComparison.OrdinalIgnoreCase))).ToList();
+                                  (_search.Length == 0 || _sSearch.Matches(asset, _search))).ToList();
 
     private Control CreateCard(LogicalImageAsset asset, long generation)
     {
@@ -431,7 +455,7 @@ public sealed class ImageGridPage : UserControl
             cardCancellation.Dispose();
         };
         var check = new CheckBox { Text = asset.DisplayName, Dock = DockStyle.Top, Height = 30, Tag = "selector", Padding = new Padding(5, 0, 0, 0) };
-        _paletteTip.SetToolTip(check, asset.Status + "；勾选用于批量操作，点击缩略图设为当前项");
+        _paletteTip.SetToolTip(check, asset.Status + _sSearch.DescribeReferences(asset) + "；勾选用于批量操作，点击缩略图设为当前项");
         card.Controls.Add(check);
         card.Click += (_, _) => ActivatePreview(asset);
         if (_assetFailures.TryGetValue(asset.StablePhysicalId, out var failure))
@@ -487,6 +511,11 @@ public sealed class ImageGridPage : UserControl
         if (_project == null || IsDisposed || !_gallery.Enabled) return;
         _focusedAssetId = asset.StablePhysicalId;
         _gallery.FocusedAssetId = _focusedAssetId;
+        if (asset.Kind == ResourceKind.SComposite)
+        {
+            _status.Text = $"当前 Unit #{SResourceExchangeNaming.PhysicalId(asset)} · {asset.DisplayName}" + _sSearch.DescribeReferences(asset);
+            _paletteTip.SetToolTip(_status, _status.Text);
+        }
         if (IsAnimatedAsset(asset))
         {
             if (_assetFailures.TryGetValue(asset.StablePhysicalId, out var error)) _animationPreview.ShowFailure(asset, error);
@@ -948,6 +977,8 @@ public sealed class ImageGridPage : UserControl
         if (_project == null) return;
         var asset = FocusedAsset();
         if (asset == null) { ShowFocusRequired(); return; }
+        var snapshot = CaptureSources(asset.Frames.Select(frame => frame.SourcePath));
+        if (snapshot == null) return;
         try
         {
             var frames = _catalog.DecodeFrames(_project, asset);
@@ -955,7 +986,24 @@ public sealed class ImageGridPage : UserControl
             try
             {
                 if (dialog.ShowDialog(this) == DialogResult.OK)
-                    Commit(_rsImports.PlanImport(_project, asset, dialog.ResultFrames));
+                {
+                    var sections = dialog.ResultFrames.GroupBy(frame => (frame.Descriptor.SourcePath, frame.Descriptor.ImageNumber))
+                        .ToDictionary(group => group.Key, group =>
+                        {
+                            var first = group.First();
+                            return CreatePixelSection("帧", new Rectangle(Point.Empty, first.Bitmap.Size), 0, first.Descriptor, asset);
+                        });
+                    var plan = _rsImports.PlanImport(_project, asset, dialog.ResultFrames) with
+                    {
+                        ExpectedImages = dialog.ResultFrames.Select(frame =>
+                        {
+                            var section = sections[(frame.Descriptor.SourcePath, frame.Descriptor.ImageNumber)];
+                            return MutationImageExpectation.FromBitmap(frame.Descriptor, asset.Kind, frame.Bitmap,
+                                transparentColor: SectionTransparentColor(section));
+                        }).ToArray()
+                    };
+                    Commit(snapshot.Complete(plan));
+                }
             }
             finally { foreach (var frame in frames) frame.Dispose(); }
         }
@@ -1042,8 +1090,10 @@ public sealed class ImageGridPage : UserControl
                 : asset.Category == ImageCategory.StrategyAnimation ? LoadAnimationPlane(descriptor)
                 : PreviewLoader.LoadRepresentative(_project, _catalog, asset, descriptor.Turn)
                                ?? throw new InvalidOperationException("无法读取待编辑帧。");
+            var editSection = CreatePixelSection("图片", new Rectangle(Point.Empty, source.Size), 0, descriptor, asset);
+            ApplyEditorTransparency(source, editSection);
             using var editor = new PixelEditorDialog(source, asset.DisplayName,
-                [new PixelEditorSection("图片", new Rectangle(Point.Empty, source.Size), 0, descriptor.SourcePath)],
+                [editSection],
                 null, asset.Kind is not (ResourceKind.McallAnimation or ResourceKind.WeatherSpecial));
             if (editor.ShowDialog(this) != DialogResult.OK || editor.ResultBitmap == null) return;
             MutationPlan plan;
@@ -1056,6 +1106,9 @@ public sealed class ImageGridPage : UserControl
             {
                 using var stream = new MemoryStream();
                 editor.ResultBitmap.Save(stream, ImageFormat.Jpeg);
+                using var encoded = BmpPayloadService.Decode(stream.ToArray());
+                using var confirmation = new EncodedImagePreviewDialog(encoded, asset.DisplayName);
+                if (confirmation.ShowDialog(this) != DialogResult.OK) return;
                 plan = new MutationPlan(Guid.NewGuid().ToString("N"), MutationKind.PixelEdit,
                     "编辑战场地图底图 " + asset.DisplayName,
                     [new MutationFile(descriptor.SourcePath, stream.ToArray(), "替换地图 JPG")],
@@ -1090,7 +1143,7 @@ public sealed class ImageGridPage : UserControl
             {
                 if (editor.SaveMode == PixelSaveMode.AppendCopy)
                 {
-                    using var copy = new Bitmap(editor.ResultBitmap);
+                    using var copy = BmpPayloadService.CopyArgb(editor.ResultBitmap);
                     var candidate = DllBitmapMutation.BuildAppendNativeSinglesCandidate(descriptor.SourcePath, [copy]);
                     plan = new MutationPlan(Guid.NewGuid().ToString("N"), MutationKind.Append, "复制并追加 " + asset.DisplayName,
                         [new MutationFile(descriptor.SourcePath, candidate, "按原生 ID 追加独立 RT_BITMAP，保留素材尺寸")],
@@ -1133,6 +1186,31 @@ public sealed class ImageGridPage : UserControl
                 plan = _mutations.PlanReplaceSingleFrame(_project, asset, descriptor, editor.ResultBitmap,
                     editor.SaveMode == PixelSaveMode.AppendCopy);
             }
+            if (editor.SaveMode == PixelSaveMode.WriteCurrent)
+            {
+                var target = descriptor with { Width = source.Width, Height = source.Height };
+                if (asset.Kind == ResourceKind.MapPair)
+                {
+                    using var savedJpeg = BmpPayloadService.Decode(plan.Files.Single().CandidateBytes);
+                    plan = plan with { ExpectedImages = [MutationImageExpectation.FromBitmap(target, asset.Kind, savedJpeg)] };
+                }
+                else if (asset.Category == ImageCategory.StrategyAnimation)
+                {
+                    using var package = StrategyAnimationDecoder.Decode(_project, StrategyAnimationResourceCodec.ReadPackageBytes(descriptor));
+                    plan = plan with { ExpectedImages = [MutationImageExpectation.FromBitmap(
+                        target with { FrameIndex = package.PlaybackSequence[0] }, asset.Kind, editor.ResultBitmap, true,
+                        SectionTransparentColor(editSection))] };
+                }
+                else if (asset.Category is ImageCategory.ItemIcon or ImageCategory.StrategyIcon)
+                    plan = plan with { ExpectedImages = [MutationImageExpectation.FromBitmap(target, asset.Kind, editor.ResultBitmap,
+                        transparentColor: SectionTransparentColor(editSection))] };
+                else if (asset.Kind == ResourceKind.DllBitmap)
+                    plan = plan with { ExpectedImages = asset.Frames.Select(frame => MutationImageExpectation.FromBitmap(
+                        frame with { Width = editor.ResultBitmap.Width, Height = editor.ResultBitmap.Height }, asset.Kind, editor.ResultBitmap,
+                        transparentColor: SectionTransparentColor(editSection))).ToArray() };
+                else plan = plan with { ExpectedImages = [MutationImageExpectation.FromBitmap(target, asset.Kind, editor.ResultBitmap,
+                    transparentColor: SectionTransparentColor(editSection))] };
+            }
             CommitVerified(plan);
         }
         catch (Exception ex) { ShowError(ex); }
@@ -1160,31 +1238,31 @@ public sealed class ImageGridPage : UserControl
             var height = sourceSections.Sum(section => section.Height);
             using var megaCanvas = new Bitmap(width, height, PixelFormat.Format32bppArgb);
             var placements = new List<(EditableSourceSection Source, PixelEditorSection Ui, FrameDescriptor[] Frames)>();
-            using (var graphics = Graphics.FromImage(megaCanvas))
+            var y = 0;
+            foreach (var section in sourceSections)
             {
-                graphics.Clear(Color.Transparent);
-                graphics.CompositingMode = System.Drawing.Drawing2D.CompositingMode.SourceCopy;
-                var y = 0;
-                foreach (var section in sourceSections)
+                var descriptors = asset.Frames.Where(frame =>
+                        frame.SourcePath.Equals(section.SourcePath, StringComparison.OrdinalIgnoreCase) &&
+                        frame.ImageNumber == section.ImageNumber)
+                    .OrderBy(frame => frame.FrameIndex).ToArray();
+                if (descriptors.Length != section.FrameCount ||
+                    !descriptors.Select(frame => frame.FrameIndex).SequenceEqual(Enumerable.Range(0, section.FrameCount)))
+                    throw new InvalidDataException($"{section.Name} 动作条帧数不完整，已拒绝打开不完整的编辑画布。");
+                foreach (var descriptor in descriptors)
                 {
-                    var descriptors = asset.Frames.Where(frame =>
-                            frame.SourcePath.Equals(section.SourcePath, StringComparison.OrdinalIgnoreCase) &&
-                            frame.ImageNumber == section.ImageNumber)
-                        .OrderBy(frame => frame.FrameIndex).ToArray();
-                    foreach (var descriptor in descriptors)
-                    {
-                        var frame = decoded.First(item => SameDescriptor(item.Descriptor, descriptor));
-                        graphics.DrawImageUnscaled(frame.Bitmap, 0, y + descriptor.FrameIndex * descriptor.Height);
-                    }
-                    var bounds = new Rectangle(0, y, section.Width, section.Height);
-                    var ui = new PixelEditorSection(section.Name, bounds, section.FrameHeight, section.SourcePath);
-                    placements.Add((section, ui, descriptors));
-                    y += section.Height;
+                    var frame = decoded.First(item => SameDescriptor(item.Descriptor, descriptor));
+                    BmpPayloadService.CopyPixels(frame.Bitmap, new Rectangle(Point.Empty, frame.Bitmap.Size),
+                        megaCanvas, new Point(0, y + descriptor.FrameIndex * descriptor.Height));
                 }
+                var bounds = new Rectangle(0, y, section.Width, section.Height);
+                var ui = CreatePixelSection(section.Name, bounds, section.FrameHeight, descriptors[0], asset);
+                ApplyEditorTransparency(megaCanvas, ui);
+                placements.Add((section, ui, descriptors));
+                y += section.Height;
             }
 
             using var editor = new PixelEditorDialog(megaCanvas, asset.DisplayName,
-                placements.Select(item => item.Ui).ToArray(), new PaletteService().Load(_project),
+                placements.Select(item => item.Ui).ToArray(), null,
                 allowAppendCopy: asset.Kind != ResourceKind.SComposite || asset.SMode != SImageMode.Job);
             if (editor.ShowDialog(this) != DialogResult.OK || editor.ResultBitmap == null) return;
             var editedFrames = new List<DecodedFrame>(asset.Frames.Count);
@@ -1206,6 +1284,20 @@ public sealed class ImageGridPage : UserControl
                 var plan = editor.SaveMode == PixelSaveMode.AppendCopy
                     ? _rsImports.PlanAppendCopy(_project, asset, editedFrames, SelectedSContext().Turn)
                     : _rsImports.PlanImport(_project, asset, editedFrames);
+                plan = plan with { ExpectedImages = editedFrames.Select(frame =>
+                {
+                    var target = frame.Descriptor;
+                    if (editor.SaveMode == PixelSaveMode.AppendCopy)
+                    {
+                        var groups = asset.Frames.Where(item => item.SourcePath.Equals(target.SourcePath, StringComparison.OrdinalIgnoreCase))
+                            .Select(item => item.ImageNumber).Distinct().ToArray();
+                        target = target with { ImageNumber = E5Archive.OpenFresh(target.SourcePath).Entries.Count + Array.IndexOf(groups, target.ImageNumber) + 1 };
+                    }
+                    var ui = placements.Single(placement => placement.Source.SourcePath.Equals(frame.Descriptor.SourcePath, StringComparison.OrdinalIgnoreCase) &&
+                        placement.Source.ImageNumber == frame.Descriptor.ImageNumber).Ui;
+                    return MutationImageExpectation.FromBitmap(target, asset.Kind, frame.Bitmap,
+                        transparentColor: SectionTransparentColor(ui));
+                }).ToArray() };
                 CommitVerified(plan);
             }
             finally { foreach (var frame in editedFrames) frame.Dispose(); }
@@ -1219,7 +1311,69 @@ public sealed class ImageGridPage : UserControl
         using var package = StrategyAnimationDecoder.Decode(_project!, bytes);
         // Editing targets the native plane. Playback may add record offsets or
         // opacity on a larger canvas, which must never be baked into storage.
-        return new Bitmap(package.PlaneFrames[package.PlaybackSequence[0]]);
+        return BmpPayloadService.CopyArgb(package.PlaneFrames[package.PlaybackSequence[0]]);
+    }
+
+    private PixelEditorSection CreatePixelSection(string name, Rectangle bounds, int frameHeight,
+        FrameDescriptor descriptor, LogicalImageAsset asset)
+    {
+        byte[] bytes;
+        if (asset.Category == ImageCategory.StrategyAnimation)
+        {
+            using var package = StrategyAnimationDecoder.Decode(_project!, StrategyAnimationResourceCodec.ReadPackageBytes(descriptor));
+            if (package.PayloadFormat == "RAW8")
+                return new(name, bounds, frameHeight, descriptor.SourcePath,
+                    new PaletteService().RequireWritePalette(_project!), "RAW8", 0);
+            bytes = package.EncodedImageBytes;
+        }
+        else if (asset.Kind == ResourceKind.DllBitmap)
+        {
+            var dib = DllBitmapArchive.Read(descriptor.SourcePath).Single(entry =>
+                entry.Id == descriptor.ImageNumber && entry.Language == descriptor.SourceOffset).Dib;
+            var header = BinaryPrimitives.ReadInt32LittleEndian(dib);
+            var core = header == 12;
+            var bits = BinaryPrimitives.ReadUInt16LittleEndian(dib.AsSpan(core ? 10 : 14));
+            if (bits is 4 or 8)
+            {
+                var used = core ? 0 : BinaryPrimitives.ReadInt32LittleEndian(dib.AsSpan(32));
+                var count = used == 0 ? 1 << bits : used;
+                var stride = core ? 3 : 4;
+                var palette = Enumerable.Range(0, count).Select(index =>
+                    Color.FromArgb(dib[header + index * stride + 2], dib[header + index * stride + 1], dib[header + index * stride])).ToArray();
+                var transparent = Array.FindIndex(palette, color => color.R == 0 && color.G == 0 && color.B == 255);
+                return new(name, bounds, frameHeight, descriptor.SourcePath, palette, $"RT_BITMAP {bits}位", transparent >= 0 ? transparent : null);
+            }
+            return new(name, bounds, frameHeight, descriptor.SourcePath, null, $"RT_BITMAP {bits}位");
+        }
+        else if (Path.GetExtension(descriptor.SourcePath).Equals(".e5", StringComparison.OrdinalIgnoreCase))
+            bytes = E5Archive.OpenFresh(descriptor.SourcePath).ReadDecoded(descriptor.ImageNumber);
+        else bytes = File.ReadAllBytes(descriptor.SourcePath);
+        var embedded = BmpPayloadService.TryGetEmbeddedPalette(bytes);
+        if (embedded != null)
+        {
+            var key = Enumerable.Range(0, embedded.Count).FirstOrDefault(index =>
+                embedded[index].G == 0 && embedded[index].B == 255 && embedded[index].R is 247 or 255, -1);
+            return new(name, bounds, frameHeight, descriptor.SourcePath, embedded, "BMP 索引色", key >= 0 ? key : null);
+        }
+        if (!ImageRendering.IsStandardImage(bytes))
+            return new(name, bounds, frameHeight, descriptor.SourcePath,
+                new PaletteService().RequireWritePalette(_project!), "RAW8", 0);
+        return new(name, bounds, frameHeight, descriptor.SourcePath, null,
+            bytes[0] == 0x89 ? "PNG ARGB" : bytes[0] == 'B' ? "BMP RGB" : "JPEG RGB");
+    }
+
+    private static Color? SectionTransparentColor(PixelEditorSection section)
+        => section.Palette != null && section.TransparentIndex is { } index ? section.Palette[index] : null;
+
+    private static void ApplyEditorTransparency(Bitmap bitmap, PixelEditorSection section)
+    {
+        if (SectionTransparentColor(section) is not { } key) return;
+        for (var y = section.Bounds.Top; y < section.Bounds.Bottom; y++)
+        for (var x = section.Bounds.Left; x < section.Bounds.Right; x++)
+        {
+            var color = bitmap.GetPixel(x, y);
+            if (color.R == key.R && color.G == key.G && color.B == key.B) bitmap.SetPixel(x, y, Color.Transparent);
+        }
     }
 
     private static bool SameDescriptor(FrameDescriptor left, FrameDescriptor right)
@@ -1252,8 +1406,12 @@ public sealed class ImageGridPage : UserControl
     {
         if (!Has(ImagePageCapabilities.ReferenceAtlas) || _project == null) return;
         var assets = SelectedAssets();
+        if (assets.Count == 0 && FocusedAsset() is { } current) assets = [current];
         if (assets.Count == 0) { ShowSelectionRequired(); return; }
-        if (!ChooseSImportNaming(assets, out var naming)) return;
+        var naming = RsImportNaming.Physical;
+        if (assets.Count > 1 && !ChooseSImportNaming(assets, out naming)) return;
+        try { foreach (var asset in assets) SReferenceTargetGuard.Validate(_project, asset); }
+        catch (Exception ex) { ShowError(ex); return; }
         var sourceSnapshot = CaptureSources(assets.SelectMany(asset => asset.Frames).Select(frame => frame.SourcePath));
         if (sourceSnapshot == null) return;
         void CommitVerified(MutationPlan candidate, bool reload = true) => Commit(sourceSnapshot.Complete(candidate), reload);
@@ -1370,6 +1528,12 @@ public sealed class ImageGridPage : UserControl
         if (plan.RequiresRiskConfirmation && MessageBox.Show(this, string.Join(Environment.NewLine, plan.Warnings),
                 "确认立即写回", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return false;
         var result = _mutations.Commit(_project, plan);
+        if (result.Outcome == MutationOutcome.NoChange)
+        {
+            _status.Text = result.Summary + "：" + string.Join("；", result.Diagnostics);
+            _paletteTip.SetToolTip(_status, _status.Text);
+            return false;
+        }
         if (!result.Success) throw new InvalidOperationException(string.Join(Environment.NewLine, result.Diagnostics));
         if (_project.TryGetResource("Pmap.e5") is { } terrainPath && result.WrittenPaths.Any(path =>
                 Path.GetFullPath(path).Equals(Path.GetFullPath(terrainPath), StringComparison.OrdinalIgnoreCase)))
@@ -1394,7 +1558,17 @@ public sealed class ImageGridPage : UserControl
 
     private MutationPlanningSnapshot? CaptureSources(IEnumerable<string> paths)
     {
-        try { return MutationPlanningSnapshot.Capture(paths); }
+        try
+        {
+            var dependencies = paths.Concat(_project == null ? [] : new[]
+            {
+                _project.TryGetResource("Spalet.e5"), Path.Combine(_project.RootPath, "tsb"),
+                Path.Combine(_project.RootPath, "Assets", "Palettes", "tsb")
+            }.Where(path => path != null && File.Exists(path)).Cast<string>()).ToArray();
+            var snapshot = MutationPlanningSnapshot.Capture(dependencies);
+            foreach (var path in dependencies) E5Archive.Invalidate(path);
+            return snapshot;
+        }
         catch (Exception ex) { ShowError(ex); return null; }
     }
 

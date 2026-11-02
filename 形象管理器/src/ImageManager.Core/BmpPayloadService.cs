@@ -96,7 +96,11 @@ public static class BmpPayloadService
             if (layout.Bits <= 8)
             {
                 _ = TryGetIndexes(original, out var oldIndexes);
-                var indexes = QuantizePreservingIndexes(edited, TryGetEmbeddedPalette(original)!, oldIndexes);
+                var palette = TryGetEmbeddedPalette(original)!;
+                var transparentIndex = Enumerable.Range(0, palette.Count).FirstOrDefault(index =>
+                    palette[index].G == 0 && palette[index].B == 255 && palette[index].R is 247 or 255, -1);
+                var indexes = QuantizePreservingIndexes(edited, palette, oldIndexes,
+                    transparentIndex >= 0 ? transparentIndex : null);
                 WriteIndexes(result, layout, indexes);
             }
             else
@@ -158,7 +162,8 @@ public static class BmpPayloadService
         return result;
     }
 
-    public static byte[] QuantizePreservingIndexes(Bitmap edited, IReadOnlyList<Color> palette, byte[]? originalIndexes = null)
+    public static byte[] QuantizePreservingIndexes(Bitmap edited, IReadOnlyList<Color> palette, byte[]? originalIndexes = null,
+        int? transparentIndex = 0)
     {
         if (palette.Count is < 1 or > 256) throw new InvalidDataException("没有可用于写入的有效调色板。");
         var pixels = ReadPixels(edited);
@@ -171,14 +176,19 @@ public static class BmpPayloadService
             var at = i * 4;
             var b = pixels[at]; var g = pixels[at + 1]; var r = pixels[at + 2];
             var transparent = pixels[at + 3] < 128;
+            if (transparent && transparentIndex == null)
+                throw new InvalidDataException("目标 BMP 色表没有透明键色，无法保存透明像素；请改用该图片的实际颜色。");
             if (originalIndexes != null && originalIndexes[i] < palette.Count)
             {
                 var old = palette[originalIndexes[i]];
-                if (old.R == r && old.G == g && old.B == b || transparent &&
-                    (originalIndexes[i] == 0 || old.G == 0 && old.B == 255 && old.R >= 247))
+                // Transparency is a change even when the hidden RGB happens to
+                // match the old opaque colour (notably an erased black pixel).
+                if (transparent
+                    ? originalIndexes[i] == transparentIndex || old.G == 0 && old.B == 255 && old.R >= 247
+                    : old.R == r && old.G == g && old.B == b)
                 { indexes[i] = originalIndexes[i]; continue; }
             }
-            if (transparent) { indexes[i] = 0; continue; }
+            if (transparent) { indexes[i] = checked((byte)transparentIndex!.Value); continue; }
             var key = r << 16 | g << 8 | b;
             if (!colors.TryGetValue(key, out var best))
             {
@@ -198,20 +208,33 @@ public static class BmpPayloadService
         return indexes;
     }
 
-    public static byte[] ReadPixels(Bitmap source)
+    /// <summary>Copies ARGB values without GDI+ premultiplication or colour rounding.</summary>
+    public static Bitmap CopyArgb(Bitmap source) => ImageImportRasterNormalization.CopyArgb(source);
+
+    public static void CopyPixels(Bitmap source, Rectangle sourceBounds, Bitmap target, Point destination)
     {
-        using var bitmap = new Bitmap(source.Width, source.Height, PixelFormat.Format32bppArgb);
-        using (var graphics = Graphics.FromImage(bitmap))
-        { graphics.CompositingMode = System.Drawing.Drawing2D.CompositingMode.SourceCopy; graphics.DrawImageUnscaled(source, 0, 0); }
-        var data = bitmap.LockBits(new Rectangle(0, 0, bitmap.Width, bitmap.Height), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+        if (!new Rectangle(Point.Empty, source.Size).Contains(sourceBounds) ||
+            !new Rectangle(Point.Empty, target.Size).Contains(new Rectangle(destination, sourceBounds.Size)))
+            throw new ArgumentOutOfRangeException(nameof(sourceBounds));
+        var input = source.LockBits(sourceBounds, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
         try
         {
-            var pixels = new byte[checked(bitmap.Width * bitmap.Height * 4)];
-            for (var y = 0; y < bitmap.Height; y++) Marshal.Copy(IntPtr.Add(data.Scan0, y * data.Stride), pixels, y * bitmap.Width * 4, bitmap.Width * 4);
-            return pixels;
+            var output = target.LockBits(new Rectangle(destination, sourceBounds.Size), ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+            try
+            {
+                var row = new byte[checked(sourceBounds.Width * 4)];
+                for (var y = 0; y < sourceBounds.Height; y++)
+                {
+                    Marshal.Copy(IntPtr.Add(input.Scan0, y * input.Stride), row, 0, row.Length);
+                    Marshal.Copy(row, 0, IntPtr.Add(output.Scan0, y * output.Stride), row.Length);
+                }
+            }
+            finally { target.UnlockBits(output); }
         }
-        finally { bitmap.UnlockBits(data); }
+        finally { source.UnlockBits(input); }
     }
+
+    public static byte[] ReadPixels(Bitmap source) => ImageImportRasterNormalization.ReadArgbPixels(source);
 
     public static int GetStandardImageLength(byte[] bytes)
     {

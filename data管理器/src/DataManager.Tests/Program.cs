@@ -1,3 +1,7 @@
+﻿﻿
+using System.Globalization;
+using DataManager.Core.Scanner;
+
 namespace DataManager.Tests;
 
 internal static class Program
@@ -14,6 +18,173 @@ internal static class Program
         using var historyScope = DataManager.Core.History.ProjectHistoryPaths.UseBaseDirectory(testHistoryRoot);
         try
         {
+            if (args.FirstOrDefault() == "--image-writeback-integration")
+            {
+                ImageWritebackIntegrationTests.Run(args.Length > 1 ? Path.GetFullPath(args[1]) : Directory.GetCurrentDirectory());
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--extended-item-storage" && args.Length >= 2)
+            {
+                ExtendedItemStorageTests.Run(Path.GetFullPath(args[1]));
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--operand-sharing-safety-tests")
+            {
+                OperandSharingSafetyTests.Run();
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--engine-effect-report-text" && args.Length >= 2)
+            {
+                EngineEffectReportTextTests.Run(Path.GetFullPath(args[1]));
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--engine-scan-lifecycle" && args.Length >= 3)
+            {
+                EngineScanLifecycleTests.Run(Path.GetFullPath(args[1]), Path.GetFullPath(args[2]));
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--engine-effect-performance" && args.Length >= 2)
+            {
+                EngineEffectScanPerformanceTests.Run(Path.GetFullPath(args[1]));
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--effect-binding-groups" && args.Length >= 2)
+            {
+                EffectBindingGroupTests.Run(Path.GetFullPath(args[1]));
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--three-base-assignments" && args.Length >= 2)
+            {
+                ThreeBaseAssignmentTests.Run(Path.GetFullPath(args[1]));
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--effect-assignment-layouts" && args.Length >= 2)
+            {
+                EffectAssignmentLayoutTests.Run(Path.GetFullPath(args[1]));
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--engine-effect-contracts" && args.Length >= 2)
+            {
+                EngineEffectContractTests.Run(Path.GetFullPath(args[1]));
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--engine-effect-native" && args.Length >= 2)
+            {
+                NativeEffectAdapterTests.Run(Path.GetFullPath(args[1]));
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--engine-disasm" && args.Length >= 3)
+            {
+                DumpDisassembly(args, EngineEffectDisassemblyProbe.Dump);
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--engine-find-pattern" && args.Length >= 3)
+            {
+                var root = Path.GetFullPath(args[1]);
+                var exe = Path.Combine(root, "Ekd5.exe");
+                var pattern = args[2].Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(text => Convert.ToByte(text, 16)).ToArray();
+                foreach (var hit in EngineEffectDisassemblyProbe.FindPattern(exe, pattern))
+                    Console.WriteLine($"0x{hit:X8}");
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--engine-disasm-fn" && args.Length >= 3)
+            {
+                var root = Path.GetFullPath(args[1]);
+                var exe = Path.Combine(root, "Ekd5.exe");
+                foreach (var line in EngineEffectDisassemblyProbe.DumpFunction(exe, Convert.ToUInt32(args[2], 16)))
+                    Console.WriteLine(line);
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--engine-disasm-bytes" && args.Length >= 3)
+            {
+                DumpDisassembly(args, EngineEffectDisassemblyProbe.DumpBytes);
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--engine-constants" && args.Length >= 2)
+            {
+                EngineConstantTests.Run(Path.GetFullPath(args[1]));
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--engine-constant-audit" && args.Length >= 2)
+            {
+                EngineConstantAuditTests.Run(Path.GetFullPath(args[1]));
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--battle-formulas" && args.Length >= 2)
+            {
+                EngineBattleFormulaTests.Run(Path.GetFullPath(args[1]));
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--battle-formula-write" && args.Length >= 2)
+            {
+                EngineBattleFormulaWriteTests.Run(Path.GetFullPath(args[1]));
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--battle-formula-status" && args.Length >= 2)
+            {
+                var root = Path.GetFullPath(args[1]);
+                var version = args.Length > 2 ? args[2] : null;
+                foreach (var value in new EngineBattleFormulaService().Read(
+                             Path.Combine(root, "Ekd5.exe"), version))
+                {
+                    Console.WriteLine($"{value.Definition.Category}\t{value.Definition.DisplayName}\t" +
+                        $"{value.Definition.Value64}/{value.Definition.Value65}/{value.Definition.Value66}\t" +
+                        $"constants={value.Constants.Count}\teditable={value.EditableCount}");
+                    foreach (var constant in value.Constants)
+                        Console.WriteLine($"  {constant.Constant.Name}\t{constant.CurrentValue}\t" +
+                            $"{constant.Status}\t{constant.Range}\tshared={constant.Shared}\t{constant.Diagnostic}");
+                }
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--engine-constant-status" && args.Length >= 2)
+            {
+                var root = Path.GetFullPath(args[1]);
+                var workspace = new DataManager.Core.Editing.ProjectWorkspace();
+                workspace.Open(root);
+                Console.WriteLine($"PROFILE {workspace.ActiveProfile.ProfileId} {workspace.ActiveProfile.Profile.Version}");
+                foreach (var value in new EngineConstantService().Read(workspace))
+                    Console.WriteLine($"{value.Definition.Id}\t{value.Definition.DisplayName}\t" +
+                        $"{value.NumericValue?.ToString() ?? value.TextValue}\t" +
+                        $"{(value.SignatureMatches ? "可改" : "只读")}\t" +
+                        $"{value.Definition.Minimum}..{value.Definition.Maximum}\t{value.Diagnostic}");
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--engine-constant-relocations" && args.Length >= 2)
+            {
+                var root = Path.GetFullPath(args[1]);
+                var version = args.Length > 2 ? args[2] : null;
+                var checks = new EngineConstantService()
+                    .ProbeRelocations(Path.Combine(root, "Ekd5.exe"), version);
+                foreach (var check in checks.Where(item => item.Applicable))
+                    Console.WriteLine($"{check.DefinitionId}\t{check.Label}\t" +
+                        $"exact={check.ExactMatch}\trelocate={check.Relocate}\thits={check.SignatureHits}\t" +
+                        string.Join(',', check.HitAddresses.Select(address => $"0x{address:X8}")));
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--engine-constant-contexts" && args.Length >= 2)
+            {
+                var root = Path.GetFullPath(args[1]);
+                var version = args.Length > 2 ? args[2] : null;
+                foreach (var suggestion in new EngineConstantService()
+                             .SuggestContexts(Path.Combine(root, "Ekd5.exe"), version))
+                    Console.WriteLine($"{suggestion.DefinitionId}\t{suggestion.Label}\t" +
+                        $"hits={suggestion.Hits}\taddress=0x{suggestion.HitAddress:X8}\t" +
+                        $"prefix=[{string.Join(",", suggestion.Prefix.Select(value => $"0x{value:X2}"))}]\t" +
+                        $"suffix=[{string.Join(",", suggestion.Suffix.Select(value => $"0x{value:X2}"))}]");
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--engine-effect-assignments" && args.Length >= 2)
+            {
+                EngineEffectAssignmentTests.Run(Path.GetFullPath(args[1]));
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--assignment-pool-audit" && args.Length >= 2)
+            {
+                AssignmentPoolAuditTests.Run(Path.GetFullPath(args[1]),
+                    args.Length > 2 ? Path.GetFullPath(args[2]) : null);
+                return 0;
+            }
             if (args.FirstOrDefault() is "--save-appearance" or "--save-appearance-service" or "--save-appearance-images" or "--save-appearance-integration")
             {
                 var root = args.Length > 1 ? Path.GetFullPath(args[1]) : Directory.GetCurrentDirectory();
@@ -86,6 +257,21 @@ internal static class Program
                 Console.WriteLine("SAVE_HISTORY_21_REGRESSION_TESTS_OK");
                 return 0;
             }
+            if (args.FirstOrDefault() == "--record-presentation")
+            {
+                RecordPresentationTests.Run();
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--record-query-ui" && args.Length >= 2)
+            {
+                RecordQueryUiTests.Run(Path.GetFullPath(args[1]));
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--person-table-projection" && args.Length >= 2)
+            {
+                PersonTableProjectionTests.Run(Path.GetFullPath(args[1]));
+                return 0;
+            }
             if (args.FirstOrDefault() == "--ui-font-scale")
             {
                 UiFontScaleTests.Run(Path.GetFullPath(args[1]), Path.GetFullPath(args[2]));
@@ -109,6 +295,47 @@ internal static class Program
             if (args.FirstOrDefault() == "--ui-cleanup-navigation")
             {
                 UiCleanupNavigationTests.Run(args.Length > 1 ? Path.GetFullPath(args[1]) : Path.Combine(Directory.GetCurrentDirectory(), "基底", "加强版6.5未加密版"));
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--engine-effect-scan" && args.Length >= 2)
+            {
+                EngineEffectScanTests.Run(Path.GetFullPath(args[1]), args.Length > 2 ? Path.GetFullPath(args[2]) : null);
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--engine-effect-evidence" && args.Length >= 3)
+            {
+                EngineEffectEvidenceTests.Run(Path.GetFullPath(args[1]), Path.GetFullPath(args[2]));
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--engine-effect-coverage" && args.Length >= 2)
+            {
+                EngineEffectCoverageTests.Run(Path.GetFullPath(args[1]), args.Length > 2 ? Path.GetFullPath(args[2]) : null);
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--engine-effect-constant-coverage" && args.Length >= 2)
+            {
+                EngineEffectConstantCoverageTests.Run(Path.GetFullPath(args[1]),
+                    args.Length > 2 ? Path.GetFullPath(args[2]) : null);
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--jump-table-probe" && args.Length >= 2)
+            {
+                JumpTableProbeTests.Run(Path.GetFullPath(args[1]));
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--engine-effect-write" && args.Length >= 2)
+            {
+                EngineEffectWriteTests.Run(Path.GetFullPath(args[1]));
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--engine-effect-ui" && args.Length >= 2)
+            {
+                EngineEffectUiTests.Run(Path.GetFullPath(args[1]), args.Length > 2 ? Path.GetFullPath(args[2]) : null);
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--engine-assignment-ui" && args.Length >= 3)
+            {
+                EngineAssignmentUiTests.Run(Path.GetFullPath(args[1]), Path.GetFullPath(args[2]));
                 return 0;
             }
             if (args.FirstOrDefault() == "--equipment-types")
@@ -230,6 +457,18 @@ internal static class Program
             {
                 AtlasImportDialogTests.Run();
                 Console.WriteLine("ATLAS_IMPORT_DIALOG_TESTS_OK");
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--atlas-ui-acceptance")
+            {
+                var repository = args.Length > 1 ? Path.GetFullPath(args[1]) : TestSupport.RepositoryRootFromBase(basePath);
+                AtlasImportDialogTests.RunAcceptance(repository, args.Length > 2 ? args[2] : null);
+                Console.WriteLine("ATLAS_UI_ACCEPTANCE_TESTS_OK");
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--s-image-location")
+            {
+                SImageLocationTests.Run();
                 return 0;
             }
             if (args.FirstOrDefault() == "--animation-preview-ui")
@@ -406,5 +645,15 @@ internal static class Program
         {
             if (Directory.Exists(testHistoryRoot)) Directory.Delete(testHistoryRoot, true);
         }
+    }
+
+    private static void DumpDisassembly(string[] arguments,
+        Func<string, uint, int, IReadOnlyList<string>> dump)
+    {
+        var root = Path.GetFullPath(arguments[1]);
+        var exe = Path.Combine(root, "Ekd5.exe");
+        var address = Convert.ToUInt32(arguments[2], 16);
+        var count = arguments.Length > 3 ? Convert.ToInt32(arguments[3], CultureInfo.InvariantCulture) : 96;
+        foreach (var line in dump(exe, address, count)) Console.WriteLine(line);
     }
 }

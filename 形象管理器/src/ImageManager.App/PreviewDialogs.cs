@@ -112,7 +112,7 @@ public sealed class AllFramesDialog : Form
         StartPosition = FormStartPosition.CenterParent;
         AutoScaleMode = AutoScaleMode.Dpi;
         KeyPreview = true;
-        _frames = frames.Select(frame => new DecodedFrame(frame.Descriptor, new Bitmap(frame.Bitmap),
+        _frames = frames.Select(frame => new DecodedFrame(frame.Descriptor, BmpPayloadService.CopyArgb(frame.Bitmap),
             frame.PaletteIndexes?.ToArray(), frame.PaletteBgra?.ToArray())).ToList();
 
         var split = new SplitContainer
@@ -189,7 +189,7 @@ public sealed class AllFramesDialog : Form
             var picture = new PictureBox
             {
                 Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom, BackColor = Color.FromArgb(235, 237, 239),
-                Image = new Bitmap(frame.Bitmap)
+                Image = BmpPayloadService.CopyArgb(frame.Bitmap)
             };
             picture.Click += (_, _) => SelectFrame(frameIndex);
             panel.Controls.Add(PreviewImageLayout.CreateViewport(picture));
@@ -224,10 +224,10 @@ public sealed class AllFramesDialog : Form
     {
         if (_frames.Count == 0) return;
         var frame = _frames[_selectedIndex];
-        var before = new Bitmap(frame.Bitmap);
+        var before = BmpPayloadService.CopyArgb(frame.Bitmap);
         var after = Shift(frame.Bitmap, dx * amount, dy * amount);
         ReplaceFrame(_selectedIndex, after);
-        _undo.Push(new FrameChange(_selectedIndex, before, new Bitmap(after)));
+        _undo.Push(new FrameChange(_selectedIndex, before, BmpPayloadService.CopyArgb(after)));
         ClearStack(_redo);
         _dirty = true;
         RefreshSelectedThumbnail();
@@ -236,9 +236,9 @@ public sealed class AllFramesDialog : Form
     private void Undo()
     {
         if (!_undo.TryPop(out var change)) return;
-        var current = new Bitmap(_frames[change.Index].Bitmap);
-        ReplaceFrame(change.Index, new Bitmap(change.Before));
-        _redo.Push(new FrameChange(change.Index, new Bitmap(change.Before), current));
+        var current = BmpPayloadService.CopyArgb(_frames[change.Index].Bitmap);
+        ReplaceFrame(change.Index, BmpPayloadService.CopyArgb(change.Before));
+        _redo.Push(new FrameChange(change.Index, BmpPayloadService.CopyArgb(change.Before), current));
         _selectedIndex = change.Index;
         RefreshSelectedThumbnail();
     }
@@ -246,9 +246,9 @@ public sealed class AllFramesDialog : Form
     private void Redo()
     {
         if (!_redo.TryPop(out var change)) return;
-        var current = new Bitmap(_frames[change.Index].Bitmap);
-        ReplaceFrame(change.Index, new Bitmap(change.After));
-        _undo.Push(new FrameChange(change.Index, current, new Bitmap(change.After)));
+        var current = BmpPayloadService.CopyArgb(_frames[change.Index].Bitmap);
+        ReplaceFrame(change.Index, BmpPayloadService.CopyArgb(change.After));
+        _undo.Push(new FrameChange(change.Index, current, BmpPayloadService.CopyArgb(change.After)));
         _selectedIndex = change.Index;
         RefreshSelectedThumbnail();
     }
@@ -267,7 +267,7 @@ public sealed class AllFramesDialog : Form
         if (panel?.Controls.OfType<Panel>().SelectMany(viewport => viewport.Controls.OfType<PictureBox>()).FirstOrDefault() is { } picture)
         {
             var old = picture.Image;
-            picture.Image = new Bitmap(_frames[_selectedIndex].Bitmap);
+            picture.Image = BmpPayloadService.CopyArgb(_frames[_selectedIndex].Bitmap);
             old?.Dispose();
         }
         SelectFrame(_selectedIndex);
@@ -276,10 +276,12 @@ public sealed class AllFramesDialog : Form
     private static Bitmap Shift(Bitmap source, int dx, int dy)
     {
         var result = new Bitmap(source.Width, source.Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-        using var graphics = Graphics.FromImage(result);
-        graphics.Clear(Color.Transparent);
-        graphics.CompositingMode = System.Drawing.Drawing2D.CompositingMode.SourceCopy;
-        graphics.DrawImageUnscaled(source, dx, dy);
+        var origin = new Point(Math.Max(0, -dx), Math.Max(0, -dy));
+        var width = Math.Min(source.Width - origin.X, source.Width - Math.Max(0, dx));
+        var height = Math.Min(source.Height - origin.Y, source.Height - Math.Max(0, dy));
+        if (width > 0 && height > 0)
+            BmpPayloadService.CopyPixels(source, new Rectangle(origin, new Size(width, height)),
+                result, new Point(Math.Max(0, dx), Math.Max(0, dy)));
         return result;
     }
 

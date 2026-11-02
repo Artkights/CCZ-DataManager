@@ -45,7 +45,7 @@ public static class FacePayloadService
 
     private static Bitmap FitPortrait(Bitmap image, Size target)
     {
-        if (image.Size == target) return new Bitmap(image);
+        if (image.Size == target) return BmpPayloadService.CopyArgb(image);
         var scale = Math.Max((double)target.Width / image.Width, (double)target.Height / image.Height);
         var sourceWidth = target.Width / scale;
         var sourceHeight = target.Height / scale;

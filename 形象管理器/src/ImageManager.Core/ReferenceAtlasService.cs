@@ -22,7 +22,7 @@ public sealed class ReferenceAtlasService : IReferenceAtlasService
         IReadOnlyList<DecodedFrame> frames, Color keyColor)
         => ExportCore(destinationDirectory, asset, frames, keyColor,
             asset.Kind == ResourceKind.RComposite ? $"R{asset.LogicalId:000}" : SResourceExchangeNaming.BaseName(asset),
-            new ReferenceAtlasExportOptions { IncludeTransparent = true });
+            new ReferenceAtlasExportOptions { Scale = 1, IncludeTransparent = true });
 
     public ReferenceAtlasExportResult Export(string destinationDirectory, ReferenceAtlasContext context,
         Color keyColor, ReferenceAtlasExportOptions? options = null)
@@ -68,8 +68,13 @@ public sealed class ReferenceAtlasService : IReferenceAtlasService
             ? Path.Combine(destinationDirectory, baseName + ".transparent.png") : string.Empty;
         SaveScaledPng(keyed, pngPath, options.Scale);
         if (options.IncludeTransparent) SaveScaledPng(transparent, transparentPath, options.Scale);
+        var manifestPath = Path.Combine(destinationDirectory, baseName + ".atlas.json");
+        AtlasManifest.Create(asset, layout, options.Scale).Save(manifestPath);
+        var guidePath = Path.Combine(destinationDirectory, baseName + ".动作对照.png");
+        SaveGuide(keyed, layout, guidePath, baseName, options.Scale);
         var promptPath = UpdatePromptDocument(destinationDirectory, asset, layout, keyColor, baseName, options);
-        return new ReferenceAtlasExportResult(pngPath, transparentPath, promptPath);
+        return new ReferenceAtlasExportResult(pngPath, transparentPath, promptPath)
+        { ManifestPath = manifestPath, GuidePath = guidePath };
     }
 
     public AiAtlasNormalizationResult Normalize(string pngPath, LogicalImageAsset asset,
@@ -151,6 +156,58 @@ public sealed class ReferenceAtlasService : IReferenceAtlasService
         SavePngAtomically(enlarged, path);
     }
 
+    private static void SaveGuide(Bitmap keyed, ReferenceAtlasLayoutPlan layout, string path, string baseName, int exportScale)
+    {
+        // Labels live on a separate image so AI source pixels and exact grid positions remain untouched.
+        var scale = Math.Max(3, exportScale);
+        var side = checked(layout.CanvasSize * scale);
+        const int headerHeight = 62;
+        using var guide = new Bitmap(side, side + headerHeight, PixelFormat.Format32bppArgb);
+        using (var graphics = Graphics.FromImage(guide))
+        using (var font = new Font("Microsoft YaHei UI", 10, FontStyle.Bold))
+        using (var titleFont = new Font("Microsoft YaHei UI", 12, FontStyle.Bold))
+        using (var grid = new Pen(Color.FromArgb(230, 255, 255, 255), 2))
+        using (var reservedPen = new Pen(Color.Yellow, 2) { DashStyle = DashStyle.Dash })
+        using (var labelBackground = new SolidBrush(Color.FromArgb(220, 20, 20, 20)))
+        {
+            graphics.Clear(Color.FromArgb(28, 28, 32));
+            graphics.DrawString(baseName + " · 动作编号对照（请勿作为 AI 主图）", titleFont, Brushes.White, 10, 5);
+            graphics.DrawString("参考图只提供动作格式；导入目标始终是图库当前所选形象。", font, Brushes.White, 10, 32);
+            graphics.InterpolationMode = InterpolationMode.NearestNeighbor;
+            graphics.PixelOffsetMode = PixelOffsetMode.Half;
+            graphics.DrawImage(keyed, new Rectangle(0, headerHeight, side, side),
+                new Rectangle(Point.Empty, keyed.Size), GraphicsUnit.Pixel);
+            foreach (var placement in layout.Placements)
+            {
+                var bounds = placement.Bounds;
+                var box = new Rectangle(bounds.X * scale, headerHeight + bounds.Y * scale,
+                    bounds.Width * scale, bounds.Height * scale);
+                graphics.DrawRectangle(grid, box);
+                var descriptor = placement.Frame.Descriptor;
+                var label = (layout.TurnCount > 1 ? $"{descriptor.Turn}转 " : string.Empty) +
+                    $"{descriptor.Action}{descriptor.FrameIndex} · {DirectionLabel(descriptor.Direction)}";
+                var size = graphics.MeasureString(label, font);
+                graphics.FillRectangle(labelBackground, box.X + 2, box.Y + 2, Math.Min(box.Width - 4, size.Width + 6), size.Height + 3);
+                graphics.DrawString(label, font, Brushes.White, box.X + 4, box.Y + 3);
+            }
+            if (layout.LayoutId == ReferenceAtlasLayoutPlanner.SLayoutId)
+                foreach (var section in layout.Sections.Where(item => item.Action == "mov+spc"))
+                foreach (var row in new[] { 1, 2 })
+                {
+                    var box = new Rectangle((section.X + 250) * scale,
+                        headerHeight + (section.Y + row * 50) * scale, 48 * scale, 48 * scale);
+                    graphics.DrawRectangle(reservedPen, box);
+                    graphics.DrawString("保留空格", font, Brushes.Yellow, box.X + 4, box.Y + 5);
+                }
+        }
+        SavePngAtomically(guide, path);
+    }
+
+    private static string DirectionLabel(string direction) => direction switch
+    {
+        "front" => "正面", "back" => "背面", "side" => "侧面", "none" => "动作", _ => direction
+    };
+
     private static string UpdatePromptDocument(string directory, LogicalImageAsset asset,
         ReferenceAtlasLayoutPlan layout, Color keyColor, string baseName, ReferenceAtlasExportOptions options)
     {
@@ -158,7 +215,7 @@ public sealed class ReferenceAtlasService : IReferenceAtlasService
         var end = $"<!-- asset:{baseName}:end -->";
         var target = Path.Combine(directory, "形象图提示词.md");
         var text = File.Exists(target) ? File.ReadAllText(target) : string.Empty;
-        if (!text.Contains("<!-- image-manager-atlas-prompt-v5 -->", StringComparison.Ordinal))
+        if (!text.Contains("<!-- image-manager-atlas-prompt-v6 -->", StringComparison.Ordinal))
             text = PromptHeader(keyColor);
 
         var entry = BuildPromptEntry(start, end, baseName, layout, keyColor, options);
@@ -179,7 +236,7 @@ public sealed class ReferenceAtlasService : IReferenceAtlasService
     {
         var hex = $"#{keyColor.R:X2}{keyColor.G:X2}{keyColor.B:X2}";
         return """
-<!-- image-manager-atlas-prompt-v5 -->
+<!-- image-manager-atlas-prompt-v6 -->
 # 形象图 AI 修改提示词
 
 ## 必须遵守
@@ -187,17 +244,19 @@ public sealed class ReferenceAtlasService : IReferenceAtlasService
 - 优先把无 `.transparent` 后缀的 PNG 作为动作格式参考图；它使用不透明键色背景，避免 AI 平台把透明层压成黑色。
 - 透明版只用于人工观察，不要同时把两版作为两个不同角色或两套动作理解。
 - 当前文件只是一套完整动作，不要额外生成进阶版本、其他人物或其他套动作。
-- 保持画布尺寸、格子数量、动作顺序、方向和空白保留格不变；每格只能出现对应的一帧。
+- 原参考人物只提供动作格式：动作、方向、帧序与原生画布规格。新人物的服装、武器、配色、体型和轮廓以本次角色要求为准，不必贴合原人物。
+- 保持格子数量、动作顺序、方向和空白保留格；每格只能出现对应的一帧。建议保持原画布和间距，方便直接回导。
 - 不得合并帧、交换行列、裁掉攻击特效或在空白保留格中新增内容。
-- 输出必须是无损 PNG，宽高必须与本次主参考图完全一致。禁止擅自输出 1024/1536 等平台预设画布、裁切、添加外边距或改变行列比例。
-- 背景应保持本项目键色，不能改成黑色、白色、场景或棋盘格。若平台强制改变背景，导入时必须检查蒙版。
+- 输出使用无损 PNG。若平台调整尺寸、增加留白或改变画布比例，保持全部动作完整且顺序不变，回导时通过有效画布和源分格校正；不要裁掉人物或刀光。
+- 建议使用本项目纯键色背景或有效透明背景；不要添加场景或棋盘格。背景改成白色、黑色或有色差时，回导前检查并校正蒙版。
 - 同一人物各方向和动作应保持造型、装备、配色、光源及像素风格一致。
 - 攻击和特技可以使用格内空间，但不得进入相邻格。
-- 只修改要求中的人物外观、服装、武器和配色；严格沿用原参考图每一格的动作、朝向、占格比例、脚底基线、轮廓粗细和低像素画法。
-- 像素边缘必须硬朗，保持原生 48×48、48×64 或 64×64 像素的细节尺度；整数倍参考图中，一个原生像素必须对应一个同色方块。禁止抗锯齿、模糊、渐变、插值、景深、柔光、高清插画和微小纹理。
+- 沿用每格动作和朝向，保持同一角色在连续动作中的比例与相对落点；倒地、退场等动作保留各自的位移。武器和特效需要完整。
+- 像素边缘必须硬朗，保持原生 48×48、48×64 或 64×64 像素的细节尺度；整数倍参考图中，一个原生像素对应一个同色方块。禁止抗锯齿、模糊、渐变、插值、景深、柔光、高清插画和微小纹理。
 - 格间空隙必须保持纯键色，不得绘制网格线、文字、编号、水印、边框或标注。不得镜像、复制同一姿态充当不同动作。
-- 导回默认按格位定位并只做一次最近邻还原，不会为了贴合原人物轮廓而再次拉伸 AI 人物；格位漂移会自动配准，低置信度结果必须人工确认。
+- 导回默认保持新人物比例并使用最近邻还原，先校正源裁剪格，再检查蒙版、连续动画和最终原生像素结果。格位漂移可自动配准或手动拖框修正。
 - 索引图片导回时使用目标原有调色板，默认不抖动，颜色损失会在确认窗口中单独统计；真彩图片保持原有真彩存储。
+- `.atlas.json` 是布局清单，`.动作对照.png` 是人工编号图，两者均不作为 AI 人物参考图。回图可改名；清单只辅助布局，实际写入目标始终由图库当前选择确定。
 
 ## S 形象统一语义
 
@@ -216,9 +275,10 @@ public sealed class ReferenceAtlasService : IReferenceAtlasService
         var builder = new StringBuilder();
         builder.AppendLine(start).AppendLine($"## {baseName}").AppendLine();
         builder.AppendLine($"- AI 主文件：`{baseName}.png`");
+        builder.AppendLine($"- 配套布局：`{baseName}.atlas.json`；人工动作编号：`{baseName}.动作对照.png`。");
         if (options.IncludeTransparent) builder.AppendLine($"- 透明观察版：`{baseName}.transparent.png`；它与主文件是同一套动作。");
         var exportedSize = layout.CanvasSize * options.Scale;
-        builder.AppendLine($"- 必须输出：`{exportedSize}×{exportedSize}` PNG；不得改变尺寸或长宽比。");
+        builder.AppendLine($"- 推荐输出：`{exportedSize}×{exportedSize}` PNG；平台改变尺寸或添加留白后，可在管理器中校正有效画布和分格。");
         builder.AppendLine($"- 原生画布：`{layout.CanvasSize}×{layout.CanvasSize}`；放大倍率：`{options.Scale}`；每个原生像素必须是 `{options.Scale}×{options.Scale}` 的同色方块。");
         builder.AppendLine($"- 帧数：`{layout.Placements.Count}`；键色：`#{keyColor.R:X2}{keyColor.G:X2}{keyColor.B:X2}`；下表坐标已按输出倍率换算。");
         foreach (var section in layout.Sections)

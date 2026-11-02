@@ -47,6 +47,12 @@ public static class LayoutRevisionCompatibility
     private static IReadOnlyList<string> GetRecognizedRevisions(string projectRoot, string profileId, string variantId,
         ResolvedProfile currentBase, ResolvedProfile current)
     {
+        // Earlier releases assigned these keys exclusively to root Item/Itemmsg.
+        // Never authorize replay or CSV import under an old identity after a key
+        // moves into Star/Imsg, even when all records have the same width.
+        if (current.Tables.Where(table => table.Key is "items-extended" or "item-description-extended")
+            .Any(table => currentBase.Tables.Any(original => original.Key == table.Key &&
+                (original.FileName != table.FileName || original.DataOffset != table.DataOffset || original.RecordCodecKey != table.RecordCodecKey)))) return [];
         // Reproduce only the exact preceding 6.4 manifest; never borrow 6.5/6.6 identities.
         if (profileId.Equals("ccz-6.4", StringComparison.OrdinalIgnoreCase))
             return GetPreConfiguration64Revisions(projectRoot, profileId, variantId, currentBase, current);

@@ -1,11 +1,8 @@
 namespace DataManager.App;
 
 /// <summary>
-/// Keeps the editable/searchable range combo while replacing its closed edit
-/// area with the corresponding range image.  The native combo remains the
-/// source of truth for text input, filtering, keyboard navigation and the
-/// owner-drawn drop-down; the preview layer is only visible while the combo
-/// is closed and unfocused.
+/// Keeps the editable/searchable range combo beside its live image, so typing
+/// and browsing never hides either the current text or the corresponding range.
 /// </summary>
 public sealed class RangePreviewPicker : UserControl
 {
@@ -15,33 +12,33 @@ public sealed class RangePreviewPicker : UserControl
     private Func<int, CancellationToken, Task<Bitmap?>>? _loader;
     private CancellationTokenSource _previewCancellation = new();
     private int _previewRevision;
+    private int? _requestedId;
     private bool _releaseCompleted;
 
     public string FieldName { get; set; } = "范围";
+    public int MinimumId { get; set; }
+    public int MaximumId { get; set; } = 255;
 
     public RangePreviewPicker(SearchableIdComboBox combo)
     {
         _combo = combo ?? throw new ArgumentNullException(nameof(combo));
         Dock = DockStyle.Fill;
         Padding = Padding.Empty;
-        MinimumSize = new Size(1, 32);
+        MinimumSize = new Size(1, 36);
 
-        _combo.Dock = DockStyle.Fill;
+        _combo.Dock = DockStyle.None;
         Controls.Add(_combo);
         Controls.Add(_preview);
 
         _preview.Click += (_, _) => BeginEdit();
-        _combo.Enter += (_, _) => HidePreview();
-        _combo.DropDown += (_, _) => HidePreview();
         _combo.DropDownClosed += (_, _) => RefreshPreview();
-        _combo.TextChanged += (_, _) =>
-        {
-            if (_combo.Focused || _combo.DroppedDown) HidePreview();
-        };
+        _combo.TextChanged += (_, _) => RefreshPreview();
         _combo.SelectionChangeCommitted += (_, _) => RefreshPreview();
         _combo.UnknownValueSubmitted += (_, _) => RefreshPreview();
         _combo.Validating += (_, _) => RefreshPreview();
         SizeChanged += (_, _) => ArrangePreview();
+        FontChanged += (_, _) => ArrangePreview();
+        DpiChangedAfterParent += (_, _) => ArrangePreview();
         HandleCreated += (_, _) => BeginInvoke((Action)ArrangePreview);
         ArrangePreview();
     }
@@ -60,6 +57,7 @@ public sealed class RangePreviewPicker : UserControl
         _previewCancellation = new CancellationTokenSource();
         _loader = loader;
         _previewRevision++;
+        _requestedId = null;
         ClearPreviewImage();
         _preview.Visible = loader != null;
         ArrangePreview();
@@ -69,23 +67,21 @@ public sealed class RangePreviewPicker : UserControl
     /// <summary>Re-reads the current combo value after programmatic binding.</summary>
     public void RefreshPreview()
     {
-        if (_loader == null) return;
-        if (_combo.Focused || _combo.DroppedDown)
-        {
-            HidePreview();
-            return;
-        }
-
-        if (!_combo.TryGetSelectedId(out var id))
-        {
-            ClearPreviewImage();
-            _preview.SetStatus("无图");
-            _previewTips.SetToolTip(_preview, $"{FieldName}：未选择有效 ID");
-            _preview.Visible = true;
-            return;
-        }
-
+        if (_loader == null || _releaseCompleted) return;
         _preview.Visible = true;
+        if (!_combo.TryGetSelectedId(out var id) || id < MinimumId || id > MaximumId)
+        {
+            // Search text and partial numbers are not resource IDs. Retain the
+            // most recent valid preview rather than flashing an unrelated image.
+            if (_requestedId == null)
+            {
+                _preview.SetStatus("请输入编号");
+                _previewTips.SetToolTip(_preview, $"{FieldName}：未选择有效 ID");
+            }
+            return;
+        }
+        if (_requestedId == id) return;
+        _requestedId = id;
         _preview.SetStatus("加载中…");
         _previewTips.SetToolTip(_preview, $"{FieldName}：ID {id}");
         RequestPreview(id);
@@ -93,28 +89,18 @@ public sealed class RangePreviewPicker : UserControl
 
     public void BeginEdit()
     {
-        HidePreview();
         _combo.Focus();
         _combo.SelectionStart = _combo.Text.Length;
         _combo.SelectionLength = 0;
     }
 
-    private void HidePreview()
-    {
-        _preview.Visible = false;
-    }
-
     private void ArrangePreview()
     {
-        // ComboBoxInfo's native button rectangle is not available until the
-        // combo handle exists.  The scaled scrollbar width is the same native
-        // width used by the standard WinForms combo and leaves its arrow fully
-        // clickable at every supported DPI.
-        var buttonWidth = Math.Max(18, (int)Math.Round(18d * DeviceDpi / 96d));
-        var width = Math.Max(1, ClientSize.Width - buttonWidth - 2);
-        var height = Math.Max(1, ClientSize.Height - 2);
-        _preview.Bounds = new Rectangle(1, 1, width, height);
-        _preview.BringToFront();
+        var gap = Math.Max(3, 4 * DeviceDpi / 96);
+        var previewWidth = Math.Min(Math.Max(40 * DeviceDpi / 96, Font.Height + 12), Math.Max(1, ClientSize.Width / 3));
+        var comboWidth = Math.Max(1, ClientSize.Width - previewWidth - gap);
+        _combo.Bounds = new Rectangle(0, Math.Max(0, (ClientSize.Height - _combo.PreferredHeight) / 2), comboWidth, _combo.PreferredHeight);
+        _preview.Bounds = new Rectangle(comboWidth + gap, 0, previewWidth, Math.Max(1, ClientSize.Height));
     }
 
     private async void RequestPreview(int id)
@@ -132,9 +118,9 @@ public sealed class RangePreviewPicker : UserControl
             if (cancellation.IsCancellationRequested || IsDisposed || Disposing ||
                 revision != _previewRevision || !ReferenceEquals(cancellation, _previewCancellation)) return;
             _preview.SetImage(bitmap);
-            _preview.SetStatus(null);
+            _preview.SetStatus(bitmap == null ? "无对应图片" : null);
             bitmap = null;
-            _preview.Visible = !_combo.Focused && !_combo.DroppedDown;
+            _preview.Visible = true;
         }
         catch (OperationCanceledException) { }
         catch
@@ -142,8 +128,8 @@ public sealed class RangePreviewPicker : UserControl
             if (!cancellation.IsCancellationRequested && !IsDisposed && revision == _previewRevision)
             {
                 ClearPreviewImage();
-                _preview.SetStatus("无图");
-                _preview.Visible = !_combo.Focused && !_combo.DroppedDown;
+                _preview.SetStatus("预览不可用");
+                _preview.Visible = true;
             }
         }
         finally { bitmap?.Dispose(); }

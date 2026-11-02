@@ -79,7 +79,7 @@ internal static class ExtendDataTests
             service.GetEffectOptions().Count == 256 && service.GetEffectOptions().Last().Name == "无", "特技空值或只读255记录缺失");
         var items = service.GetItemOptions();
         TestSupport.Assert(items.Single(item => item.Id == 256).Name == "独立扩展物品" &&
-            items.Any(item => item.Id == 510) && !items.Any(item => item.Id == 511), "扩展物品列表没有按根目录25字节记录识别");
+            items.Any(item => item.Id == 510) && items.Count(item => item.Id == 511) == 1, "扩展物品列表没有按根目录25字节记录识别或遗漏511");
         TestSupport.Assert(service.ReadLong(ExtendDataCategory.Forge, 0, "价格") == uint.MaxValue &&
             service.GetRaw(ExtendDataCategory.Effects, 0).SequenceEqual(service.GetRaw(ExtendDataCategory.Effects, 0, false)) &&
             !service.Workspace.IsDirty, "读取目录/原始视图修改草稿或丢失UInt32价格");

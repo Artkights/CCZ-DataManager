@@ -17,13 +17,34 @@ namespace DataManager.App;
 /// </summary>
 public sealed partial class BusinessEditorPanel : UserControl
 {
+    private sealed class PreviewNumericUpDown : NumericUpDown
+    {
+        public Func<bool>? ValidateInput { get; set; }
+
+        protected override void ValidateEditText()
+        {
+            // Native focus changes validate before the shell's query handler.
+            // Refuse invalid text before NumericUpDown can replace or clamp it.
+            if (ValidateInput?.Invoke() != false) base.ValidateEditText();
+        }
+
+        protected override void UpdateEditText()
+        {
+            // NumericUpDown.OnLostFocus calls UpdateEditText directly, which
+            // otherwise bypasses ValidateEditText and invokes ParseEditText.
+            if (UserEdit && ValidateInput?.Invoke() == false) return;
+            base.UpdateEditText();
+        }
+
+        protected override void OnValidating(System.ComponentModel.CancelEventArgs e)
+        {
+            base.OnValidating(e);
+            if (ValidateInput?.Invoke() == false) e.Cancel = true;
+        }
+    }
+
     private static IReadOnlyList<string> EquipmentColumns => ItemTypeService.EquipmentColumns;
-    private static readonly string[] TerrainNames =
-    [
-        "平原", "草原", "树林", "荒地", "山地", "岩山", "山崖", "雪原", "桥梁", "浅滩",
-        "沼泽", "池塘", "小河", "大河", "栅栏", "城墙", "城内", "城门", "城池", "关隘",
-        "鹿砦", "村庄", "兵营", "民居", "宝物库", "水池", "火", "船", "祭坛", "地下"
-    ];
+    private static IReadOnlyList<string> TerrainNames => RecordPresentationService.TerrainNames;
     private static readonly string[] StrategyTypes =
     [
         "火系", "水系", "地系", "风系", "眩晕", "诱惑", "谍报", "压迫/威吓", "咒骂/挑拨",
@@ -78,6 +99,7 @@ public sealed partial class BusinessEditorPanel : UserControl
     public event EventHandler? Edited;
     public event EventHandler? PendingChangesChanged;
     public event EventHandler? SaveRequested;
+    public event Action<int, int, int>? SImageLocationRequested;
     public event EventHandler? ExtendCategoryChanged;
     public TabControl DetailTabs => _kind == BusinessPageKind.ExtendData && _extendEditor != null ? _extendEditor.DetailTabs : _tabs;
     public ExtendDataEditorPanel? ExtendEditor => _extendEditor;
@@ -326,7 +348,12 @@ public sealed partial class BusinessEditorPanel : UserControl
             combo.SetOptions(options);
             var isRangeField = field.Name is "攻击范围" or "施法范围" or "穿透" or "穿透范围";
             RangePreviewPicker? rangePicker = isRangeField ? new RangePreviewPicker(combo) : null;
-            if (rangePicker != null) rangePicker.FieldName = field.Name;
+            if (rangePicker != null)
+            {
+                rangePicker.FieldName = field.Name;
+                rangePicker.MinimumId = (int)field.Minimum;
+                rangePicker.MaximumId = (int)field.Maximum;
+            }
             CancellationTokenSource? optionCancellation = null;
             string? previewContext = null;
             combo.Disposed += (_, _) => { optionCancellation?.Cancel(); optionCancellation?.Dispose(); optionCancellation = null; };
@@ -428,6 +455,8 @@ public sealed partial class BusinessEditorPanel : UserControl
             combo.Validating += (_, args) => args.Cancel = !SaveCombo();
             _flushers.Add(SaveCombo);
             combo.TextChanged += (_, _) => NotifyPendingChanges();
+            RegisterPreviewInput(document.Definition.Key, field.Name, combo, () => active && combo.Enabled &&
+                combo.TryGetSelectedId(out var value) && value >= field.Minimum && value <= field.Maximum ? value : null);
             _pendingChecks.Add(() => active && editable && (!combo.TryGetSelectedId(out var selectedId) || selectedId.ToString(CultureInfo.InvariantCulture) != lastSubmitted));
             var editorControl = (Control?)rangePicker ?? combo;
             Register(editorControl, () =>
@@ -454,9 +483,48 @@ public sealed partial class BusinessEditorPanel : UserControl
                 });
             return editorControl;
         }
-        var numeric = new NumericUpDown { Width = 180, Minimum = Math.Min(field.Minimum, Convert.ToDecimal(current ?? 0, CultureInfo.InvariantCulture)), Maximum = Math.Max(field.Maximum, Convert.ToDecimal(current ?? 0, CultureInfo.InvariantCulture)), Value = Convert.ToDecimal(current ?? 0, CultureInfo.InvariantCulture), Enabled = editable, ThousandsSeparator = false };
+        var numeric = new PreviewNumericUpDown { Width = 180, Minimum = Math.Min(field.Minimum, Convert.ToDecimal(current ?? 0, CultureInfo.InvariantCulture)), Maximum = Math.Max(field.Maximum, Convert.ToDecimal(current ?? 0, CultureInfo.InvariantCulture)), Value = Convert.ToDecimal(current ?? 0, CultureInfo.InvariantCulture), Enabled = editable, ThousandsSeparator = false };
+        var hasLivePreview = RegisterPreviewInput(document.Definition.Key, field.Name, numeric, () => active && numeric.Enabled &&
+            int.TryParse(numeric.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value) &&
+            value >= field.Minimum && value <= field.Maximum ? value : null);
+        if (hasLivePreview)
+        {
+            numeric.TextChanged += (_, _) => NotifyPendingChanges();
+            // Reading NumericUpDown.Value validates typed text. Inspect Text
+            // here so checking dirty state cannot submit a preview-only input.
+            _pendingChecks.Add(() => active && editable && (!int.TryParse(numeric.Text, NumberStyles.Integer,
+                CultureInfo.InvariantCulture, out var value) || value.ToString(CultureInfo.InvariantCulture) != lastSubmitted));
+        }
         numeric.ValueChanged += (_, _) => Commit(numeric, field.Kind == FieldKind.UInt32 ? (object)(long)numeric.Value : (int)numeric.Value);
-        _flushers.Add(() => Commit(numeric, field.Kind == FieldKind.UInt32 ? (object)(long)numeric.Value : (int)numeric.Value));
+        bool ValidatePreviewNumber()
+        {
+            if (_binding || !editable || !active) return true;
+            // Value validates and clamps native edit-box text. Parse the text
+            // first so queries/saves cannot silently discard an invalid input.
+            var text = numeric.Text.Trim();
+            if (long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var number))
+            {
+                var normalized = number.ToString(CultureInfo.InvariantCulture);
+                // Existing out-of-range legacy values remain an unchanged no-op.
+                if (normalized == lastSubmitted) { _errors.SetError(numeric, string.Empty); return true; }
+                if (number >= field.Minimum && number <= field.Maximum)
+                { _errors.SetError(numeric, string.Empty); return true; }
+            }
+            // Focusing the UpDown container can move focus away from its native
+            // edit child and invoke NumericUpDown's clamping validation.
+            ShowEditorError(numeric, $"{field.Name}请输入 {field.Minimum}..{field.Maximum} 范围内的整数。", focus: false);
+            return false;
+        }
+        bool SavePreviewNumber()
+        {
+            if (!ValidatePreviewNumber()) return false;
+            if (_binding || !editable || !active) return true;
+            var number = long.Parse(numeric.Text, NumberStyles.Integer, CultureInfo.InvariantCulture);
+            return Commit(numeric, field.Kind == FieldKind.UInt32 ? (object)number : (int)number);
+        }
+        if (hasLivePreview) numeric.ValidateInput = ValidatePreviewNumber;
+        _flushers.Add(hasLivePreview ? SavePreviewNumber :
+            () => Commit(numeric, field.Kind == FieldKind.UInt32 ? (object)(long)numeric.Value : (int)numeric.Value));
         Register(numeric, () =>
         {
             var value = Convert.ToDecimal(current ?? 0, CultureInfo.InvariantCulture);
@@ -745,7 +813,7 @@ public sealed partial class BusinessEditorPanel : UserControl
         for (var index = 0; index < terrain.Data.Rows.Count; index++)
         {
             var field = terrain.Definition.Fields[0];
-            AddFormRow(layout, index < TerrainNames.Length ? $"{index}：{TerrainNames[index]}" : index.ToString(CultureInfo.InvariantCulture), CreateEditor(terrain, terrain.Data.Rows[index], index, field));
+            AddFormRow(layout, index < TerrainNames.Count ? $"{index}：{TerrainNames[index]}" : index.ToString(CultureInfo.InvariantCulture), CreateEditor(terrain, terrain.Data.Rows[index], index, field));
         }
     }
 

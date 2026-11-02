@@ -8,6 +8,40 @@ namespace DataManager.App;
 
 public sealed partial class MainForm
 {
+    private async void LocatePersonSImage(int personId, int sId, int jobId)
+    {
+        try
+        {
+            // A malformed unused person row must not prevent locating this verified target.
+            if (!_workspace.Documents.TryGetValue("person-s-assign", out var assignments) ||
+                assignments.Definition.Capability != TableCapability.Editable ||
+                assignments.Definition.VerificationLevel == VerificationLevel.InheritedUnverified ||
+                string.IsNullOrWhiteSpace(assignments.Definition.CapabilityEvidence) ||
+                !assignments.Data.Columns.Contains("S形象ID") || sId is < 0 or >= ushort.MaxValue)
+                throw new InvalidOperationException("当前人物 S 指定未通过布局验证，不能据此定位物理形象。");
+            var root = _workspace.RootPath;
+            var candidates = SImageLocationCandidates.Create(sId, jobId);
+            var selected = candidates[0].PhysicalImageNumber;
+            if (candidates.Count > 1)
+            {
+                using var choose = new SImageLocationDialog(_resourceAdapter ??= new(), root, personId, sId, candidates);
+                if (choose.ShowDialog(this) != DialogResult.OK) return;
+                selected = choose.SelectedPhysicalImageNumber;
+            }
+            _lastResourceCategory = "S";
+            var tab = _moduleTabs.TabPages.Cast<TabPage>().Single(page => Equals(page.Tag, "__resources"));
+            _moduleTabs.SelectedTab = tab;
+            if (!_resourceModule || _workspace.RootPath != root) return;
+            if (await _imageEditor.LocateSPhysicalImageAsync(selected))
+                SetStatus($"按人物 {personId} 当前草稿 S={sId} 定位至 Unit #{selected}；图片导入即时保存，存档同步按已保存指定。 ");
+            else SetStatus($"无法定位完整 Unit #{selected}，请检查当前项目的三个动作资源。", true);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or IOException or InvalidDataException)
+        {
+            SetStatus("S 形象定位失败：" + ex.Message, true);
+        }
+    }
+
     private IReadOnlyList<SImageAssignmentReference>? GetCurrentSAssignmentReferences()
     {
         // Reuse the same evidence gate as the physical idle filter without changing its policy.

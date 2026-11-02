@@ -573,6 +573,30 @@ public sealed partial class BusinessEditorPanel
     {
         var page = DetailPage("宝物详情");
         var root = Columns(72, 28); page.Controls.Add(root);
+        if (_id >= 256)
+        {
+            var source = new Label
+            {
+                Name = "ItemStorageSource", Dock = DockStyle.Top, Height = 30,
+                Padding = new Padding(8, 4, 8, 2), AutoEllipsis = true,
+                BackColor = Color.FromArgb(241, 245, 249)
+            };
+            void RefreshSource()
+            {
+                var data = _workspace.GetDocument("items-extended");
+                var hasDescription = _workspace.Documents.TryGetValue("item-description-extended", out var description);
+                source.Text = $"宝物拓展（256–511） · 数据：{Path.GetFileName(data.FilePath)} · " +
+                    (hasDescription ? $"说明：{Path.GetFileName(description!.FilePath)}" : "说明未加载") +
+                    (data.Definition.IsWriteSupported ? string.Empty : " · 只读");
+                _diagnosticTips.SetToolTip(source, data.FilePath + Environment.NewLine + data.Definition.CapabilityEvidence +
+                    Environment.NewLine + (hasDescription ? description!.FilePath :
+                        string.Join(Environment.NewLine, _workspace.LastScan?.Diagnostics.Where(message =>
+                            message.Contains("宝物扩展说明", StringComparison.Ordinal)) ?? [])));
+            }
+            _entityRebinders.Add(RefreshSource);
+            RefreshSource();
+            page.Controls.Add(source);
+        }
         var left = Rows((SizeType.Percent, 68), (SizeType.Percent, 32)); root.Controls.Add(left, 0, 0);
         var itemFields = Fields("items-low").Concat(Fields("items-high")).Concat(Fields("items-extended")).ToArray();
         var item = itemFields.FirstOrDefault();
@@ -750,7 +774,7 @@ public sealed partial class BusinessEditorPanel
         root.Controls.Add(FieldsBlock(string.Empty, slots, 4, 64), 0, 1);
     }
 
-    private static string TerrainName(int index) => index < TerrainNames.Length ? TerrainNames[index] : "未确认";
+    private static string TerrainName(int index) => index < TerrainNames.Count ? TerrainNames[index] : "未确认";
     private static string TerrainLabel(int index) => $"{index}：{TerrainName(index)}";
     private static IReadOnlyList<IdNameOption>? JobAttributeOptions(int attribute) => attribute switch
     {

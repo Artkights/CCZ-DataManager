@@ -2,7 +2,7 @@ using ImageManager.Core;
 
 namespace ImageManager.App;
 
-public sealed class AiAtlasImportDialog : Form
+public sealed partial class AiAtlasImportDialog : Form
 {
     private readonly IReferenceAtlasService _service;
     private readonly string _pngPath;
@@ -16,7 +16,7 @@ public sealed class AiAtlasImportDialog : Form
     private bool _processing;
     private long _successfulRevision = -1;
     private readonly AiAtlasNormalizationOptions _options = new();
-    private readonly ComboBox _kernel = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 112 };
+    private readonly ComboBox _kernel = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 136 };
     private readonly NumericUpDown _tolerance = new() { Minimum = 0, Maximum = 80, Value = 12, Width = 66 };
     private readonly CheckBox _dither = new() { Text = "有序抖动", AutoSize = true, Margin = new Padding(8, 7, 3, 0) };
     private readonly ComboBox _maskTool = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 108 };
@@ -49,6 +49,7 @@ public sealed class AiAtlasImportDialog : Form
     private bool _painting;
     private Point? _lastStrokePoint;
     private int _animationIndex;
+    private bool _fillingDiagnostics;
 
     public AiAtlasImportDialog(IReferenceAtlasService service, string pngPath, LogicalImageAsset asset,
         IReadOnlyList<DecodedFrame> referenceFrames)
@@ -84,22 +85,28 @@ public sealed class AiAtlasImportDialog : Form
         _comparisonMode.SelectedIndexChanged += (_, _) => ShowSelectedComparison();
 
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, Padding = new Padding(8) };
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 58));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 42));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 78));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 22));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.Controls.Add(BuildToolbar(), 0, 0);
-        root.Controls.Add(BuildPreviews(), 0, 1);
+        root.Controls.Add(BuildLockedTargetHeader(), 0, 0);
+        root.Controls.Add(BuildWorkspace(), 0, 1);
         root.Controls.Add(_diagnostics, 0, 2);
         root.Controls.Add(BuildBottomBar(), 0, 3);
         Controls.Add(root);
+        InitializeSourceSpace(root);
+        _summary.MaximumSize = new Size(Math.Max(200, ClientSize.Width - 36), 0);
+        SizeChanged += (_, _) => _summary.MaximumSize = new Size(Math.Max(200, ClientSize.Width - 36), 0);
 
         ConfigureDiagnostics();
         SelectionAppearance.Configure(_diagnostics, preserveCurrentRow: true);
         _diagnostics.SelectionChanged += (_, _) =>
         {
+            if (_fillingDiagnostics) return;
             LoadSelectedAdjustment();
             ShowSelectedComparison();
+            SelectSourceFrame();
         };
         _reviewed.CheckedChanged += (_, _) => UpdateConfirmState();
         _confirm.Click += (_, _) => Confirm();
@@ -109,6 +116,7 @@ public sealed class AiAtlasImportDialog : Form
         _animationTimer.Tick += (_, _) => AdvanceAnimation();
         _play.Click += (_, _) => ToggleAnimation();
         _legacyThreeTurns.CheckedChanged += (_, _) => Rerun();
+        InitializeSourceEditing();
         Shown += (_, _) => Rerun();
     }
 
@@ -121,14 +129,9 @@ public sealed class AiAtlasImportDialog : Form
             Dock = DockStyle.Fill, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
             WrapContents = true, Padding = new Padding(4), MinimumSize = new Size(0, 78)
         };
-        AddLabel(bar, "卷积"); bar.Controls.Add(_kernel);
+        AddLabel(bar, "还原方式"); bar.Controls.Add(_kernel);
         if (_legacyReferenceFrames != null) bar.Controls.Add(_legacyThreeTurns);
-        AddLabel(bar, "背景容差"); bar.Controls.Add(_tolerance);
         bar.Controls.Add(_dither);
-        AddLabel(bar, "蒙版工具"); bar.Controls.Add(_maskTool);
-        AddLabel(bar, "画笔半径"); bar.Controls.Add(_brushRadius);
-        AddButton(bar, "撤回蒙版", UndoMask);
-        AddButton(bar, "重做蒙版", RedoMask);
         AddButton(bar, "重新处理", Rerun);
         AddLabel(bar, "调整范围"); bar.Controls.Add(_scope);
         AddButton(bar, "←", () => Nudge(-1, 0));
@@ -139,36 +142,76 @@ public sealed class AiAtlasImportDialog : Form
         AddButton(bar, "应用缩放", ApplyScale);
         AddButton(bar, "复位范围", ResetAdjustment);
         AddLabel(bar, "对比"); bar.Controls.Add(_comparisonMode);
+        bar.Controls.Add(_showGuides);
         return bar;
     }
 
     private Control BuildPreviews()
     {
-        var table = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 4, Padding = new Padding(2) };
+        var tabs = new TabControl { Dock = DockStyle.Fill };
+        var stagePage = new TabPage("逐帧对比与调整");
+        var stage = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
+        stage.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        stage.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        stage.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        stage.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        stage.Controls.Add(BuildToolbar(), 0, 0);
+        var table = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 2, Padding = new Padding(2) };
         for (var column = 0; column < 4; column++) table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
         table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        table.RowStyles.Add(new RowStyle(SizeType.Percent, 46));
-        table.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        table.RowStyles.Add(new RowStyle(SizeType.Percent, 54));
+        table.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         table.Controls.Add(Header("原始项目参考帧"), 0, 0);
         table.Controls.Add(Header("AI 原始帧"), 1, 0);
         table.Controls.Add(Header("几何对齐帧"), 2, 0);
-        table.Controls.Add(Header("最终 CCZ 调色板帧"), 3, 0);
+        table.Controls.Add(Header("最终写入帧"), 3, 0);
         table.Controls.Add(PreviewImageLayout.CreateViewport(_referencePreview), 0, 1);
         table.Controls.Add(PreviewImageLayout.CreateViewport(_rawPreview), 1, 1);
         table.Controls.Add(PreviewImageLayout.CreateViewport(_alignedPreview), 2, 1);
         table.Controls.Add(PreviewImageLayout.CreateViewport(_finalPreview), 3, 1);
-        table.Controls.Add(Header("背景蒙版（点击/拖动修正）"), 0, 2);
-        table.Controls.Add(Header("归一化标准总图"), 1, 2);
+        stage.Controls.Add(table, 0, 1);
+        _comparisonStatus.MaximumSize = new Size(600, 0);
+        stage.Controls.Add(_comparisonStatus, 0, 2);
+        stagePage.Controls.Add(stage);
+        var maskPage = new TabPage("蒙版、整图与动画");
+        var maskLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
+        maskLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        maskLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        maskLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        maskLayout.Controls.Add(BuildMaskToolbar(), 0, 0);
+        var masks = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 2 };
+        for (var column = 0; column < 3; column++) masks.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100 / 3f));
+        masks.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        masks.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        masks.Controls.Add(Header("背景蒙版（点击/拖动修正）"), 0, 0);
+        masks.Controls.Add(Header("归一化标准总图"), 1, 0);
         var animationHeader = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, WrapContents = true };
         animationHeader.Controls.Add(Header("逐帧动画")); animationHeader.Controls.Add(_play);
-        table.Controls.Add(animationHeader, 2, 2);
-        table.Controls.Add(_comparisonStatus, 3, 2);
-        table.Controls.Add(PreviewImageLayout.CreateViewport(_maskPreview), 0, 3);
-        table.Controls.Add(PreviewImageLayout.CreateViewport(_normalizedPreview), 1, 3);
-        table.Controls.Add(PreviewImageLayout.CreateViewport(_animationPreview), 2, 3);
-        table.SetColumnSpan(_comparisonStatus, 1);
-        return table;
+        animationHeader.Controls.Add(_animationScope);
+        masks.Controls.Add(animationHeader, 2, 0);
+        masks.Controls.Add(PreviewImageLayout.CreateViewport(_maskPreview), 0, 1);
+        masks.Controls.Add(PreviewImageLayout.CreateViewport(_normalizedPreview), 1, 1);
+        masks.Controls.Add(PreviewImageLayout.CreateViewport(_animationPreview), 2, 1);
+        maskLayout.Controls.Add(masks, 0, 1);
+        maskPage.Controls.Add(maskLayout);
+        tabs.TabPages.Add(stagePage);
+        tabs.TabPages.Add(maskPage);
+        return tabs;
+    }
+
+    private Control BuildMaskToolbar()
+    {
+        var bar = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true, Padding = new Padding(3) };
+        AddLabel(bar, "背景容差"); bar.Controls.Add(_tolerance);
+        AddLabel(bar, "蒙版工具"); bar.Controls.Add(_maskTool);
+        AddLabel(bar, "画笔半径"); bar.Controls.Add(_brushRadius);
+        AddButton(bar, "撤回蒙版", UndoMask);
+        AddButton(bar, "重做蒙版", RedoMask);
+        AddButton(bar, "撤回取色点", UndoBackgroundSample);
+        AddButton(bar, "重做取色点", RedoBackgroundSample);
+        AddButton(bar, "清空取色点", ClearBackgroundSamples);
+        AddLabel(bar, "蒙版底色"); bar.Controls.Add(_maskBackdrop);
+        AddButton(bar, "重新处理", Rerun);
+        return bar;
     }
 
     private Control BuildBottomBar()
@@ -252,6 +295,7 @@ public sealed class AiAtlasImportDialog : Form
             }
             _result?.Dispose();
             _result = next;
+            UpdateSourceEditor(next);
             ReplaceImage(_maskPreview, new Bitmap(next.MaskPreview));
             ReplaceImage(_normalizedPreview, new Bitmap(next.NormalizedAtlas));
             _animationIndex = 0;
@@ -269,8 +313,8 @@ public sealed class AiAtlasImportDialog : Form
                             $"必需帧 {next.Frames.Count}。";
             _reviewed.Checked = false;
             _reviewed.Visible = next.HasWarnings;
-            _status.Text = next.HasBlockingIssues ? "存在阻止写回的问题。" : next.HasWarnings ? "请检查警告后勾选确认。" : "可以写回。";
-            _comparisonStatus.Text = "选择下方帧诊断行查看：原始 → AI → 几何对齐 → CCZ。";
+            _status.Text = next.HasBlockingIssues ? "请在“裁剪与格位”中修正红色问题。" : next.HasWarnings ? "请检查警告后勾选确认。" : "可以写回。";
+            _comparisonStatus.Text = "选择下方帧诊断行查看：原始 → AI → 对齐 → 写入结果。";
             _processing = false;
             _successfulRevision = revision;
             UpdateConfirmState();
@@ -298,6 +342,10 @@ public sealed class AiAtlasImportDialog : Form
 
     private void FillDiagnostics()
     {
+        var selectedKey = (_diagnostics.CurrentRow?.Tag as AiAtlasFrameDiagnostic)?.FrameKey;
+        _fillingDiagnostics = true;
+        try
+        {
         _diagnostics.Rows.Clear();
         if (_result == null) return;
         foreach (var item in _result.FrameDiagnostics)
@@ -318,8 +366,19 @@ public sealed class AiAtlasImportDialog : Form
                 _ => SystemColors.Window
             };
         }
-        if (_diagnostics.Rows.Count > 0) _diagnostics.Rows[0].Selected = true;
+        var selectedRow = _diagnostics.Rows.Cast<DataGridViewRow>().FirstOrDefault(row =>
+            row.Tag is AiAtlasFrameDiagnostic item && item.FrameKey == selectedKey)
+            ?? _diagnostics.Rows.Cast<DataGridViewRow>().FirstOrDefault();
+        if (selectedRow != null)
+        {
+            _diagnostics.CurrentCell = selectedRow.Cells.Cast<DataGridViewCell>().First(cell => cell.Visible);
+            selectedRow.Selected = true;
+        }
+        }
+        finally { _fillingDiagnostics = false; }
+        LoadSelectedAdjustment();
         ShowSelectedComparison();
+        SelectSourceFrame();
     }
 
     private void UpdateConfirmState()
@@ -342,7 +401,9 @@ public sealed class AiAtlasImportDialog : Form
         if (point == null) return;
         if (_maskTool.SelectedIndex == 0)
         {
-            _options.BackgroundSample = point;
+            _options.BackgroundSample = null;
+            _options.BackgroundSamples.Add(point.Value);
+            _undoneBackgroundSamples.Clear();
             Rerun();
             return;
         }
@@ -464,22 +525,24 @@ public sealed class AiAtlasImportDialog : Form
 
     private void ToggleAnimation()
     {
-        if (_result == null || _result.Frames.Count < 2) return;
+        if (AnimationFrames().Count < 2) return;
         _animationTimer.Enabled = !_animationTimer.Enabled;
         _play.Text = _animationTimer.Enabled ? "暂停" : "播放";
     }
 
     private void AdvanceAnimation()
     {
-        if (_result == null || _result.Frames.Count == 0) return;
-        _animationIndex = (_animationIndex + 1) % _result.Frames.Count;
+        var frames = AnimationFrames();
+        if (frames.Count == 0) return;
+        _animationIndex = (_animationIndex + 1) % frames.Count;
         ShowAnimationFrame();
     }
 
     private void ShowAnimationFrame()
     {
-        if (_result == null || _result.Frames.Count == 0) { ReplaceImage(_animationPreview, null); return; }
-        var frame = _result.Frames[Math.Clamp(_animationIndex, 0, _result.Frames.Count - 1)];
+        var frames = AnimationFrames();
+        if (frames.Count == 0) { ReplaceImage(_animationPreview, null); return; }
+        var frame = frames[Math.Clamp(_animationIndex, 0, frames.Count - 1)];
         ReplaceImage(_animationPreview, new Bitmap(frame.Bitmap));
     }
 
@@ -490,6 +553,8 @@ public sealed class AiAtlasImportDialog : Form
             ++_normalizationRevision;
             _normalizationCancellation?.Cancel();
             _animationTimer.Dispose();
+            _targetToolTip.Dispose();
+            _maskPreview.BackgroundImage?.Dispose();
             _result?.Dispose();
             ReplaceImage(_maskPreview, null);
             ReplaceImage(_referencePreview, null);
@@ -505,7 +570,7 @@ public sealed class AiAtlasImportDialog : Form
     private static PictureBox PreviewBox() => new()
     {
         Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom, BackColor = Color.FromArgb(38, 40, 43),
-        BorderStyle = BorderStyle.FixedSingle, MinimumSize = new Size(180, 180)
+        BorderStyle = BorderStyle.FixedSingle, MinimumSize = new Size(80, 60)
     };
 
     private static Label Header(string text) => new()

@@ -21,7 +21,7 @@ internal static class AtomicItemMigrationMapper
     public static bool TryMap(ProjectWorkspace sourceWorkspace, ProjectWorkspace targetWorkspace,
         TableDocument source, TableDocument target, DataRow sourceRow, DataRow targetRow, List<MigrationChange> changes)
     {
-        if (source.Definition.Key is not ("items-low" or "items-high") ||
+        if (source.Definition.Key is not ("items-low" or "items-high" or "items-extended") ||
             !target.Definition.RecordCodecKey.Equals("item-66-15-v1", StringComparison.OrdinalIgnoreCase) ||
             source.Definition.RecordCodecKey.Equals(target.Definition.RecordCodecKey, StringComparison.OrdinalIgnoreCase)) return false;
         var sourceIndex = source.Data.Rows.IndexOf(sourceRow);
@@ -73,7 +73,7 @@ internal static class AtomicItemMigrationMapper
             var payload = JsonSerializer.Deserialize<Payload>(Convert.ToString(change.SourceValue, CultureInfo.InvariantCulture) ?? string.Empty)
                 ?? throw new InvalidDataException("缺少空闲宝物槽逻辑记录。");
             if (payload.Id != change.Id || !workspace.Documents.TryGetValue(payload.PhysicalTableKey, out var document) ||
-                payload.PhysicalTableKey is not ("items-low" or "items-high") ||
+                payload.PhysicalTableKey is not ("items-low" or "items-high" or "items-extended") ||
                 document.Definition.RecordCodecKey != "item-66-15-v1" || document.Definition.Capability != TableCapability.Editable)
                 throw new InvalidDataException("空闲宝物槽的目标记录/Codec不匹配。");
             var index = payload.Id - document.Definition.BeginId;

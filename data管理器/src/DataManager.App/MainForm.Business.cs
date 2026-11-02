@@ -1,4 +1,4 @@
-using DataManager.Core.Domain;
+﻿using DataManager.Core.Domain;
 using DataManager.Core.Csv;
 using DataManager.Core.Editing;
 
@@ -46,6 +46,7 @@ public sealed partial class MainForm
             throw new InvalidOperationException("当前业务页有无效编辑，不能导入。");
         var result = new BusinessDataService(_workspace).ImportPageCsvAtomic(kind, files);
         RefreshBusinessSelection();
+        RefreshQueryNavigation();
         RefreshDirtyState();
         return result;
     }
@@ -71,26 +72,12 @@ public sealed partial class MainForm
         if (kind == BusinessPageKind.ExtendData)
         {
             _businessEditor.Bind(kind, _businessEditor.ExtendEditor?.CurrentId ?? 0);
-            RefreshExtendEntityList();
             _grid.Visible = false; _imageEditor.Visible = false; _businessEditor.Visible = true;
+            RefreshExtendEntityList();
             return;
         }
-        var rememberedId = _businessEditor.CurrentId;
-        var options = new BusinessDataService(_workspace).GetIdNameOptions(kind);
-        _selectingBusinessEntity = true;
-        _entityList.BeginUpdate();
-        try
-        {
-            _entityList.Items.Clear();
-            foreach (var option in options) _entityList.Items.Add(new EntityChoice(option.Id, option.Name));
-            _quickLookup.SetOptions(options.Select(option => new IdNameOption(option.Id, option.Name)));
-            if (_entityList.Items.Count > 0)
-                _entityList.SelectedIndex = Math.Max(0, _entityList.Items.Cast<EntityChoice>().ToList().FindIndex(option => option.Id == rememberedId));
-        }
-        finally { _entityList.EndUpdate(); _selectingBusinessEntity = false; }
-        _businessEditor.Bind(kind, (_entityList.SelectedItem as EntityChoice)?.Id ?? 0);
         _grid.Visible = false; _imageEditor.Visible = false; _businessEditor.Visible = true;
-        SetStatus($"业务详情：{options.Count} 项。关联表编辑统一进入保存事务。");
+        RefreshQueryNavigation();
     }
 
     private void SelectBusinessEntity(int id)
@@ -130,62 +117,16 @@ public sealed partial class MainForm
             _businessEditor.Bind(kind, entity.Id);
     }
 
-    private void RefreshSavedNames()
-    {
-        if (_businessKind is { } kind)
-        {
-            if (kind == BusinessPageKind.ExtendData)
-            {
-                RefreshExtendEntityList();
-                _businessEditor.Bind(kind, _businessEditor.CurrentId);
-                return;
-            }
-            var id = _businessEditor.CurrentId;
-            var options = new BusinessDataService(_workspace).GetIdNameOptions(kind);
-            _selectingBusinessEntity = true;
-            _entityList.BeginUpdate();
-            try
-            {
-                _entityList.Items.Clear();
-                foreach (var option in options) _entityList.Items.Add(new EntityChoice(option.Id, option.Name));
-                _quickLookup.SetOptions(options.Select(option => new IdNameOption(option.Id, option.Name)));
-                _entityList.SelectedIndex = _entityList.Items.Cast<EntityChoice>().ToList().FindIndex(option => option.Id == id);
-            }
-            finally { _entityList.EndUpdate(); _selectingBusinessEntity = false; }
-            _businessEditor.Bind(kind, id);
-        }
-        else if (_currentDocument is { } document)
-        {
-            var selectedId = _grid.CurrentRow?.DataBoundItem is System.Data.DataRowView view ? Convert.ToInt32(view.Row["ID"]) : -1;
-            _selectingBusinessEntity = true;
-            try
-            {
-                PopulateEntityList(document); PopulateQuickLookup(document);
-                _entityList.SelectedIndex = _entityList.Items.Cast<EntityChoice>().ToList().FindIndex(option => option.Id == selectedId);
-            }
-            finally { _selectingBusinessEntity = false; }
-        }
-    }
+    private void RefreshSavedNames() => RefreshQueryNavigation();
 
     private void RefreshExtendEntityList(bool keepSearch = true)
     {
         if (_businessKind != BusinessPageKind.ExtendData || _businessEditor.ExtendEditor is not { } panel) return;
-        var options = panel.GetEntityOptions();
-        var query = keepSearch ? panel.SearchText : string.Empty;
-        var filtered = string.IsNullOrWhiteSpace(query) ? options : options.Where(option =>
-            option.Id.ToString(System.Globalization.CultureInfo.InvariantCulture).Contains(query, StringComparison.OrdinalIgnoreCase) ||
-            option.Name.Contains(query, StringComparison.CurrentCultureIgnoreCase)).ToArray();
-        _selectingBusinessEntity = true;
-        _entityList.BeginUpdate();
-        try
+        if (!keepSearch && QueryPageKey is { } key)
         {
-            _entityList.Items.Clear();
-            foreach (var option in filtered) _entityList.Items.Add(new EntityChoice(option.Id, option.Name));
-            _entityList.SelectedIndex = _entityList.Items.Cast<EntityChoice>().ToList().FindIndex(option => option.Id == panel.CurrentId);
-            _quickLookup.SetOptions(options);
-            if (_quickLookup.Text != query) _quickLookup.SetBoundValue(query);
+            _pageQueries[key] = string.Empty;
+            _pageQueryIds.Remove(key);
         }
-        finally { _entityList.EndUpdate(); _selectingBusinessEntity = false; }
-        SetStatus($"{panel.DetailTabs.SelectedTab?.Text}：{options.Count} 项；编辑进入草稿，顶部保存统一写回。");
+        RefreshQueryNavigation();
     }
 }

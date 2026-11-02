@@ -26,6 +26,7 @@ public sealed class SearchableIdComboBox : ComboBox
     private bool _boundValueUntouched;
     private int _interactionRevision;
     private bool _idOnly;
+    private string _displayFilterText = string.Empty;
 
     public SearchableIdComboBox()
     {
@@ -37,6 +38,9 @@ public sealed class SearchableIdComboBox : ComboBox
     }
 
     public IReadOnlyList<IdNameOption> Options => _options;
+
+    /// <summary>Match the literal ID：name label, including its separator and unnamed label.</summary>
+    public bool MatchDisplayText { get; set; }
 
     /// <summary>Show only the numeric ID while retaining names for filtering.</summary>
     public bool IdOnly
@@ -90,7 +94,7 @@ public sealed class SearchableIdComboBox : ComboBox
     }
 
     /// <summary>Programmatic binding must not leave the native edit box looking like selected user text.</summary>
-    public void SetBoundValue(string value, bool preserveEditSelection = false)
+    public void SetBoundValue(string value, bool preserveEditSelection = false, bool filterOptions = false)
     {
         var start = SelectionStart;
         var length = SelectionLength;
@@ -98,7 +102,8 @@ public sealed class SearchableIdComboBox : ComboBox
         _updating = true;
         try
         {
-            Text = value;
+            if (filterOptions) RebuildItems(value);
+            else Text = value;
             SelectionStart = preserveEditSelection && Focused ? Math.Min(start, Text.Length) : Text.Length;
             SelectionLength = preserveEditSelection && Focused ? Math.Min(length, Text.Length - SelectionStart) : 0;
             _bindingSelectionPending = !(preserveEditSelection && Focused);
@@ -188,18 +193,35 @@ public sealed class SearchableIdComboBox : ComboBox
         if (_updating) return;
         MarkUserInteraction();
         var text = Text;
+        var start = SelectionStart;
+        var length = SelectionLength;
         RebuildItems(text);
         if (!DroppedDown && Items.Count > 0)
         {
             DroppedDown = true;
-            SelectionStart = text.Length;
-            SelectionLength = 0;
+            // Opening the native list can replace a typed ID prefix with its
+            // first suggestion. A query must retain the user's actual input.
+            if (MatchDisplayText) SetBoundValue(text, preserveEditSelection: true);
         }
+        SelectionStart = Math.Min(start, Text.Length);
+        SelectionLength = Math.Min(length, Text.Length - SelectionStart);
     }
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
         MarkUserInteraction();
+        if (MatchDisplayText && e.KeyCode == Keys.Enter)
+        {
+            // Merely typing a complete label can set SelectedItem. Only a
+            // changed label from keyboard navigation commits a suggestion.
+            if (SelectedItem is IdNameOption option && Text == option.Display && Text != _displayFilterText)
+            {
+                OnSelectionChangeCommitted(EventArgs.Empty);
+                e.Handled = e.SuppressKeyPress = true;
+            }
+            else base.OnKeyDown(e);
+            return;
+        }
         if (e.KeyCode == Keys.Enter && TryGetSelectedId(out var id))
         {
             UnknownValueSubmitted?.Invoke(this, id);
@@ -212,6 +234,7 @@ public sealed class SearchableIdComboBox : ComboBox
 
     protected override void OnSelectionChangeCommitted(EventArgs e)
     {
+        MarkUserInteraction();
         // Owner-drawn editable combos can still expose the previous typed
         // text when the native selection changes. Commit listeners parse
         // Text, so synchronize it before notifying them of the new selection.
@@ -223,9 +246,30 @@ public sealed class SearchableIdComboBox : ComboBox
     {
         // The selected display text is not a new search. Opening an already
         // selected value must expose all choices again.
-        if (_options.Any(option => GetDisplayText(option).Equals(Text, StringComparison.Ordinal)))
+        if (!MatchDisplayText && _options.Any(option => GetDisplayText(option).Equals(Text, StringComparison.Ordinal)))
             RebuildItems(string.Empty, Text);
+        else if (MatchDisplayText)
+        {
+            var text = _displayFilterText;
+            var interaction = _interactionRevision;
+            RebuildItems(text);
+            // The native arrow/F4 path may also select the first prefix match
+            // after OnDropDown returns. Do not overwrite later user actions.
+            BeginInvoke((Action)(() =>
+            {
+                if (!IsDisposed && !Disposing && DroppedDown && interaction == _interactionRevision)
+                    SetBoundValue(text, preserveEditSelection: true);
+            }));
+        }
         base.OnDropDown(e);
+    }
+
+    protected override void OnDropDownClosed(EventArgs e)
+    {
+        // Closing without committing can copy the native highlight into the
+        // edit box. Keep the typed query until an explicit selection is made.
+        if (MatchDisplayText) SetBoundValue(_displayFilterText, preserveEditSelection: true);
+        base.OnDropDownClosed(e);
     }
 
     protected override void OnMeasureItem(MeasureItemEventArgs e)
@@ -379,10 +423,12 @@ public sealed class SearchableIdComboBox : ComboBox
 
     private void RebuildItems(string query, string? displayText = null)
     {
+        if (MatchDisplayText) _displayFilterText = query;
         var trimmed = query.Trim();
         var filtered = string.IsNullOrWhiteSpace(trimmed)
             ? _options
-            : _options.Where(option => option.Id.ToString(CultureInfo.InvariantCulture).Contains(trimmed, StringComparison.OrdinalIgnoreCase) ||
+            : _options.Where(option => MatchDisplayText ? option.Display.Contains(trimmed, StringComparison.OrdinalIgnoreCase) :
+                                       option.Id.ToString(CultureInfo.InvariantCulture).Contains(trimmed, StringComparison.OrdinalIgnoreCase) ||
                                        option.Name.Contains(trimmed, StringComparison.OrdinalIgnoreCase)).ToList();
         var wasUpdating = _updating;
         _updating = true;

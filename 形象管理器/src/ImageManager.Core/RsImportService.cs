@@ -89,7 +89,7 @@ public sealed class RsImportService
             var index = frames.FindIndex(frame => FrameKey(frame.Descriptor) == FrameKey(editedDescriptor));
             if (index < 0) throw new InvalidOperationException("找不到待写回帧。");
             frames[index].Bitmap.Dispose();
-            frames[index] = new DecodedFrame(editedDescriptor, new Bitmap(edited));
+            frames[index] = new DecodedFrame(editedDescriptor, BmpPayloadService.CopyArgb(edited));
             return PlanImport(project, asset, frames);
         }
         finally
@@ -113,7 +113,7 @@ public sealed class RsImportService
             var index = frames.FindIndex(frame => FrameKey(frame.Descriptor) == FrameKey(editedDescriptor));
             if (index < 0) throw new InvalidOperationException("找不到待复制帧。");
             frames[index].Bitmap.Dispose();
-            frames[index] = new DecodedFrame(editedDescriptor, new Bitmap(edited));
+            frames[index] = new DecodedFrame(editedDescriptor, BmpPayloadService.CopyArgb(edited));
             return PlanAppendCopy(project, asset, frames, editedDescriptor.Turn);
         }
         finally { foreach (var frame in frames) frame.Dispose(); }
@@ -181,21 +181,25 @@ public sealed class RsImportService
         if (!descriptors.Select(frame => frame.FrameIndex).SequenceEqual(Enumerable.Range(0, descriptors.Count)))
             throw new InvalidDataException("动作条必须包含从 0 开始完整连续的动作帧。");
         using var strip = new Bitmap(width, checked(height * descriptors.Count), System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-        using (var graphics = Graphics.FromImage(strip))
+        var standard = ImageRendering.IsStandardImage(original);
+        var keyTransparency = !standard || original[0] == 'B';
+        var rawKey = !standard ? new PaletteService().RequireWritePalette(project)[0] : Color.Empty;
+        for (var index = 0; index < descriptors.Count; index++)
         {
-            graphics.CompositingMode = System.Drawing.Drawing2D.CompositingMode.SourceCopy;
-            graphics.Clear(Color.Transparent);
-            for (var index = 0; index < descriptors.Count; index++)
-            {
-                var importedFrame = imported[FrameKey(descriptors[index])];
-                var frame = importedFrame.Bitmap;
-                if (frame.Width != descriptors[index].Width || frame.Height != descriptors[index].Height)
-                    throw new InvalidDataException($"帧尺寸不符：要求 {descriptors[index].Width}x{descriptors[index].Height}，实际 {frame.Width}x{frame.Height}。");
-                // Source numeric indexes never override the target palette.
-                // Both F700FF and FF00FF are accepted as transparent material keys.
-                using var keyed = ImageRendering.ApplyKeyTransparency(frame, false);
-                graphics.DrawImageUnscaled(keyed, 0, index * height);
-            }
+            var importedFrame = imported[FrameKey(descriptors[index])];
+            var frame = importedFrame.Bitmap;
+            if (frame.Width != descriptors[index].Width || frame.Height != descriptors[index].Height)
+                throw new InvalidDataException($"帧尺寸不符：要求 {descriptors[index].Width}x{descriptors[index].Height}，实际 {frame.Width}x{frame.Height}。");
+            using var keyed = keyTransparency ? ImageRendering.ApplyKeyTransparency(frame, false) : BmpPayloadService.CopyArgb(frame);
+            if (!standard)
+                for (var pixelY = 0; pixelY < keyed.Height; pixelY++)
+                for (var pixelX = 0; pixelX < keyed.Width; pixelX++)
+                {
+                    var color = keyed.GetPixel(pixelX, pixelY);
+                    if (color.R == rawKey.R && color.G == rawKey.G && color.B == rawKey.B)
+                        keyed.SetPixel(pixelX, pixelY, Color.Transparent);
+                }
+            BmpPayloadService.CopyPixels(keyed, new Rectangle(Point.Empty, keyed.Size), strip, new Point(0, index * height));
         }
         return RebuildStrip(project, original, strip);
     }

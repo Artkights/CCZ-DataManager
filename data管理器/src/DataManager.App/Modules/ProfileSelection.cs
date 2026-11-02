@@ -48,6 +48,8 @@ public sealed partial class MainForm
     {
         if (_workspace.ActiveProfile.ProfileId == profileId && _workspace.ActiveProfile.VariantId == variantId) return;
         if (!PreparePendingEdits()) { SyncProfileSelectors(); return; }
+        if (!ConfirmLeaveEngine()) { SyncProfileSelectors(); return; }
+        if (!ConfirmLeaveFormula()) { SyncProfileSelectors(); return; }
         if (HasPendingChanges && !ConfirmDiscardOrSave("切换 Profile/布局"))
         {
             SyncProfileSelectors();

@@ -71,6 +71,8 @@ public sealed class BaseScanner
             var validation = reader.Validate(rootPath, definition);
             if (validation.IsUsable) usable++;
             else diagnostics.Add($"{definition.DisplayName}：{validation.Message}");
+            if (validation.IsUsable && definition.Key is "items-extended" or "item-description-extended")
+                diagnostics.Add($"{definition.DisplayName}：{Path.GetRelativePath(rootPath, validation.Path)}+0x{definition.DataOffset:X}；{definition.RowCount}×{definition.RowSize}；{definition.Capability}。{definition.CapabilityEvidence}");
         }
         var allTables = usable == resolved.Tables.Count;
         var anyMissing = reports.Any(report => !report.Exists);

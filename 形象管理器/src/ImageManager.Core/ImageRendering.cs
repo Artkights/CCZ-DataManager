@@ -47,14 +47,13 @@ public static class ImageRendering
         if (source.X < 0 || source.Y < 0 || source.Right > strip.Width || source.Bottom > strip.Height)
             throw new ArgumentOutOfRangeException(nameof(source));
         var frame = new Bitmap(source.Width, source.Height, PixelFormat.Format32bppArgb);
-        using var graphics = Graphics.FromImage(frame);
-        graphics.DrawImage(strip, new Rectangle(0, 0, frame.Width, frame.Height), source, GraphicsUnit.Pixel);
+        BmpPayloadService.CopyPixels(strip, source, frame, Point.Empty);
         return frame;
     }
 
     public static Bitmap ApplyKeyTransparency(Bitmap source, bool showBackground, bool dllBlue = false)
     {
-        if (showBackground) return new Bitmap(source);
+        if (showBackground) return BmpPayloadService.CopyArgb(source);
         var output = new Bitmap(source.Width, source.Height, PixelFormat.Format32bppArgb);
         // Avoid a GDI+ draw round trip for ARGB pixels: premultiplication can round RGB values.
         var pixels = source.PixelFormat == PixelFormat.Format32bppArgb

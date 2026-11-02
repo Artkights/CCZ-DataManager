@@ -517,7 +517,7 @@ public sealed class ImageMutationService : IImageMutationService
             .FirstOrDefault(group => group.Count() > 1);
         if (duplicate != null) throw new InvalidOperationException("事务包含重复目标：" + duplicate.Key);
 
-        var snapshotDirectory = _history.SnapshotDirectory(project, plan.OperationId);
+        var snapshotDirectory = string.Empty;
         var targets = new List<HistoryTarget>();
         var staged = new List<(MutationFile File, string? TempPath)>();
         var written = new List<HistoryTarget>();
@@ -526,6 +526,20 @@ public sealed class ImageMutationService : IImageMutationService
         {
             if (plan.SourceSnapshots != null)
                 foreach (var source in plan.SourceSnapshots) source.Value.Verify(source.Key);
+            foreach (var file in plan.Files)
+            {
+                file.ExpectedSource.Verify(file.TargetPath);
+                if (file.DeleteTarget && !File.Exists(file.TargetPath)) throw new FileNotFoundException("待删除资源不存在。", file.TargetPath);
+                if (!file.DeleteTarget && !file.AllowCreate && !File.Exists(file.TargetPath))
+                    throw new FileNotFoundException("目标资源不存在。", file.TargetPath);
+                if (!file.DeleteTarget) ValidateCandidate(project, file.TargetPath, file.CandidateBytes);
+            }
+            var verification = MutationSemanticVerification.Prepare(project, plan);
+            if (!verification.HasChanges)
+                return new MutationResult(plan.OperationId, false, "未产生可写入变化", null, [],
+                    ["转换后的目标像素和数据与原资源相同；未写入文件，也未新增历史记录。"])
+                { Outcome = MutationOutcome.NoChange };
+            snapshotDirectory = _history.SnapshotDirectory(project, plan.OperationId);
             foreach (var file in plan.Files)
             {
                 var targetPath = Path.GetFullPath(file.TargetPath);
@@ -583,6 +597,10 @@ public sealed class ImageMutationService : IImageMutationService
                 ResourceFileRecovery.Verify(target.TargetPath, target.AfterExists, target.AfterLength, target.AfterSha256);
                 if (target.AfterExists) ValidateFile(project, target.TargetPath);
             }
+
+            // SHA-256 proves the staged bytes reached disk. Reopening the physical
+            // entries also proves their decoded pixels and editor expectations survived.
+            verification.VerifyWritten(project, plan);
 
             if (afterPrimaryWrite != null)
             {

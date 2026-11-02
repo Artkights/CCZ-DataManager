@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 
 namespace ImageManager.Core;
 
-public sealed class AiAtlasNormalizer : IAiAtlasNormalizer
+public sealed partial class AiAtlasNormalizer : IAiAtlasNormalizer
 {
     private readonly IReferenceAtlasLayoutPlanner _layouts;
 
@@ -31,13 +31,11 @@ public sealed class AiAtlasNormalizer : IAiAtlasNormalizer
 
         var layout = _layouts.Plan(asset, referenceFrames);
         using var loaded = new Bitmap(pngPath);
-        if (loaded.Width != loaded.Height)
-            throw new InvalidDataException($"AI 参考图必须为正方形，当前为 {loaded.Width}x{loaded.Height}。");
         using var source = ToArgb(loaded);
         var pixels = ReadPixels(source, cancellationToken);
-        var background = ClassifyBackground(pixels, source.Size, options);
-        var foreground = BuildForegroundMask(pixels, source.Size, background, options,
-            layout.CanvasSize, cancellationToken);
+        var effective = ResolveEffectiveBounds(pixels, source.Size, options.SourceMapping?.EffectiveBounds);
+        var background = ClassifyEffectiveBackground(pixels, source.Size, effective, options);
+        var foreground = BuildEffectiveForeground(pixels, source.Size, effective, background, options, cancellationToken);
         var diagnostics = new List<string>
         {
             $"输入 {source.Width}x{source.Height}，标准画布 {layout.CanvasSize}x{layout.CanvasSize}，倍率 {source.Width / (double)layout.CanvasSize:0.######}x。",
@@ -49,7 +47,7 @@ public sealed class AiAtlasNormalizer : IAiAtlasNormalizer
             }
         };
 
-        var mapped = BuildSourceMapping(layout, foreground, source.Size, diagnostics, cancellationToken);
+        var mapped = BuildFlexibleMapping(layout, foreground, source.Size, effective, options, diagnostics, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         diagnostics.Add(options.GeometryMode == FrameAlignmentMode.None
             ? "按固定或自动配准后的格位一次性还原；不自动按原人物前景大小二次缩放。"
@@ -75,8 +73,8 @@ public sealed class AiAtlasNormalizer : IAiAtlasNormalizer
                 cancellationToken.ThrowIfCancellationRequested();
                 var key = FrameKey(placement.Frame.Descriptor);
                 var sourceBounds = mapped.Rectangles[key];
-                using var raw = Resample(pixels, foreground, source.Size, sourceBounds,
-                    placement.Bounds.Size, sourceIsSmaller ? AtlasResamplingKernel.NearestNeighbor : options.Kernel);
+                using var raw = RestoreMappedFrame(pixels, foreground, source.Size, sourceBounds,
+                    placement.Bounds.Size, mapped, key, options);
                 var referenceProfile = BuildGeometryProfile(placement.Frame.Bitmap, options.AlphaThreshold);
                 referenceGeometry[key] = referenceProfile;
                 var aiProfile = BuildGeometryProfile(pixels, foreground, source.Size, sourceBounds,
@@ -109,7 +107,7 @@ public sealed class AiAtlasNormalizer : IAiAtlasNormalizer
                 }
                 else paletteIndexes[key] = null;
 
-                var coverage = ForegroundCoverage(resized);
+                var coverage = ForegroundCoverage(alignedFrames[^1].Bitmap);
                 var confidence = mapped.Confidences.TryGetValue(key, out var rowConfidence)
                     ? rowConfidence : 0.5;
                 AtlasIssueSeverity severity;
@@ -120,18 +118,18 @@ public sealed class AiAtlasNormalizer : IAiAtlasNormalizer
                     confidence = Math.Min(confidence, 0.15);
                     message = "该必需帧没有检测到前景；可能缺帧、错格或背景蒙版过强。";
                 }
-                else if (mapped.HasRegistrationFallback)
+                else if (mapped.Issues.TryGetValue(key, out var mappingIssue))
                 {
                     severity = AtlasIssueSeverity.Error;
                     confidence = Math.Min(confidence, 0.25);
-                    message = "未能识别规定数量的语义行，禁止按比例猜测后直接写回。";
+                    message = mappingIssue;
                 }
-                else if (sourceIsSmaller || confidence < 0.55 || TouchesEdge(resized))
+                else if (sourceIsSmaller || confidence < 0.55 || TouchesEdge(alignedFrames[^1].Bitmap))
                 {
                     severity = AtlasIssueSeverity.Warning;
                     message = sourceIsSmaller
                         ? "源图小于标准格位，最近邻放大无法恢复已经丢失的细节。"
-                        : TouchesEdge(resized)
+                        : TouchesEdge(alignedFrames[^1].Bitmap)
                         ? "前景接触帧边界，写回前请检查是否被裁切或跨格。"
                         : "该帧使用低置信度配准结果，写回前请检查位置与动作。";
                 }
@@ -151,20 +149,12 @@ public sealed class AiAtlasNormalizer : IAiAtlasNormalizer
                     AlignedAiFrame = new Bitmap(alignedFrames[^1].Bitmap),
                     FinalCczFrame = new Bitmap(resized)
                 };
-                var alignedBounds = FindForegroundBounds(resized, options.AlphaThreshold);
+                var alignedBounds = FindForegroundBounds(alignedFrames[^1].Bitmap, options.AlphaThreshold, excludeKeyColor: false);
                 var baselineOffset = alignment.BaselineOffset;
                 var quantizationReport = quantizationReports.GetValueOrDefault(key);
                 var silhouetteIou = ComputeSilhouetteIoU(referenceProfile.ForegroundBounds, alignedBounds);
                 var aiColorError = ComputeColorError(placement.Frame.Bitmap, alignedFrames[^1].Bitmap,
                     options.AlphaThreshold);
-                if (severity == AtlasIssueSeverity.Information &&
-                    (Math.Abs(alignment.Scale - 1) > .35 ||
-                     Math.Abs(aiProfile.Occupancy - referenceProfile.Occupancy) > .12 || silhouetteIou < .25 ||
-                     aiColorError > 18))
-                {
-                    severity = AtlasIssueSeverity.Warning;
-                    message = "AI 帧内容或占位与原始参考差异较大；请在逐帧预览中人工确认。";
-                }
                 var warning = severity == AtlasIssueSeverity.Warning ||
                               background.Kind == AtlasBackgroundKind.OpaqueColor ||
                               alignment.IsClipped || Math.Abs(alignment.Scale - 1) > .35;
@@ -182,7 +172,7 @@ public sealed class AiAtlasNormalizer : IAiAtlasNormalizer
                     AiColorError = aiColorError,
                     KeyPixelCount = quantizationReport?.KeyPixelCount ?? 0,
                     NonKeyPixelCount = quantizationReport?.NonKeyPixelCount ?? 0,
-                    IsClipped = alignment.IsClipped || TouchesEdge(resized),
+                    IsClipped = alignment.IsClipped || TouchesEdge(alignedFrames[^1].Bitmap),
                     RequiresManualReview = background.Kind == AtlasBackgroundKind.OpaqueColor ||
                                            alignment.IsClipped || confidence < .7 || warning
                 });
@@ -200,6 +190,7 @@ public sealed class AiAtlasNormalizer : IAiAtlasNormalizer
             {
                 SourcePath = Path.GetFullPath(pngPath),
                 SourceSize = source.Size,
+                SourceMapping = ToPublicMapping(mapped, effective, options),
                 TargetCanvasSize = layout.CanvasSize,
                 BackgroundKind = background.Kind,
                 BackgroundColor = background.Color,
@@ -245,11 +236,9 @@ public sealed class AiAtlasNormalizer : IAiAtlasNormalizer
 
     private static Bitmap ToArgb(Bitmap source)
     {
-        var output = new Bitmap(source.Width, source.Height, PixelFormat.Format32bppArgb);
-        using var graphics = Graphics.FromImage(output);
-        graphics.CompositingMode = CompositingMode.SourceCopy;
-        graphics.DrawImageUnscaled(source, 0, 0);
-        return output;
+        // Clone in pixel coordinates: DrawImageUnscaled still considers image/device
+        // DPI in a PerMonitorV2 host and can resample the one-pixel outside frame.
+        return source.Clone(new Rectangle(Point.Empty, source.Size), PixelFormat.Format32bppArgb);
     }
 
     private static int[] ReadPixels(Bitmap bitmap, CancellationToken cancellationToken = default)
@@ -269,36 +258,6 @@ public sealed class AiAtlasNormalizer : IAiAtlasNormalizer
         return pixels;
     }
 
-    private static BackgroundInfo ClassifyBackground(int[] pixels, Size size,
-        AiAtlasNormalizationOptions options)
-    {
-        var transparent = pixels.Count(argb => (uint)argb >> 24 < 250);
-        var samplePoint = options.BackgroundSample is { } selected &&
-                          selected.X >= 0 && selected.Y >= 0 && selected.X < size.Width && selected.Y < size.Height
-            ? selected : Point.Empty;
-        if (transparent > pixels.Length / 1000)
-            return new BackgroundInfo(AtlasBackgroundKind.Transparent,
-                Color.FromArgb(pixels[samplePoint.Y * size.Width + samplePoint.X]));
-
-        var border = BorderColors(pixels, size).ToArray();
-        var color = options.BackgroundSample.HasValue
-            ? Color.FromArgb(pixels[samplePoint.Y * size.Width + samplePoint.X])
-            : DominantBorderColor(border);
-        var isKey = color.B >= 235 && color.G <= 28 && color.R >= 220;
-        return new BackgroundInfo(isKey ? AtlasBackgroundKind.KeyColor : AtlasBackgroundKind.OpaqueColor,
-            Color.FromArgb(255, color.R, color.G, color.B));
-    }
-
-    private static IEnumerable<Color> BorderColors(int[] pixels, Size size)
-    {
-        var depth = Math.Max(1, (int)Math.Ceiling(Math.Min(size.Width, size.Height) * .02));
-        var stride = Math.Max(1, Math.Min(size.Width, size.Height) / 256);
-        for (var y = 0; y < size.Height; y += stride)
-        for (var x = 0; x < size.Width; x += stride)
-            if (x < depth || y < depth || x >= size.Width - depth || y >= size.Height - depth)
-                yield return Color.FromArgb(pixels[y * size.Width + x]);
-    }
-
     private static Color DominantBorderColor(IReadOnlyList<Color> colors)
     {
         if (colors.Count == 0) return Color.Black;
@@ -306,175 +265,6 @@ public sealed class AiAtlasNormalizer : IAiAtlasNormalizer
             .OrderByDescending(item => item.Count()).First().ToArray();
         return Color.FromArgb(255, (int)group.Average(color => color.R),
             (int)group.Average(color => color.G), (int)group.Average(color => color.B));
-    }
-
-    private static bool[] BuildForegroundMask(int[] pixels, Size size, BackgroundInfo background,
-        AiAtlasNormalizationOptions options, int targetCanvas, CancellationToken cancellationToken)
-    {
-        var count = pixels.Length;
-        var foreground = new bool[count];
-        if (background.Kind == AtlasBackgroundKind.Transparent)
-        {
-            for (var index = 0; index < count; index++)
-            {
-                if ((index & 0x3FFF) == 0) cancellationToken.ThrowIfCancellationRequested();
-                foreground[index] = (uint)pixels[index] >> 24 >= 16;
-            }
-        }
-        else
-        {
-            var candidate = new bool[count];
-            var threshold = background.Kind == AtlasBackgroundKind.KeyColor
-                ? Math.Max(4, options.BackgroundTolerance)
-                : Math.Max(3, options.BackgroundTolerance);
-            var backgroundLab = ToLab(background.Color);
-            for (var index = 0; index < count; index++)
-            {
-                if ((index & 0x3FFF) == 0) cancellationToken.ThrowIfCancellationRequested();
-                var color = Color.FromArgb(pixels[index]);
-                candidate[index] = LabDistance(backgroundLab, ToLab(color)) <= threshold;
-            }
-
-            var flooded = FloodBorder(candidate, size, cancellationToken);
-            for (var index = 0; index < count; index++) foreground[index] = !flooded[index];
-
-            if (background.Kind == AtlasBackgroundKind.OpaqueColor)
-            {
-                var strong = new bool[count];
-                for (var index = 0; index < count; index++)
-                    strong[index] = LabDistance(backgroundLab, ToLab(Color.FromArgb(pixels[index]))) > threshold * 2.25;
-                var radius = Math.Clamp((int)Math.Round(size.Width / (double)targetCanvas), 1, 6);
-                DilateInto(strong, foreground, size, radius, flooded);
-                FillSmallHoles(foreground, size, radius * radius * 8);
-                RemoveIsolatedNoise(foreground, strong, size, Math.Max(4, radius * radius * 3));
-            }
-        }
-
-        foreach (var stroke in options.MaskStrokes)
-        {
-            var radiusSquared = stroke.Radius * stroke.Radius;
-            for (var y = Math.Max(0, stroke.Center.Y - stroke.Radius);
-                 y <= Math.Min(size.Height - 1, stroke.Center.Y + stroke.Radius); y++)
-            for (var x = Math.Max(0, stroke.Center.X - stroke.Radius);
-                 x <= Math.Min(size.Width - 1, stroke.Center.X + stroke.Radius); x++)
-                if ((x - stroke.Center.X) * (x - stroke.Center.X) +
-                    (y - stroke.Center.Y) * (y - stroke.Center.Y) <= radiusSquared)
-                    foreground[y * size.Width + x] = stroke.Keep;
-        }
-        return foreground;
-    }
-
-    private static bool[] FloodBorder(bool[] candidate, Size size, CancellationToken cancellationToken)
-    {
-        var flooded = new bool[candidate.Length];
-        var queue = new Queue<int>();
-        void Add(int index)
-        {
-            if (candidate[index] && !flooded[index]) { flooded[index] = true; queue.Enqueue(index); }
-        }
-        for (var x = 0; x < size.Width; x++) { Add(x); Add((size.Height - 1) * size.Width + x); }
-        for (var y = 0; y < size.Height; y++) { Add(y * size.Width); Add(y * size.Width + size.Width - 1); }
-        while (queue.Count > 0)
-        {
-            var index = queue.Dequeue();
-            if ((index & 0x3FFF) == 0) cancellationToken.ThrowIfCancellationRequested();
-            var x = index % size.Width;
-            var y = index / size.Width;
-            if (x > 0) Add(index - 1);
-            if (x + 1 < size.Width) Add(index + 1);
-            if (y > 0) Add(index - size.Width);
-            if (y + 1 < size.Height) Add(index + size.Width);
-        }
-        return flooded;
-    }
-
-    private static void DilateInto(bool[] seeds, bool[] target, Size size, int radius, bool[] onlyFlooded)
-    {
-        var horizontal = new bool[seeds.Length];
-        for (var y = 0; y < size.Height; y++)
-        {
-            var active = 0;
-            for (var x = -radius; x < size.Width + radius; x++)
-            {
-                var add = x + radius;
-                var remove = x - radius - 1;
-                if (add < size.Width && seeds[y * size.Width + add]) active++;
-                if (remove >= 0 && seeds[y * size.Width + remove]) active--;
-                if (x >= 0 && x < size.Width && active > 0) horizontal[y * size.Width + x] = true;
-            }
-        }
-        for (var x = 0; x < size.Width; x++)
-        {
-            var active = 0;
-            for (var y = -radius; y < size.Height + radius; y++)
-            {
-                var add = y + radius;
-                var remove = y - radius - 1;
-                if (add < size.Height && horizontal[add * size.Width + x]) active++;
-                if (remove >= 0 && horizontal[remove * size.Width + x]) active--;
-                if (y >= 0 && y < size.Height && active > 0 && onlyFlooded[y * size.Width + x])
-                    target[y * size.Width + x] = true;
-            }
-        }
-    }
-
-    private static void FillSmallHoles(bool[] foreground, Size size, int maximumArea)
-    {
-        var seen = new bool[foreground.Length];
-        var queue = new Queue<int>();
-        var component = new List<int>();
-        for (var start = 0; start < foreground.Length; start++)
-        {
-            if (foreground[start] || seen[start]) continue;
-            queue.Enqueue(start); seen[start] = true; component.Clear();
-            var touchesBorder = false;
-            while (queue.Count > 0)
-            {
-                var index = queue.Dequeue(); component.Add(index);
-                var x = index % size.Width; var y = index / size.Width;
-                touchesBorder |= x == 0 || y == 0 || x == size.Width - 1 || y == size.Height - 1;
-                void Visit(int next)
-                {
-                    if (!foreground[next] && !seen[next]) { seen[next] = true; queue.Enqueue(next); }
-                }
-                if (x > 0) Visit(index - 1);
-                if (x + 1 < size.Width) Visit(index + 1);
-                if (y > 0) Visit(index - size.Width);
-                if (y + 1 < size.Height) Visit(index + size.Width);
-                if (component.Count > maximumArea && touchesBorder) queue.Clear();
-            }
-            if (!touchesBorder && component.Count <= maximumArea)
-                foreach (var index in component) foreground[index] = true;
-        }
-    }
-
-    private static void RemoveIsolatedNoise(bool[] foreground, bool[] strong, Size size, int maximumArea)
-    {
-        var seen = new bool[foreground.Length];
-        var queue = new Queue<int>();
-        var component = new List<int>();
-        for (var start = 0; start < foreground.Length; start++)
-        {
-            if (!foreground[start] || seen[start]) continue;
-            queue.Enqueue(start); seen[start] = true; component.Clear();
-            var hasStrong = false;
-            while (queue.Count > 0)
-            {
-                var index = queue.Dequeue(); component.Add(index); hasStrong |= strong[index];
-                var x = index % size.Width; var y = index / size.Width;
-                void Visit(int next)
-                {
-                    if (foreground[next] && !seen[next]) { seen[next] = true; queue.Enqueue(next); }
-                }
-                if (x > 0) Visit(index - 1);
-                if (x + 1 < size.Width) Visit(index + 1);
-                if (y > 0) Visit(index - size.Width);
-                if (y + 1 < size.Height) Visit(index + size.Width);
-                if (component.Count > maximumArea && hasStrong) queue.Clear();
-            }
-            if (!hasStrong && component.Count <= maximumArea)
-                foreach (var index in component) foreground[index] = false;
-        }
     }
 
     private static Bitmap BuildMaskPreview(int[] pixels, bool[] foreground, Size size)
@@ -497,126 +287,6 @@ public sealed class AiAtlasNormalizer : IAiAtlasNormalizer
         }
         finally { output.UnlockBits(data); }
         return output;
-    }
-
-    private static SourceMapping BuildSourceMapping(ReferenceAtlasLayoutPlan layout, bool[] foreground,
-        Size sourceSize, List<string> diagnostics, CancellationToken cancellationToken)
-    {
-        var mapping = new SourceMapping();
-        var scale = sourceSize.Width / (double)layout.CanvasSize;
-        var integerScale = sourceSize.Width >= layout.CanvasSize && sourceSize.Width % layout.CanvasSize == 0;
-        if (integerScale && CanonicalGridIsValid(layout, foreground, sourceSize, scale))
-        {
-            foreach (var placement in layout.Placements)
-            {
-                var key = FrameKey(placement.Frame.Descriptor);
-                mapping.Rectangles[key] = ScaleRectangle(placement.Bounds, scale, sourceSize);
-                mapping.Confidences[key] = 1;
-                mapping.SectionKeys[key] = SectionKey(placement.Frame.Descriptor);
-            }
-            mapping.ReservedRectangles.AddRange(CanonicalReservedRectangles(layout).Select(item =>
-                item with { Bounds = ScaleRectangle(item.Bounds, scale, sourceSize) }));
-            diagnostics.Add($"检测到有效的 {scale:0} 倍固定格位，逐格直接切分，不做前景配准。");
-            return mapping;
-        }
-
-        diagnostics.Add(integerScale ? "固定格位存在缺帧或错位，尝试自动语义行配准。" : "非整数倍率，尝试自动语义行配准后一次性还原。");
-        if (layout.LayoutId == ReferenceAtlasLayoutPlanner.SLayoutId)
-        {
-            foreach (var section in layout.Sections)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                var placements = layout.Placements.Where(placement =>
-                    placement.Frame.Descriptor.Turn == section.Turn &&
-                    (section.Action == "atk" ? placement.Frame.Descriptor.Action == "atk" :
-                        placement.Frame.Descriptor.Action != "atk")).ToArray();
-                var rowCount = 3;
-                var search = Scaled(section, scale, sourceSize);
-                search = ExpandVertical(search, sourceSize, .015);
-                var rowBounds = DetectRows(foreground, sourceSize, search, rowCount);
-                if (rowBounds == null)
-                {
-                    mapping.HasRegistrationFallback = true;
-                    diagnostics.Add($"{section.Name} 未能稳定识别 {rowCount} 条语义行，已使用比例格位并要求人工确认。");
-                }
-                else
-                    diagnostics.Add($"{section.Name} 已按前景投影配准 {rowCount} 条语义行。");
-
-                foreach (var placement in placements)
-                {
-                    var descriptor = placement.Frame.Descriptor;
-                    var key = FrameKey(descriptor);
-                    var row = descriptor.Action == "atk" ? descriptor.FrameIndex / 4 :
-                        descriptor.Action == "spc" ? 2 : descriptor.FrameIndex < 6 ? 0 : 1;
-                    var scaled = ScaleRectangle(placement.Bounds, scale, sourceSize);
-                    if (rowBounds != null)
-                        scaled = new Rectangle(scaled.X, rowBounds[row].Top, scaled.Width,
-                            rowBounds[row].Height);
-                    mapping.Rectangles[key] = scaled;
-                    mapping.Confidences[key] = rowBounds == null ? .45 : rowBounds[row].Confidence;
-                    mapping.SectionKeys[key] = SectionKey(descriptor);
-                }
-
-                foreach (var reserved in CanonicalReservedRectangles(layout).Where(item =>
-                             item.Turn == section.Turn && item.Section == (section.Action == "atk" ? "atk" : "small")))
-                {
-                    var scaled = ScaleRectangle(reserved.Bounds, scale, sourceSize);
-                    if (rowBounds != null) scaled = new Rectangle(scaled.X, rowBounds[reserved.Row].Top,
-                        scaled.Width, rowBounds[reserved.Row].Height);
-                    mapping.ReservedRectangles.Add(reserved with { Bounds = scaled });
-                }
-            }
-        }
-        else
-        {
-            var rows = layout.Placements.Select(item => item.Bounds.Y).Distinct().Order().Count();
-            var search = new Rectangle(0, 0, sourceSize.Width, sourceSize.Height);
-            var rowBounds = DetectRows(foreground, sourceSize, search, rows);
-            if (rowBounds == null)
-            {
-                mapping.HasRegistrationFallback = true;
-                diagnostics.Add("R 参考图未能稳定识别全部语义行，已使用比例格位并要求人工确认。");
-            }
-            foreach (var placement in layout.Placements)
-            {
-                var descriptor = placement.Frame.Descriptor;
-                var key = FrameKey(descriptor);
-                var scaled = ScaleRectangle(placement.Bounds, scale, sourceSize);
-                var row = placement.Bounds.Y / Math.Max(1, layout.Placements.Max(item => item.Bounds.Height));
-                if (rowBounds != null && row < rowBounds.Length)
-                    scaled = new Rectangle(scaled.X, rowBounds[row].Top, scaled.Width, rowBounds[row].Height);
-                mapping.Rectangles[key] = scaled;
-                mapping.Confidences[key] = rowBounds == null || row >= rowBounds.Length ? .45 : rowBounds[row].Confidence;
-                mapping.SectionKeys[key] = SectionKey(descriptor);
-            }
-        }
-        return mapping;
-    }
-
-    private static bool CanonicalGridIsValid(ReferenceAtlasLayoutPlan layout, bool[] foreground,
-        Size size, double scale)
-    {
-        foreach (var placement in layout.Placements)
-        {
-            var bounds = ScaleRectangle(placement.Bounds, scale, size);
-            var found = false;
-            for (var y = bounds.Top; y < bounds.Bottom && !found; y++)
-            for (var x = bounds.Left; x < bounds.Right; x++)
-                if (foreground[y * size.Width + x]) { found = true; break; }
-            if (!found) return false;
-        }
-        return true;
-    }
-
-    private static Rectangle Scaled(ReferenceAtlasSection section, double scale, Size sourceSize)
-        => Clamp(new Rectangle((int)Math.Round(section.X * scale), (int)Math.Round(section.Y * scale),
-            Math.Max(1, (int)Math.Round(section.Width * scale)), Math.Max(1, (int)Math.Round(section.Height * scale))), sourceSize);
-
-    private static Rectangle ExpandVertical(Rectangle rectangle, Size size, double ratio)
-    {
-        var amount = (int)Math.Round(size.Height * ratio);
-        return Clamp(Rectangle.FromLTRB(rectangle.Left, rectangle.Top - amount,
-            rectangle.Right, rectangle.Bottom + amount), size);
     }
 
     private static DetectedRow[]? DetectRows(bool[] foreground, Size size, Rectangle search, int expected)
@@ -706,32 +376,31 @@ public sealed class AiAtlasNormalizer : IAiAtlasNormalizer
     private static List<(int Start, int End, double Weight)> SelectOrderedBands(
         IReadOnlyList<(int Start, int End, double Weight)> bands, int count, double expectedSpacing)
     {
-        List<(int Start, int End, double Weight)>? best = null;
-        var bestScore = double.MinValue;
-        void Search(int sourceIndex, List<(int Start, int End, double Weight)> selected)
+        // Dynamic programming avoids exponential subset search on noisy AI backgrounds.
+        var scores = new double[count, bands.Count];
+        var previous = new int[count, bands.Count];
+        for (var row = 0; row < count; row++)
+        for (var index = 0; index < bands.Count; index++)
         {
-            if (selected.Count == count)
+            scores[row, index] = double.NegativeInfinity;
+            previous[row, index] = -1;
+            var weight = Math.Log10(bands[index].Weight + 1);
+            if (row == 0) { scores[row, index] = weight; continue; }
+            for (var prior = row - 1; prior < index; prior++)
             {
-                var centers = selected.Select(item => (item.Start + item.End) / 2d).ToArray();
-                var spacingPenalty = centers.Zip(centers.Skip(1), (left, right) =>
-                    Math.Abs(right - left - expectedSpacing) / Math.Max(1, expectedSpacing)).Sum();
-                var score = selected.Sum(item => Math.Log10(item.Weight + 1)) - spacingPenalty * 3;
-                if (score > bestScore) { bestScore = score; best = selected.ToList(); }
-                return;
-            }
-            for (var index = sourceIndex; index <= bands.Count - (count - selected.Count); index++)
-            {
-                selected.Add(bands[index]); Search(index + 1, selected); selected.RemoveAt(selected.Count - 1);
+                var distance = (bands[index].Start + bands[index].End - bands[prior].Start - bands[prior].End) / 2d;
+                var score = scores[row - 1, prior] + weight - Math.Abs(distance - expectedSpacing) / Math.Max(1, expectedSpacing) * 3;
+                if (score <= scores[row, index]) continue;
+                scores[row, index] = score;
+                previous[row, index] = prior;
             }
         }
-        Search(0, []);
-        return best ?? [];
+        var last = Enumerable.Range(0, bands.Count).MaxBy(index => scores[count - 1, index]);
+        var selected = new List<(int Start, int End, double Weight)>();
+        for (var row = count - 1; row >= 0; row--) { selected.Add(bands[last]); last = previous[row, last]; }
+        selected.Reverse();
+        return selected;
     }
-
-    private static Rectangle ScaleRectangle(Rectangle rectangle, double scale, Size sourceSize)
-        => Clamp(new Rectangle((int)Math.Round(rectangle.X * scale), (int)Math.Round(rectangle.Y * scale),
-            Math.Max(1, (int)Math.Round(rectangle.Width * scale)),
-            Math.Max(1, (int)Math.Round(rectangle.Height * scale))), sourceSize);
 
     private static Rectangle Clamp(Rectangle rectangle, Size size)
     {
@@ -793,17 +462,17 @@ public sealed class AiAtlasNormalizer : IAiAtlasNormalizer
             new Rectangle(1, 1, Math.Max(1, targetSize.Width - 2), Math.Max(1, targetSize.Height - 2)));
     }
 
-    private static Rectangle FindForegroundBounds(Bitmap bitmap, int alphaThreshold)
-        => FindForegroundBounds(ReadPixels(bitmap), bitmap.Size, alphaThreshold);
+    private static Rectangle FindForegroundBounds(Bitmap bitmap, int alphaThreshold, bool excludeKeyColor = true)
+        => FindForegroundBounds(ReadPixels(bitmap), bitmap.Size, alphaThreshold, excludeKeyColor);
 
-    private static Rectangle FindForegroundBounds(int[] pixels, Size size, int alphaThreshold)
+    private static Rectangle FindForegroundBounds(int[] pixels, Size size, int alphaThreshold, bool excludeKeyColor = true)
     {
         var left = size.Width; var top = size.Height; var right = -1; var bottom = -1;
         for (var y = 0; y < size.Height; y++)
         for (var x = 0; x < size.Width; x++)
         {
             var color = Color.FromArgb(pixels[y * size.Width + x]);
-            if (color.A < alphaThreshold || IsKeyColor(color)) continue;
+            if (color.A < alphaThreshold || excludeKeyColor && IsKeyColor(color)) continue;
             left = Math.Min(left, x); top = Math.Min(top, y);
             right = Math.Max(right, x); bottom = Math.Max(bottom, y);
         }
@@ -882,7 +551,7 @@ public sealed class AiAtlasNormalizer : IAiAtlasNormalizer
             var left = reference.GetPixel(x, y);
             var right = actual.GetPixel(x, y);
             var leftVisible = left.A >= alphaThreshold && !IsKeyColor(left);
-            var rightVisible = right.A >= alphaThreshold && !IsKeyColor(right);
+            var rightVisible = right.A >= alphaThreshold;
             if (!leftVisible && !rightVisible) continue;
             if (leftVisible != rightVisible) { total += 40; count++; continue; }
             total += LabDistance(ToLab(left), ToLab(right));
@@ -1132,7 +801,7 @@ public sealed class AiAtlasNormalizer : IAiAtlasNormalizer
     private static double ForegroundCoverage(Bitmap bitmap)
     {
         var pixels = ReadPixels(bitmap);
-        return pixels.Count(pixel => (uint)pixel >> 24 >= 16 && !IsKeyColor(Color.FromArgb(pixel))) /
+        return pixels.Count(pixel => (uint)pixel >> 24 >= 16) /
                (double)pixels.Length;
     }
 
@@ -1140,13 +809,11 @@ public sealed class AiAtlasNormalizer : IAiAtlasNormalizer
     {
         var pixels = ReadPixels(bitmap);
         for (var x = 0; x < bitmap.Width; x++)
-            if ((uint)pixels[x] >> 24 >= 16 && !IsKeyColor(Color.FromArgb(pixels[x])) ||
-                (uint)pixels[(bitmap.Height - 1) * bitmap.Width + x] >> 24 >= 16 &&
-                !IsKeyColor(Color.FromArgb(pixels[(bitmap.Height - 1) * bitmap.Width + x]))) return true;
+            if ((uint)pixels[x] >> 24 >= 16 ||
+                (uint)pixels[(bitmap.Height - 1) * bitmap.Width + x] >> 24 >= 16) return true;
         for (var y = 0; y < bitmap.Height; y++)
-            if ((uint)pixels[y * bitmap.Width] >> 24 >= 16 && !IsKeyColor(Color.FromArgb(pixels[y * bitmap.Width])) ||
-                (uint)pixels[y * bitmap.Width + bitmap.Width - 1] >> 24 >= 16 &&
-                !IsKeyColor(Color.FromArgb(pixels[y * bitmap.Width + bitmap.Width - 1]))) return true;
+            if ((uint)pixels[y * bitmap.Width] >> 24 >= 16 ||
+                (uint)pixels[y * bitmap.Width + bitmap.Width - 1] >> 24 >= 16) return true;
         return false;
     }
 
@@ -1164,8 +831,8 @@ public sealed class AiAtlasNormalizer : IAiAtlasNormalizer
             var related = layout.Placements.First(item => item.Frame.Descriptor.Turn == reserved.Turn &&
                 item.Frame.Descriptor.Action != "atk").Frame.Descriptor;
             diagnostics.Add(new AiAtlasFrameDiagnostic($"reserved:{reserved.Turn}:{reserved.Row}:{reserved.Column}",
-                related, reserved.Bounds, Rectangle.Empty, Math.Max(0, .4 - ratio), AtlasIssueSeverity.Error,
-                "S 参考图的保留空格中检测到内容；不能判断它属于哪一帧。"));
+                related, reserved.Bounds, Rectangle.Empty, Math.Max(0, .4 - ratio), AtlasIssueSeverity.Warning,
+                "保留区域含未分配内容，请检查是否为背景残留或跨格特效。"));
         }
     }
 
@@ -1229,7 +896,8 @@ public sealed class AiAtlasNormalizer : IAiAtlasNormalizer
         public Dictionary<string, double> Confidences { get; } = new(StringComparer.Ordinal);
         public Dictionary<string, string> SectionKeys { get; } = new(StringComparer.Ordinal);
         public List<ReservedCell> ReservedRectangles { get; } = [];
-        public bool HasRegistrationFallback { get; set; }
+        public Dictionary<string, string> Issues { get; } = new(StringComparer.Ordinal);
+        public Dictionary<string, double> GroupScales { get; } = new(StringComparer.Ordinal);
     }
 
     private sealed record QuantizedImage(Bitmap Bitmap, byte[] Indexes, FrameColorQuantizationReport Report);

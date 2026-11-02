@@ -17,6 +17,27 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        if (args.Any(argument => argument.StartsWith("--atlas-", StringComparison.Ordinal)))
+            Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
+        if (args.Contains("--atlas-real-compat", StringComparer.Ordinal))
+        {
+            Run("6.4/6.5/6.6真实S_242两图兼容与副本事务", RealAtlasCompatibilityTests.Run);
+            Console.WriteLine($"结果：通过 {_passed}，失败 {_failed}。");
+            return _failed == 0 ? 0 : 1;
+        }
+        if (args.Contains("--atlas-package", StringComparer.Ordinal))
+        {
+            Run("参考包清单、目标隔离、编号图和兼容导出", AtlasPackageTests.Run);
+            Console.WriteLine($"结果：通过 {_passed}，失败 {_failed}。");
+            return _failed == 0 ? 0 : 1;
+        }
+        if (args.Contains("--atlas-flexible", StringComparer.Ordinal))
+        {
+            Run("非标准画布、背景、源框修正与真实AI图", FlexibleAtlasTests.Run);
+            Run("横竖画布、非整数动作偏移与缺帧", AtlasTransformTests.Run);
+            Console.WriteLine($"结果：通过 {_passed}，失败 {_failed}。");
+            return _failed == 0 ? 0 : 1;
+        }
         if (args.Contains("--image-import-acceptance", StringComparer.Ordinal))
         {
             Run("真实头像格式切换、新增/替换预览与原基底SHA", ImageImportAcceptanceScreenshots.Run);
@@ -34,6 +55,14 @@ internal static class Program
             Run("换色底图取色、取消、只读配置与调色板", PixelColorPickingTests.Run);
             Run("编辑与播放窗口高 DPI 布局", TestDialogLayout);
             Console.WriteLine($"结果：通过 {_passed}，失败 {_failed}，跳过 {_skipped}。");
+            return _failed == 0 ? 0 : 1;
+        }
+        if (args.Contains("--pixel-writeback", StringComparer.Ordinal))
+        {
+            Run("真实像素对话框R/S落盘、黑擦除、分区色表与ARGB", PixelWritebackTests.Run);
+            Run("图片语义修改、无变化与独立预期像素复读", MutationSemanticTests.Run);
+            Run("换色底图取色、取消、只读配置与调色板", PixelColorPickingTests.Run);
+            Console.WriteLine($"结果：通过 {_passed}，失败 {_failed}。");
             return _failed == 0 ? 0 : 1;
         }
         if (args.Contains("--ccz64", StringComparer.Ordinal))
@@ -107,6 +136,9 @@ internal static class Program
         }
         if (args.Contains("--atlas-regression", StringComparer.Ordinal))
         {
+            Run("参考包清单、目标隔离、编号图和兼容导出", AtlasPackageTests.Run);
+            Run("非标准画布、背景、源框修正与真实AI图", FlexibleAtlasTests.Run);
+            Run("横竖画布、非整数动作偏移与缺帧", AtlasTransformTests.Run);
             Run("R 无清单参考图 40 帧归一化", TestRAtlasRoundTrip);
             Run("S 单转无清单参考图语义布局", TestSAtlasRoundTrip);
             Run("旧三转布局探针与跨物理导出拒绝", TestSThreeTurnAtlasLayout);
@@ -165,6 +197,8 @@ internal static class Program
         Run("6.6 实际样本只读验收", TestSample66);
         Run("WinForms 主界面离屏烟测", TestUiSmoke);
         Run("换色底图取色、取消、只读配置与调色板", PixelColorPickingTests.Run);
+        Run("真实像素对话框R/S落盘、黑擦除、分区色表与ARGB", PixelWritebackTests.Run);
+        Run("图片语义修改、无变化与独立预期像素复读", MutationSemanticTests.Run);
         Run("编辑与播放窗口高 DPI 布局", TestDialogLayout);
         Run("资源分类实际写回矩阵", () => ResourceWritebackMatrixTests.Run());
         Console.WriteLine($"\n结果：通过 {_passed}，失败 {_failed}，跳过 {_skipped}。");
@@ -206,7 +240,7 @@ internal static class Program
         var exported = service.Export(scope.Path, asset, decoded, Color.Magenta);
         True(File.Exists(exported.PngPath) && File.Exists(exported.TransparentPngPath) && File.Exists(exported.PromptPath),
             "R 导出必须包含键色版、透明版和提示词。");
-        True(!Directory.EnumerateFiles(scope.Path, "*.json").Any(), "无清单导出不应生成 JSON。");
+        True(File.Exists(exported.ManifestPath) && File.Exists(exported.GuidePath), "R 导出必须生成布局清单和独立动作对照图。");
         using (var atlas = new Bitmap(exported.PngPath)) Equal(new Size(448, 448), atlas.Size);
         using var normalized = service.Normalize(exported.TransparentPngPath, asset, decoded, new AiAtlasNormalizationOptions());
         try
@@ -243,7 +277,7 @@ internal static class Program
         var exported = service.Export(scope.Path, asset, decoded, Color.Magenta);
         using (var atlas = new Bitmap(exported.PngPath)) Equal(new Size(348, 348), atlas.Size);
         using (var transparent = new Bitmap(exported.TransparentPngPath)) Equal(new Size(348, 348), transparent.Size);
-        True(!Directory.EnumerateFiles(scope.Path, "*.json").Any(), "S 导出不应生成 JSON。");
+        True(File.Exists(exported.ManifestPath) && File.Exists(exported.GuidePath), "S 导出必须生成布局清单和独立动作对照图。");
         var plan = new ReferenceAtlasLayoutPlanner().Plan(asset, decoded);
         Equal("s-semantic-size-grid-v3", plan.LayoutId);
         AssertAtlasFrame(plan, 1, "mov", 0, 25, 0, 48);

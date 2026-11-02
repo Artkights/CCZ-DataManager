@@ -95,6 +95,7 @@ public sealed class ProfileAugmentationService
                     VerificationLevel = assignmentEvidence.Capability == TableCapability.Editable ? VerificationLevel.SourceReviewed : VerificationLevel.InheritedUnverified }
                 : item;
         }).Append(table).ToArray();
+        tables = ExtendedItemLayoutProbe.Apply(root, tables, executable).ToArray();
         var equipmentTables = EquipmentTypeCatalogService.BuildTables(executable);
         tables = tables.Where(item => !equipmentTables.Any(equipment => equipment.Key == item.Key)).Concat(equipmentTables).ToArray();
         tables = TextConsumerEvidence.Apply(tables, executable).ToArray();
@@ -114,6 +115,12 @@ public sealed class ProfileAugmentationService
             original.Key == item.Key && (original.RowCount != item.RowCount || original.Capability != item.Capability)))
             .OrderBy(item => item.Key).Select(item => $"{item.Key}:{item.Capability}:{item.DataOffset}:{item.RowCount}:{item.RowSize}").ToArray();
         if (extensionChanges.Length > 0) geometry += "|" + string.Join("|", extensionChanges);
+        var itemChanges = tables.Where(item => item.Key is "items-high" or "item-description-high" or "items-extended" or "item-description-extended")
+            .Where(item => profile.Tables.Any(original => original.Key == item.Key &&
+                (original.FileName != item.FileName || original.DataOffset != item.DataOffset || original.RowCount != item.RowCount ||
+                 original.RecordCodecKey != item.RecordCodecKey || original.Capability != item.Capability)))
+            .OrderBy(item => item.Key).Select(item => $"{item.Key}:{item.FileName}:{item.DataOffset}:{item.RowCount}:{item.RowSize}:{item.RecordCodecKey}:{item.Capability}").ToArray();
+        if (itemChanges.Length > 0) geometry += "|item-extension:" + string.Join("|", itemChanges);
         var revision = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(profile.LayoutRevision + "|" + geometry)))[..16];
         return new ResolvedProfile { Profile = profile.Profile, Variant = profile.Variant, Tables = tables, Modules = modules, LayoutRevision = revision };
     }
