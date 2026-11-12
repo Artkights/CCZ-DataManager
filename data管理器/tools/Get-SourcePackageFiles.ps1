@@ -10,8 +10,15 @@ function Get-DataManagerSourceFiles {
         foreach ($taskFile in Get-ChildItem -LiteralPath $taskDirectory -Recurse -File -Force) {
             $taskRelative = [IO.Path]::GetRelativePath($taskSourceRoot, $taskFile.FullName).Replace('\', '/')
             if ($taskRelative.StartsWith('data管理器/src/src/', [StringComparison]::OrdinalIgnoreCase)) { continue }
+            # ProfileRegistry still selects these embedded compatibility manifests.
+            # They are build inputs rather than discarded configuration backups.
+            $taskCompatibilityProfile = $taskRelative -in @(
+                'data管理器/config/profiles/ccz-6.4.before-configuration.json',
+                'data管理器/config/profiles/ccz-6.5.before-simplification.json',
+                'data管理器/config/profiles/ccz-6.6.before-simplification.json')
             if ($taskRelative -match '(^|/)(bin|obj|\.git|\.vs|\.tmp|__pycache__|TestResults|历史|历史记录|运行产物)(/|$)' -or
-                $taskRelative -match '\.before-' -or $taskFile.Extension -in @('.exe','.dll','.pdb','.log','.zip','.nupkg','.cache','.tmp','.bak','.e5','.sav','.user','.pyc')) { continue }
+                ($taskRelative -match '\.before-' -and !$taskCompatibilityProfile) -or
+                $taskFile.Extension -in @('.exe','.dll','.pdb','.log','.zip','.nupkg','.cache','.tmp','.bak','.e5','.sav','.user','.pyc')) { continue }
             $taskFiles[$taskRelative] = $taskFile.FullName
         }
     }
