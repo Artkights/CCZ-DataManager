@@ -8,19 +8,29 @@ namespace DataManager.App;
 
 public sealed partial class MainForm
 {
-    private readonly SearchableIdComboBox _queryText = new() { Name = "RecordQuery", Width = 265, MatchDisplayText = true, CausesValidation = false };
+    private readonly TextBox[] _queryInputs = Enumerable.Range(1, 3).Select(index => new TextBox
+        { Name = $"RecordQuery{index}", Width = 112, PlaceholderText = "关键词（空格分词）", CausesValidation = false }).ToArray();
+    private readonly ComboBox[] _queryFields = Enumerable.Range(1, 3).Select(index => new ComboBox
+        { Name = $"RecordQueryField{index}", Width = 142, DropDownStyle = ComboBoxStyle.DropDownList, CausesValidation = false }).ToArray();
     private readonly Button _queryButton = new() { Name = "ExecuteQuery", Text = "查询", AutoSize = true, CausesValidation = false };
     private readonly Button _clearQueryButton = new() { Name = "ClearQuery", Text = "清空", AutoSize = true, CausesValidation = false };
     private readonly Label _querySummary = new() { AutoSize = true, ForeColor = Color.DimGray, Anchor = AnchorStyles.Left };
-    private readonly FlowLayoutPanel _queryGroup = new() { AutoSize = true, WrapContents = false, Margin = Padding.Empty };
-    private readonly Label _emptyQueryLabel = new() { Name = "EmptyQueryResult", Text = "没有匹配记录，请修改或清空查询条件。", TextAlign = ContentAlignment.MiddleCenter, Dock = DockStyle.Fill, BackColor = SystemColors.Window, Visible = false };
-    private readonly Dictionary<string, string> _pageQueries = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, int> _pageQueryIds = new(StringComparer.Ordinal);
+    private readonly FlowLayoutPanel _queryGroup = new() { Name = "RecordQueryGroups", Dock = DockStyle.Fill, AutoSize = true, WrapContents = true, Margin = Padding.Empty };
+    private readonly Label _emptyQueryLabel = new() { Name = "EmptyQueryResult", Text = "没有匹配记录，请切换详情子页、修改或清空查询条件。", TextAlign = ContentAlignment.MiddleCenter, Dock = DockStyle.Bottom, Height = 32, BackColor = SystemColors.Window, Visible = false };
+    private sealed record QueryFieldChoice(string? Key, string Display)
+    {
+        public override string ToString() => Display;
+    }
+    private sealed class QueryPageState : RecordQueryState
+    {
+        public int? SelectedId { get; set; }
+    }
+    private static RecordQueryCondition[] EmptyConditions() => Enumerable.Range(0, 3).Select(_ => new RecordQueryCondition(null, string.Empty)).ToArray();
+    private readonly Dictionary<RecordQueryContext, QueryPageState> _pageQueries = new();
     private readonly HashSet<string> _sizedNavigationPages = new(StringComparer.Ordinal);
     private SplitContainer? _navigationSplit;
-    private bool _refreshingQuery, _queryRefreshQueued;
-    private bool _queryInputEdited;
-    private string? _queryBoundPage;
+    private bool _refreshingQuery, _queryRefreshQueued, _bindingQueryInputs;
+    private RecordQueryContext? _queryBoundPage;
     private bool _restoringHideEmpty, _appliedHideEmpty;
     private sealed class PhysicalQueryFilterState
     {
@@ -28,24 +38,57 @@ public sealed partial class MainForm
         public string External { get; set; } = string.Empty;
     }
     private readonly ConditionalWeakTable<DataTable, PhysicalQueryFilterState> _physicalQueryFilters = new();
-    private sealed record QueryRecordSnapshot(string Version, IReadOnlyList<RecordPresentation> Records)
+    private sealed record QueryRecordSnapshot(string Version, RecordQuerySnapshot Snapshot);
+    private readonly Dictionary<RecordQueryContext, QueryRecordSnapshot> _queryRecords = new();
+
+    private RecordQueryScope CurrentQueryScope()
     {
-        public Dictionary<string, int> MeasuredWidths { get; } = new(StringComparer.Ordinal);
+        if (_businessKind is not null) return _businessEditor.CurrentQueryScope;
+        var service = new RecordQueryService(_workspace);
+        if (_currentDocument is not { } document) return new("none", [service.IdentityField()]);
+        var fields = new List<RecordQueryField> { service.IdentityField() };
+        foreach (var column in _grid.Columns.Cast<DataGridViewColumn>().Where(column => column.Visible))
+        {
+            if (column.Tag is not ProjectedField && string.IsNullOrEmpty(column.DataPropertyName)) continue;
+            var field = column.Tag is ProjectedField projected
+                ? service.PhysicalField([projected.TableKey], projected.FieldName, column.HeaderText)
+                : service.PhysicalField([document.Definition.Key], column.DataPropertyName, column.HeaderText);
+            if (field == null || fields.Any(existing => existing.Key == field.Key)) continue;
+            if (document.Definition.Fields.FirstOrDefault(definition => definition.Name == column.DataPropertyName) is { ReferenceTable.Length: > 0 } definition)
+            {
+                var physical = field;
+                var names = GetReferenceChoices(document, definition).ToDictionary(choice => choice.Value, choice => choice.Display);
+                field = physical with { ReadValues = id => physical.ReadValues(id).SelectMany(value =>
+                    int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var number) && names.TryGetValue(number, out var display)
+                        ? new[] { value, display } : new[] { value }).ToArray() };
+            }
+            fields.Add(field);
+        }
+        return new("table:" + document.Definition.Key, fields);
     }
-    private readonly Dictionary<string, QueryRecordSnapshot> _queryRecords = new(StringComparer.Ordinal);
 
-    private string? QueryPageKey => _businessKind == BusinessPageKind.ExtendData && _businessEditor.ExtendEditor is { } extend
-        ? "business:ExtendData:" + extend.Category
-        : _businessKind is { } kind ? "business:" + kind : _currentDocument?.Definition.Key;
+    private RecordQueryContext? QueryPageKey => _businessKind is { } kind
+        ? new(kind == BusinessPageKind.ExtendData ? RecordQueryContextKind.ExtendData : RecordQueryContextKind.Business,
+            _businessEditor.CurrentQueryScopeKey, kind, ExtendCategory: _businessEditor.ExtendEditor?.Category.ToString())
+        : _currentDocument is { } document
+            ? new(RecordQueryContextKind.PhysicalTable, "table:" + document.Definition.Key, TableKey: document.Definition.Key) : null;
 
-    private string ActiveQuery => QueryPageKey is { } key ? _pageQueries.GetValueOrDefault(key, string.Empty) : string.Empty;
-
-    private FlowLayoutPanel BuildQuerySettingsStrip()
+    private QueryPageState QueryState(RecordQueryContext key)
     {
-        var strip = new FlowLayoutPanel { Name = "SettingsAndQuery", Dock = DockStyle.Top, AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = true, Padding = new Padding(8, 2, 8, 2),
+        if (!_pageQueries.TryGetValue(key, out var state)) _pageQueries[key] = state = new();
+        return state;
+    }
+
+    private Control BuildQuerySettingsStrip()
+    {
+        var host = new TableLayoutPanel { Name = "SettingsAndQuery", Dock = DockStyle.Top, AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink, ColumnCount = 1, RowCount = 2, Padding = new Padding(8, 2, 8, 2),
             BackColor = Color.FromArgb(245, 247, 250) };
-        FlowLayoutPanel Group(string caption, Control control, int width)
+        host.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        host.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        host.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        var settings = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true, Margin = Padding.Empty };
+        void Group(string caption, Control control, int width)
         {
             var group = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 0, 8, 0) };
             group.Controls.Add(new Label { Text = caption, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 0, 4, 0) });
@@ -53,110 +96,158 @@ public sealed partial class MainForm
             control.Width = width;
             control.Margin = new Padding(0, 3, 0, 3);
             group.Controls.Add(control);
-            strip.Controls.Add(group);
-            return group;
+            settings.Controls.Add(group);
         }
         Group("版本", _profileSelector, 165);
         Group("布局", _variantSelector, 195);
         _hideEmpty.Margin = new Padding(0, 6, 10, 3);
-        strip.Controls.Add(_hideEmpty);
+        settings.Controls.Add(_hideEmpty);
         Group("快速定位", _quickLookup, 190);
-        _queryText.Margin = new Padding(0, 3, 5, 3);
-        _shellTips.SetToolTip(_queryText, "输入当前页左侧列表的 ID 或名称，选择匹配项，或按回车查询。仅匹配左侧显示的文字。");
-        _queryGroup.Controls.Add(_queryText);
-        _queryGroup.Controls.Add(_queryButton);
-        _queryGroup.Controls.Add(_clearQueryButton);
-        _queryGroup.Controls.Add(_querySummary);
-        strip.Controls.Add(_queryGroup);
         Group("表", _tableSelector, 285);
         _tableSelector.DropDownStyle = ComboBoxStyle.DropDownList;
+        host.Controls.Add(settings, 0, 0);
+        host.Controls.Add(_queryGroup, 0, 1);
+        for (var index = 0; index < 3; index++)
+        {
+            var pair = new FlowLayoutPanel { Name = $"RecordQueryPair{index + 1}", AutoSize = true, WrapContents = false, Margin = new Padding(0, 0, 8, 0) };
+            _queryFields[index].Margin = new Padding(0, 3, 4, 3);
+            _queryInputs[index].Margin = new Padding(0, 3, 0, 3);
+            pair.Controls.Add(_queryFields[index]);
+            pair.Controls.Add(_queryInputs[index]);
+            _queryGroup.Controls.Add(pair);
+            _shellTips.SetToolTip(_queryFields[index], "选择当前详情子页的属性；全部属性包含 ID：名称及该子页的所有记录属性。");
+            _shellTips.SetToolTip(_queryInputs[index], "空格分词，框内各词和三组条件全部满足。按回车或点击查询后应用。");
+            _queryFields[index].SelectedIndexChanged += (_, _) => RememberQueryInputs();
+            _queryInputs[index].TextChanged += (_, _) => RememberQueryInputs();
+            _queryInputs[index].KeyDown += (_, args) =>
+            {
+                if (args.KeyCode != Keys.Enter) return;
+                args.Handled = args.SuppressKeyPress = true;
+                SubmitRecordQuery();
+            };
+        }
+        var actions = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = Padding.Empty };
+        actions.Controls.Add(_queryButton);
+        actions.Controls.Add(_clearQueryButton);
+        actions.Controls.Add(_querySummary);
+        _queryGroup.Controls.Add(actions);
         _queryButton.Click += (_, _) => SubmitRecordQuery();
-        _clearQueryButton.Click += (_, _) => ExecuteRecordQuery(string.Empty);
-        _queryText.SelectionChangeCommitted += (_, _) =>
-        {
-            if (_queryText.SelectedItem is IdNameOption option) ExecuteRecordQuery(option.Display, option.Id);
-        };
-        _queryText.TextUpdate += (_, _) => _queryInputEdited = true;
-        _queryText.KeyDown += (_, args) =>
-        {
-            if (args.KeyCode != Keys.Enter) return;
-            args.Handled = args.SuppressKeyPress = true;
-            SubmitRecordQuery();
-        };
-        return strip;
+        _clearQueryButton.Click += (_, _) => ClearRecordQuery();
+        return host;
     }
 
-    private void SubmitRecordQuery()
+    private RecordQueryCondition[] ReadQueryInputs() => Enumerable.Range(0, 3).Select(index => new RecordQueryCondition(
+        (_queryFields[index].SelectedItem as QueryFieldChoice)?.Key, _queryInputs[index].Text)).ToArray();
+
+    private void RememberQueryInputs()
     {
-        // SelectedItem can also be assigned by typing a complete label. Only
-        // retain an exact selection that was explicitly committed previously.
-        if (!_queryInputEdited && QueryPageKey is { } key && _pageQueryIds.TryGetValue(key, out var id) && _queryText.Text == ActiveQuery)
-            ExecuteRecordQuery(_queryText.Text, id);
-        else ExecuteRecordQuery(_queryText.Text);
+        if (!_bindingQueryInputs && _queryBoundPage is { } key) QueryState(key).Inputs = ReadQueryInputs();
     }
 
-    private bool ExecuteRecordQuery(string query, int? selectedId = null)
+    private bool SubmitRecordQuery()
     {
-        if (QueryPageKey is not { } key || !PreparePendingEdits()) return false;
-        _pageQueries[key] = query.Trim();
-        if (selectedId.HasValue) _pageQueryIds[key] = selectedId.Value;
-        else _pageQueryIds.Remove(key);
-        _queryText.DroppedDown = false;
-        if (_businessKind == BusinessPageKind.ExtendData && _businessEditor.ExtendEditor is { } extend)
-            extend.SearchText = query.Trim();
-        _queryInputEdited = false;
+        if (QueryPageKey is not { } key) return false;
+        var conditions = ReadQueryInputs();
+        QueryState(key).Inputs = conditions;
+        if (!PreparePendingEdits()) return false;
+        QueryState(key).Applied = new(conditions.ToArray());
         RefreshQueryNavigation();
         return true;
+    }
+
+    private bool ClearRecordQuery()
+    {
+        if (QueryPageKey is not { } key || !PreparePendingEdits()) return false;
+        ResetCurrentQuery(key);
+        RefreshQueryNavigation();
+        return true;
+    }
+
+    private void ResetCurrentQuery(RecordQueryContext key)
+    {
+        var state = QueryState(key);
+        state.Inputs = EmptyConditions();
+        state.Applied = new();
+        _queryBoundPage = null;
+    }
+
+    private void BindQueryInputs(RecordQueryContext key, RecordQueryScope scope)
+    {
+        var state = QueryState(key);
+        var available = scope.Fields.Select(field => field.Key).ToHashSet(StringComparer.Ordinal);
+        var removed = false;
+        for (var index = 0; index < 3; index++)
+            if ((state.Inputs[index].FieldKey is { Length: > 0 } input && !available.Contains(input)) ||
+                (state.Applied.Conditions[index].FieldKey is { Length: > 0 } applied && !available.Contains(applied)))
+            {
+                state.Inputs[index] = new(null, string.Empty);
+                state.Applied = new(state.Applied.Conditions.Select((condition, ordinal) => ordinal == index ? new(null, string.Empty) : condition).ToArray());
+                removed = true;
+            }
+        _bindingQueryInputs = true;
+        try
+        {
+            for (var index = 0; index < 3; index++)
+            {
+                var choices = new[] { new QueryFieldChoice(null, "全部属性") }
+                    .Concat(scope.Fields.Select(field => new QueryFieldChoice(field.Key, field.DisplayName))).ToArray();
+                var combo = _queryFields[index];
+                if (!combo.Items.Cast<QueryFieldChoice>().SequenceEqual(choices))
+                {
+                    combo.Items.Clear();
+                    combo.Items.AddRange(choices);
+                }
+                combo.DropDownWidth = Math.Max(combo.Width, Math.Min(800,
+                    choices.Max(choice => TextRenderer.MeasureText(choice.Display, combo.Font).Width) + 32));
+                combo.SelectedIndex = Array.FindIndex(choices, choice => choice.Key == state.Inputs[index].FieldKey);
+                if (combo.SelectedIndex < 0) combo.SelectedIndex = 0;
+                if (_queryInputs[index].Text != state.Inputs[index].Text) _queryInputs[index].Text = state.Inputs[index].Text;
+            }
+            _queryBoundPage = key;
+        }
+        finally { _bindingQueryInputs = false; }
+        if (removed) SetStatus("当前基底已不提供选中的属性，已清除对应查询条件。", true);
     }
 
     private void ResetQueryNavigation()
     {
         _queryBoundPage = null;
         _pageQueries.Clear();
-        _pageQueryIds.Clear();
-        _queryInputEdited = false;
         _sizedNavigationPages.Clear();
-        _queryText.SetOptions([]);
-        _queryText.SetBoundValue(string.Empty, filterOptions: true);
+        _bindingQueryInputs = true;
+        try
+        {
+            foreach (var combo in _queryFields) combo.Items.Clear();
+            foreach (var input in _queryInputs) input.Clear();
+        }
+        finally { _bindingQueryInputs = false; }
         _emptyQueryLabel.Visible = false;
         _querySummary.Text = string.Empty;
         _queryRecords.Clear();
     }
 
-    private IReadOnlyList<RecordPresentation> CurrentQueryRecords()
+    private RecordQuerySnapshot CurrentQuerySnapshot(RecordQueryScope scope)
     {
-        var page = QueryPageKey;
-        if (page == null) return [];
+        var page = QueryPageKey ?? scope.Context ?? new RecordQueryContext(RecordQueryContextKind.Business, scope.Key);
         var version = string.Join('|', _workspace.Documents.Values.Select(document =>
-            $"{document.Definition.Key}:{RuntimeHelpers.GetHashCode(document)}:{document.Revision}"));
-        if (_businessKind == BusinessPageKind.ExtendData)
+            $"{document.Definition.Key}:{RuntimeHelpers.GetHashCode(document)}:{document.Revision}")) + "|" + string.Join('|', scope.Fields.Select(field => field.Key));
+        if (!string.IsNullOrWhiteSpace(_workspace.RootPath))
         {
             var exe = new FileInfo(DataManager.Core.Binary.ProjectFileLocator.Resolve(_workspace.RootPath, "Ekd5.exe"));
             version += $"|{exe.FullName}:{(exe.Exists ? exe.Length : -1)}:{(exe.Exists ? exe.LastWriteTimeUtc.Ticks : 0)}";
         }
-        if (_queryRecords.TryGetValue(page, out var cached) && cached.Version == version) return cached.Records;
+        if (_queryRecords.TryGetValue(page, out var cached) && cached.Version == version) return cached.Snapshot;
         var service = new RecordPresentationService(_workspace);
-        IReadOnlyList<RecordPresentation> records;
-        if (_businessKind == BusinessPageKind.ExtendData && _businessEditor.ExtendEditor is { } extend)
-        {
-            records = extend.GetEntityOptions().Select(option => new RecordPresentation(option.Id, option.Name,
-                string.Empty)).ToArray();
-        }
-        else records = _businessKind is { } kind ? service.GetBusinessRecords(kind)
+        IReadOnlyList<RecordPresentation> records = _businessKind == BusinessPageKind.ExtendData && _businessEditor.ExtendEditor is { } extend
+            ? extend.GetEntityOptions().Select(option => new RecordPresentation(option.Id, option.Name, string.Empty)).ToArray()
+            : _businessKind is { } kind ? service.GetBusinessRecords(kind)
             : _currentDocument is { } document ? service.GetTableRecords(document) : [];
-        _queryRecords[page] = new(version, records);
-        return records;
+        var snapshot = new RecordQueryService(_workspace).BuildSnapshot(scope, records);
+        _queryRecords[page] = new(version, snapshot);
+        return snapshot;
     }
 
-    private int QueryTextWidth(string page, IReadOnlyList<RecordPresentation> records)
-    {
-        var key = $"{_queryText.Font}:{_queryText.DeviceDpi}";
-        var snapshot = _queryRecords.GetValueOrDefault(page);
-        if (snapshot != null && snapshot.MeasuredWidths.TryGetValue(key, out var cached)) return cached;
-        var measured = records.Select(record => TextRenderer.MeasureText(record.Display, _queryText.Font).Width + 40).DefaultIfEmpty(265).Max();
-        if (snapshot != null) snapshot.MeasuredWidths[key] = measured;
-        return measured;
-    }
+    private IReadOnlyList<RecordPresentation> CurrentQueryRecords() => CurrentQuerySnapshot(CurrentQueryScope()).Records;
 
     private void RefreshQueryNavigation(bool bindSelection = true)
     {
@@ -167,35 +258,24 @@ public sealed partial class MainForm
         _selectingBusinessEntity = _suppressGridEvents = true;
         try
         {
-            var records = CurrentQueryRecords();
-            var query = ActiveQuery;
-            if (_queryBoundPage != pageKey) _queryInputEdited = false;
-            var inputText = _queryBoundPage == pageKey && _queryText.ContainsFocus && _queryInputEdited ? _queryText.Text : null;
-            var hasSelectedId = _pageQueryIds.TryGetValue(pageKey, out var selectedQueryId);
-            if (hasSelectedId && records.FirstOrDefault(record => record.Id == selectedQueryId) is { } selectedRecord)
-                _pageQueries[pageKey] = query = selectedRecord.Display;
-            _queryText.SetOptions(records.Select(record => new IdNameOption(record.Id,
-                string.IsNullOrWhiteSpace(record.Name) ? "未命名" : record.Name)));
-            _queryText.SetBoundValue(inputText ?? query, preserveEditSelection: inputText != null, filterOptions: true);
-            var dropDownWidth = Math.Max(_queryText.Width, Math.Min(760, QueryTextWidth(pageKey, records)));
-            if (_queryText.DropDownWidth != dropDownWidth) _queryText.DropDownWidth = dropDownWidth;
-            var currentId = _queryBoundPage == pageKey ? (_entityList.SelectedItem as EntityChoice)?.Id : null;
-            _queryBoundPage = pageKey;
-            if (_businessKind is not null) currentId ??= _businessEditor.CurrentId;
+            var scope = CurrentQueryScope();
+            var state = QueryState(pageKey);
+            int? currentId = _queryBoundPage == pageKey ? (_entityList.SelectedItem as EntityChoice)?.Id ?? state.SelectedId : state.SelectedId;
+            if (_businessKind is not null) currentId = _businessEditor.CurrentId;
             else if (_grid.CurrentRow?.DataBoundItem is DataRowView current) currentId = Convert.ToInt32(current["ID"], CultureInfo.InvariantCulture);
-            IEnumerable<RecordPresentation> matches = records.Where(record => hasSelectedId ? record.Id == selectedQueryId : record.Matches(query));
+            BindQueryInputs(pageKey, scope);
+            var snapshot = CurrentQuerySnapshot(scope);
+            var records = snapshot.Records;
+            IEnumerable<RecordPresentation> matches = snapshot.Filter(state.Applied.Conditions);
             if (_currentDocument is { } document)
             {
                 var clauses = new List<string>();
                 var filterState = _physicalQueryFilters.GetOrCreateValue(document.Data);
                 var currentFilter = document.Data.DefaultView.RowFilter ?? string.Empty;
-                // A caller can supply a DataView filter independently of the
-                // shell query. Deferred name refreshes and undo must preserve
-                // that view instead of silently expanding the editable rows.
                 if (filterState.Applied != currentFilter) filterState.External = currentFilter;
                 if (filterState.External.Length > 0) clauses.Add("(" + filterState.External + ")");
                 if (_hideEmpty.Checked) clauses.Add("(" + NonEmptyRowFilter(document.Data) + ")");
-                if (query.Length > 0)
+                if (state.Applied.Conditions.Any(condition => !string.IsNullOrWhiteSpace(condition.Text)))
                 {
                     var ids = matches.Select(record => record.Id.ToString(CultureInfo.InvariantCulture)).ToArray();
                     clauses.Add(ids.Length == 0 ? "false" : "[ID] IN (" + string.Join(',', ids) + ")");
@@ -208,7 +288,6 @@ public sealed partial class MainForm
             }
             else if (_hideEmpty.Checked && _businessKind is { } kind && kind != BusinessPageKind.ExtendData)
             {
-                // Entity pages have one primary record per ID. Derived names never make an empty physical row nonempty.
                 var primaryKeys = kind switch
                 {
                     BusinessPageKind.Persons => new[] { "persons" }, BusinessPageKind.Items => new[] { "items-low", "items-high", "items-extended" },
@@ -236,17 +315,17 @@ public sealed partial class MainForm
                 _quickLookup.SetOptions(records.Select(record => new IdNameOption(record.Id, record.Name)));
                 var selected = Array.FindIndex(filtered, record => record.Id == currentId);
                 _entityList.SelectedIndex = selected >= 0 ? selected : filtered.Length > 0 ? 0 : -1;
+                state.SelectedId = (_entityList.SelectedItem as EntityChoice)?.Id ?? currentId;
             }
             finally { _entityList.EndUpdate(); }
             _querySummary.Text = $"匹配 {filtered.Length} / 共 {records.Count} 项";
             _emptyQueryLabel.Visible = filtered.Length == 0;
-            _businessEditor.Enabled = filtered.Length != 0;
+            _businessEditor.SetQueryResultAvailable(filtered.Length != 0);
             if (_emptyQueryLabel.Visible) _emptyQueryLabel.BringToFront();
-            FitNavigationWidth(pageKey, records);
+            FitNavigationWidth(pageKey.ScopeKey, records);
             if (bindSelection && _entityList.SelectedItem is EntityChoice entity)
             {
-                if (_businessKind is { } businessKind)
-                    _businessEditor.Bind(businessKind, entity.Id);
+                if (_businessKind is { } businessKind) _businessEditor.Bind(businessKind, entity.Id);
                 else if (_grid.CurrentRow?.DataBoundItem is not DataRowView selectedRow || Convert.ToInt32(selectedRow["ID"], CultureInfo.InvariantCulture) != entity.Id)
                     SelectEntityById(entity.Id);
             }
@@ -261,19 +340,15 @@ public sealed partial class MainForm
 
     private bool RevealQueryEntity(int id)
     {
-        if (_refreshingQuery || QueryPageKey == null) return true;
+        if (_refreshingQuery || QueryPageKey is not { } key) return true;
         if (_entityList.Items.Cast<object>().OfType<EntityChoice>().Any(entity => entity.Id == id)) return true;
         if (!CurrentQueryRecords().Any(record => record.Id == id)) return true;
         if (!PreparePendingEdits()) return false;
-        _pageQueries[QueryPageKey] = string.Empty;
-        _pageQueryIds.Remove(QueryPageKey);
-        if (_businessKind == BusinessPageKind.ExtendData && _businessEditor.ExtendEditor is { } extend) extend.SearchText = string.Empty;
-        // A direct jump must also reveal a legitimate empty record.
+        ResetCurrentQuery(key);
         if (_hideEmpty.Checked) _hideEmpty.Checked = false;
         RefreshQueryNavigation(bindSelection: false);
         return true;
     }
-
     private void FitNavigationWidth(string key, IReadOnlyList<RecordPresentation> records)
     {
         if (_navigationSplit is not { } split || !_sizedNavigationPages.Add(key) || split.ClientSize.Width < 720) return;
@@ -320,7 +395,21 @@ public sealed partial class MainForm
         }));
     }
 
-    internal bool QueryForSmokeTest(string query) => ExecuteRecordQuery(query);
+    internal bool QueryForSmokeTest(string query) => QueryConditionsForSmokeTest([new(null, query)]);
+    internal IReadOnlyList<TextBox> QueryInputsForSmokeTest => _queryInputs;
+    internal IReadOnlyList<ComboBox> QueryFieldsForSmokeTest => _queryFields;
+    internal RecordQueryScope QueryScopeForSmokeTest => CurrentQueryScope();
+    internal bool QueryConditionsForSmokeTest(IReadOnlyList<RecordQueryCondition> conditions)
+    {
+        for (var index = 0; index < 3; index++)
+        {
+            var condition = index < conditions.Count ? conditions[index] : new(null, string.Empty);
+            _queryFields[index].SelectedIndex = _queryFields[index].Items.Cast<QueryFieldChoice>().ToList()
+                .FindIndex(choice => choice.Key == condition.FieldKey);
+            _queryInputs[index].Text = condition.Text;
+        }
+        return SubmitRecordQuery();
+    }
     internal void QuickLocateForSmokeTest(int id) => SelectEntityById(id);
     internal string QuerySummaryForSmokeTest => _querySummary.Text;
     internal bool EmptyQueryForSmokeTest => _emptyQueryLabel.Visible;

@@ -43,6 +43,11 @@ public sealed partial class MainForm
         panel.SImageLocationRequested += LocatePersonSImage;
         panel.PersonImageLocationRequested += LocatePersonImage;
         panel.ExtendCategoryChanged += (_, _) => { if (ReferenceEquals(panel, _businessEditor)) RefreshExtendEntityList(); };
+        panel.QueryScopeChanged += (_, _) =>
+        {
+            if (ReferenceEquals(panel, _businessEditor) && !_bindingModule && !_refreshingQuery)
+                RefreshQueryNavigation();
+        };
         return panel;
     }
 

@@ -332,7 +332,7 @@ public sealed partial class BusinessEditorPanel
                 form.RowStyles.Add(new RowStyle(SizeType.Percent, 100f / perColumn));
                 if (index >= columnFields.Length) continue;
                 var binding = columnFields[index];
-                var editor = CreateEditor(binding.Document, binding.Row, binding.RowIndex, binding.Field);
+                var editor = CreateEditor(binding.Document, binding.Row, binding.RowIndex, binding.Field, labels[index]);
                 var text = editor is ByteTextEditor byteEditor ? byteEditor.Editor : editor as TextBox;
                 if (text is { Multiline: true })
                 {
@@ -494,7 +494,7 @@ public sealed partial class BusinessEditorPanel
         void AddField(FieldBinding? binding, string labelText, int labelColumn, int editorColumn, int row)
         {
             if (binding == null) return;
-            var editor = CreateEditor(binding.Document, binding.Row, binding.RowIndex, binding.Field);
+            var editor = CreateEditor(binding.Document, binding.Row, binding.RowIndex, binding.Field, labelText);
             var text = editor is ByteTextEditor byteEditor ? byteEditor.Editor : editor as TextBox;
             if (text is { Multiline: true })
             {
@@ -601,6 +601,7 @@ public sealed partial class BusinessEditorPanel
     private void BuildPersonPage()
     {
         var page = DetailPage("人物详情");
+        DeclarePersonQueryFields();
         var root = Rows((SizeType.Percent, 43), (SizeType.Percent, 57));
         root.Name = "PersonPageContent";
         var stacked = false;
@@ -690,6 +691,7 @@ public sealed partial class BusinessEditorPanel
     private void BuildJobSeriesPage()
     {
         var page = DetailPage("兵种属性");
+        DeclareJobSeriesMatrixQueryFields();
         var body = Columns(20, 20, 20, 20, 20);
         body.Name = "JobSeriesColumns";
         page.Controls.Add(body);
@@ -706,7 +708,7 @@ public sealed partial class BusinessEditorPanel
         if (_workspace.Documents.TryGetValue("job-series-attributes", out var document))
         {
             var field = document.Definition.Fields.FirstOrDefault(candidate => candidate.Name == $"兵种系 {_id}");
-            if (field != null)
+            if (field != null && document.Data.Columns.Contains(field.Name))
                 for (var row = 0; row < Math.Min(JobAttributeNames.Length, document.Data.Rows.Count); row++)
                     attributes.Add(new(document, document.Data.Rows[row], row, field, JobAttributeNames[row]));
         }
@@ -800,6 +802,7 @@ public sealed partial class BusinessEditorPanel
     private void BuildItemPage()
     {
         var page = DetailPage("宝物详情");
+        DeclareItemQueryFields();
         var root = Columns(72, 28); page.Controls.Add(root);
         if (_id >= 256)
         {
@@ -887,6 +890,7 @@ public sealed partial class BusinessEditorPanel
         FieldBinding? CurrentItem() => Fields("items-low").Concat(Fields("items-high")).Concat(Fields("items-extended")).FirstOrDefault();
         if (CurrentItem() == null) return;
         var page = DetailPage("可装备部队");
+        DeclareItemPermissionQueryFields();
         var message = new Label { Dock = DockStyle.Top, Height = 30, Padding = new Padding(4), AutoEllipsis = true };
         var table = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 20, Padding = new Padding(4) };
         for (var column = 0; column < 4; column++) table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));

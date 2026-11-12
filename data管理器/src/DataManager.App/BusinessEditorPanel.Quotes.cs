@@ -9,6 +9,7 @@ public sealed partial class BusinessEditorPanel
 {
     private void BuildQuoteEditor(Control host, int personId)
     {
+        DeclareQuoteQueryFields();
         var service = new PersonQuoteService(_workspace);
         PersonQuoteMapping mapping;
         try { mapping = service.Resolve(personId); }

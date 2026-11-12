@@ -50,6 +50,7 @@ public sealed partial class ExtendDataEditorPanel : UserControl
             if (_binding || _tabs.SelectedTab?.Tag is not ExtendDataCategory category) return;
             Category = category;
             RenderCurrent();
+            QueryScopeChanged?.Invoke(this, EventArgs.Empty);
             CategoryChanged?.Invoke(this, EventArgs.Empty);
         };
         RenderCurrent();
@@ -232,6 +233,7 @@ public sealed partial class ExtendDataEditorPanel : UserControl
         finally
         {
             _binding = false;
+            ApplyQueryAvailability();
             State.Tab.ResumeLayout(true);
             ResumeLayout(true);
             if (State.Scroll is { IsDisposed: false } scroll) scroll.AutoScrollPosition = State.ScrollPosition;

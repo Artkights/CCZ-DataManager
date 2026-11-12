@@ -8,6 +8,8 @@ namespace DataManager.Tests;
 
 internal static class RecordPresentationTests
 {
+    // Presentation owns the left navigation label. Attribute searches are tested
+    // separately through RecordQueryService and the three-condition UI tests.
     public static void Run()
     {
         var workspace = new ProjectWorkspace();
@@ -99,7 +101,7 @@ internal static class RecordPresentationTests
         TestSupport.Assert(new RecordPresentationService(missing).GetBusinessRecords(BusinessPageKind.Persons).Count == 0 &&
             new BusinessDataService(missing).GetIdNameOptions(BusinessPageKind.Persons).Count == 0,
             "缺主表时不得将共享台词池行号冒充人物ID");
-        Console.WriteLine("记录语义与查询：仅匹配左栏ID/名称、忽略附加字段、字面包含、大小写、未命名占位、转置属性、地形、台词标签、战役和草稿名称验证通过。");
+        Console.WriteLine("记录展示标签：ID/名称、附加字段隔离、字面包含、大小写、未命名占位、转置属性、地形、台词标签、战役和草稿名称验证通过；详情属性查询由独立查询服务验证。");
     }
 
     private static TableFieldDefinition F(string name, FieldKind kind = FieldKind.FixedString, string? reference = null)

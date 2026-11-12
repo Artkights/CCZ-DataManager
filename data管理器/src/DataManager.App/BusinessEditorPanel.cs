@@ -227,9 +227,14 @@ public sealed partial class BusinessEditorPanel : UserControl, IEditorViewLifecy
         _errors.ContainerControl = this;
         _viewLayouts = new LayoutScheduler(this, ArrangeActiveView);
         VisibleChanged += (_, _) => { if (Visible) ActivateView(); else DeactivateView(); };
+        _tabs.Selecting += (_, args) =>
+        {
+            if (!_binding && !_disposingDetailPages && !_releaseCompleted && !Flush()) args.Cancel = true;
+        };
         _tabs.SelectedIndexChanged += (_, _) =>
         {
             UpdatePreviewActivity(); RequestViewLayout();
+            NotifyQueryScopeChanged();
             // Native tab visibility can settle after SelectedIndexChanged.
             if (IsHandleCreated && !_releaseCompleted)
                 BeginInvoke((Action)UpdatePreviewActivity);
@@ -274,6 +279,7 @@ public sealed partial class BusinessEditorPanel : UserControl, IEditorViewLifecy
             RequestViewLayout();
             return;
         }
+        RememberQueryPage();
         _binding = true;
         SuspendLayout();
         _tabs.SuspendLayout();
@@ -326,6 +332,7 @@ public sealed partial class BusinessEditorPanel : UserControl, IEditorViewLifecy
                     _extendEditor.Edited += (_, _) => OnEdited();
                     _extendEditor.PendingChangesChanged += (_, _) => PendingChangesChanged?.Invoke(this, EventArgs.Empty);
                     _extendEditor.CategoryChanged += (_, _) => ExtendCategoryChanged?.Invoke(this, EventArgs.Empty);
+                    _extendEditor.QueryScopeChanged += (_, _) => NotifyQueryScopeChanged();
                     Controls.Add(_extendEditor);
                 }
                 _extendEditor.Visible = true;
@@ -363,6 +370,7 @@ public sealed partial class BusinessEditorPanel : UserControl, IEditorViewLifecy
         }
         finally
         {
+            RestoreQueryPage();
             _binding = false;
             RecordStableBinding();
             _tabs.RefreshHeader();
@@ -370,6 +378,7 @@ public sealed partial class BusinessEditorPanel : UserControl, IEditorViewLifecy
             ResumeLayout(true);
             UpdatePreviewActivity();
             RequestViewLayout();
+            NotifyQueryScopeChanged();
         }
     }
 
@@ -397,13 +406,14 @@ public sealed partial class BusinessEditorPanel : UserControl, IEditorViewLifecy
             if (include != null && !include(field)) continue;
             if (_kind == BusinessPageKind.Persons && document.Definition.Key == "persons" && field.Name is "Army" or "暴击台词" or "级别" or "经验") continue;
             var label = ItemFieldLabel(document, rowIndex, field.Name) ?? FieldLabel(document.Definition.Key, field.Name);
-            var editor = CreateEditor(document, row, rowIndex, field);
+            var editor = CreateEditor(document, row, rowIndex, field, label);
             AddFormRow(layout, label, editor);
         }
     }
 
-    private Control CreateEditor(TableDocument document, DataRow row, int rowIndex, TableFieldDefinition field)
+    private Control CreateEditor(TableDocument document, DataRow row, int rowIndex, TableFieldDefinition field, string? queryLabel = null)
     {
+        DeclareQueryBinding(document, rowIndex, field, queryLabel);
         var editable = document.Definition.IsWriteSupported && field.Policy == FieldPolicy.Editable;
         var current = ReadFieldValue(document, rowIndex, field);
         var lastSubmitted = Convert.ToString(current, CultureInfo.InvariantCulture) ?? string.Empty;
@@ -952,6 +962,7 @@ public sealed partial class BusinessEditorPanel : UserControl, IEditorViewLifecy
             AddFormRow(typeLayout, "共享许可", Notice("普通武器/防具按类型码直接关联许可槽；辅助/道具不使用此许可。修改类型后进入可装备部队子页会按当前草稿刷新。"));
         }
         var tab = NewTab("可装备部队");
+        DeclareItemPermissionQueryFields();
         string? loadedSignature = null;
         void RenderPermissions()
         {
@@ -985,8 +996,13 @@ public sealed partial class BusinessEditorPanel : UserControl, IEditorViewLifecy
     {
         if (!_workspace.Documents.TryGetValue("strategies", out var strategies)) return;
         var fieldName = $"兵种{jobId:D2}学习等级";
-        if (!strategies.Data.Columns.Contains(fieldName)) return;
+        if (!strategies.Data.Columns.Contains(fieldName))
+        {
+            if (host != null) DeclareJobLearningQueryFields();
+            return;
+        }
         var tab = host ?? NewTab("习得策略");
+        DeclareJobLearningQueryFields();
         var table = new DataTable(); table.Columns.Add("策略ID", typeof(int)); table.Columns.Add("策略名称"); table.Columns.Add("习得等级", typeof(int));
         foreach (DataRow row in strategies.Data.Rows)
         {
@@ -1622,7 +1638,13 @@ public sealed partial class BusinessEditorPanel : UserControl, IEditorViewLifecy
         } : field == "移动力成长" ? "移动成长" : field;
 
     private static bool IsLearningField(string field) => Regex.IsMatch(field, @"^兵种\d+学习等级$");
-    private TabPage NewTab(string title) { var tab = new TabPage(title) { Padding = new Padding(8), AutoScroll = true }; _tabs.TabPages.Add(tab); return tab; }
+    private TabPage NewTab(string title)
+    {
+        var tab = new TabPage(title) { Padding = new Padding(8), AutoScroll = true };
+        DeclareQueryPage(tab, title);
+        _tabs.TabPages.Add(tab);
+        return tab;
+    }
     private void AddNoticeTab(string title, string message) => NewTab(title).Controls.Add(Notice(message));
     private static Label Notice(string text) => new() { Text = text, Dock = DockStyle.Top, Height = 105, Padding = new Padding(8), AutoEllipsis = true };
     private static TableLayoutPanel FormLayout()

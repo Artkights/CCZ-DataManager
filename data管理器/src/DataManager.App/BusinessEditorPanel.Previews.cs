@@ -151,7 +151,7 @@ public sealed partial class BusinessEditorPanel
             _diagnosticTips.SetToolTip(locationButton, category == "S"
                 ? "按当前草稿指定定位实际 Unit 图号；三转人物或默认兵种可选择阶段/阵营。图片导入会即时保存。\n存档同步仍使用磁盘上已保存的人物指定。"
                 : "按当前草稿编号定位图片设定中的对应条目。图片导入会即时保存。");
-            var editor = CreateEditor(binding.Document, binding.Row, binding.RowIndex, binding.Field);
+            var editor = CreateEditor(binding.Document, binding.Row, binding.RowIndex, binding.Field, binding.Label);
             editor.Dock = DockStyle.None; editor.Anchor = AnchorStyles.Left | AnchorStyles.Right;
             editor.Margin = new Padding(0, 1, 0, 1);
             form.Controls.Add(label, 0, 0); form.Controls.Add(editor, 0, 1);

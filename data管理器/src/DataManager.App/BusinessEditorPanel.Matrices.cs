@@ -13,7 +13,7 @@ public sealed partial class BusinessEditorPanel
         var bindings = source.ToArray();
         return EditableMatrix(caption, [nameHeader, valueHeader], bindings.Select(binding =>
             new Control[] { MatrixLabel(binding.Label ?? binding.Field.Name),
-                CreateEditor(binding.Document, binding.Row, binding.RowIndex, binding.Field) }).ToArray(), columnGroups);
+                CreateEditor(binding.Document, binding.Row, binding.RowIndex, binding.Field, binding.Label) }).ToArray(), columnGroups);
     }
 
     private Control TerrainValueMatrix()
@@ -31,8 +31,8 @@ public sealed partial class BusinessEditorPanel
                 .Select(index => new Control[]
                 {
                     MatrixLabel(TerrainName(index)),
-                    CreateEditor(effectiveness[index].Document, effectiveness[index].Row, effectiveness[index].RowIndex, effectiveness[index].Field),
-                    CreateEditor(movement[index].Document, movement[index].Row, movement[index].RowIndex, movement[index].Field)
+                    CreateEditor(effectiveness[index].Document, effectiveness[index].Row, effectiveness[index].RowIndex, effectiveness[index].Field, TerrainName(index) + "发挥"),
+                    CreateEditor(movement[index].Document, movement[index].Row, movement[index].RowIndex, movement[index].Field, TerrainName(index) + "消耗")
                 }).ToArray();
             var matrix = EditableMatrix(string.Empty, ["地形", "发挥", "消耗"], rows, 1);
             matrix.Name = $"JobSeriesTerrain{start}";

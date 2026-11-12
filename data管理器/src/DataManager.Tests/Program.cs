@@ -392,6 +392,16 @@ internal static class Program
                 RecordPresentationTests.Run();
                 return 0;
             }
+            if (args.FirstOrDefault() == "--record-query-bindings" && args.Length >= 2)
+            {
+                RecordQueryBindingTests.Run(Path.GetFullPath(args[1]));
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--record-query-core" && args.Length >= 2)
+            {
+                RecordQueryServiceTests.Run(Path.GetFullPath(args[1]));
+                return 0;
+            }
             if (args.FirstOrDefault() == "--record-query-ui" && args.Length >= 2)
             {
                 RecordQueryUiTests.Run(Path.GetFullPath(args[1]));

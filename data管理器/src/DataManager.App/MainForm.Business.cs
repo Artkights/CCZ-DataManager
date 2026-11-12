@@ -74,6 +74,7 @@ public sealed partial class MainForm
         _businessKind = kind;
         _currentDocument = null;
         _historyFilter.Visible = false;
+        _businessEditor.Bind(kind, _businessEditor.CurrentId);
         if (kind == BusinessPageKind.ExtendData)
         {
             _businessEditor.Bind(kind, _businessEditor.ExtendEditor?.CurrentId ?? 0);
@@ -129,8 +130,7 @@ public sealed partial class MainForm
         if (_businessKind != BusinessPageKind.ExtendData || _businessEditor.ExtendEditor is not { } panel) return;
         if (!keepSearch && QueryPageKey is { } key)
         {
-            _pageQueries[key] = string.Empty;
-            _pageQueryIds.Remove(key);
+            ResetCurrentQuery(key);
         }
         RefreshQueryNavigation();
     }

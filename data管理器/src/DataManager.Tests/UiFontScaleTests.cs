@@ -9,8 +9,8 @@ internal static class UiFontScaleTests
     internal static void Run(string source, string output)
     {
         Directory.CreateDirectory(output);
-        var results = new List<string> { $"Source={Path.GetFullPath(source)}；按原始字节复制，未恢复历史快照。", "使用与产品相同的ApplicationBootstrap初始化。本项在真实显示器DPI上额外模拟125%/150%字体放大；不代表PerMonitor DPI切换。窗口1920×1080。" };
-        foreach (var factor in new[] { 1.25f, 1.5f })
+        var results = new List<string> { $"Source={Path.GetFullPath(source)}；按原始字节复制，未恢复历史快照。", "使用与产品相同的ApplicationBootstrap初始化。字体比例100%/125%/150%，每档覆盖1100×650、1280×720和1920×1080。真实DeviceDpi逐项记录；字体放大模拟不代表PerMonitor DPI切换。" };
+        foreach (var factor in new[] { 1f, 1.25f, 1.5f })
         {
             var root = TestSupport.CreateCoreCopy(source, restoreKnown65Snapshot: false);
             using var fontProbe = new Control();
@@ -38,16 +38,24 @@ internal static class UiFontScaleTests
                             $"{module}/{factor:P0}标签被裁剪：{label.Text}");
                     if (module == "兵种系")
                         UiOptimizationReportTests.CheckJobSeriesLayout(editor);
-                    using var bitmap = new Bitmap(form.Width, form.Height); form.DrawToBitmap(bitmap, new Rectangle(Point.Empty, form.Size));
-                    bitmap.Save(Path.Combine(output, $"{module.Replace('/', '_')}-字体模拟{factor*100:0}%-1920x1080.png"), ImageFormat.Png);
-                    results.Add($"{module}/{factor*100:0}%：{fields.Length}个编辑控件尺寸、{labels.Length}个关键标签通过；DPI={form.DeviceDpi}。");
+                    foreach (var size in new[] { new Size(1100, 650), new Size(1280, 720), new Size(1920, 1080) })
+                    {
+                        SetWindowPos(form.Handle, IntPtr.Zero, -32000, -32000, size.Width, size.Height, 0x0010 | 0x0004 | 0x0400);
+                        TestSupport.PumpUi();
+                        var context = $"{module}/字体{factor*100:0}%/{size.Width}x{size.Height}/实际DPI={form.DeviceDpi}";
+                        RecordQueryUiTests.CheckQueryLayout(form, context);
+                        using var bitmap = new Bitmap(form.Width, form.Height); form.DrawToBitmap(bitmap, new Rectangle(Point.Empty, form.Size));
+                        bitmap.Save(Path.Combine(output, $"{module.Replace('/', '_')}-字体模拟{factor*100:0}%-{size.Width}x{size.Height}.png"), ImageFormat.Png);
+                        results.Add(context + "：三组属性/文本、查询/清空按钮完整可用，未重叠、未裁切，属性和输入整组排列。");
+                    }
+                    results.Add($"{module}/{factor*100:0}%/1920×1080：{fields.Length}个编辑控件尺寸、{labels.Length}个关键标签通过；DPI={form.DeviceDpi}。");
                     TestSupport.Assert(!form.WorkspaceForSmokeTest.IsDirty, "字体缩放产生游戏草稿。");
                 }
             }
             finally { form.BusinessEditorForSmokeTest.DiscardPendingChanges(); form.Close(); Directory.Delete(root, true); }
         }
         File.WriteAllLines(Path.Combine(output, "字体缩放模拟.txt"), results);
-        Console.WriteLine("UI_FONT_SCALE_TESTS_OK 125%/150% extra-font-scale; actual DPI is recorded per page");
+        Console.WriteLine("UI_FONT_SCALE_TESTS_OK 100%/125%/150% font-scale x 1100x650/1280x720/1920x1080; query controls checked; actual monitor DPI is recorded per page");
     }
     private static IEnumerable<Control> Descendants(Control root) { foreach (Control child in root.Controls) { yield return child; foreach (var nested in Descendants(child)) yield return nested; } }
     [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr window, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
