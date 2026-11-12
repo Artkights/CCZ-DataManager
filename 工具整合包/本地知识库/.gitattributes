@@ -1,0 +1,3 @@
+# Preserve the exact CSV/JSON source bytes used by the knowledge ledger.
+*.csv -text
+*.json -text

@@ -16,7 +16,8 @@ function Get-DataManagerSourceFiles {
         }
     }
     foreach ($taskRelative in @('data管理器/DataManager.sln', 'data管理器/README.md', 'data管理器/.gitignore',
-        '形象管理器/Directory.Build.props', '形象管理器/ImageManager.sln', '形象管理器/README.md')) {
+        '形象管理器/Directory.Build.props', '形象管理器/ImageManager.sln', '形象管理器/README.md',
+        'Knowledge-base-for-CCZ-mod/.gitattributes', '工具整合包/本地知识库/.gitattributes')) {
         $taskPath = Join-Path $taskSourceRoot $taskRelative
         if (Test-Path -LiteralPath $taskPath -PathType Leaf) { $taskFiles[$taskRelative] = $taskPath }
     }

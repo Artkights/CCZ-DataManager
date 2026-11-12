@@ -1,0 +1,2 @@
+# Research snapshots are hashed byte-for-byte by the frozen knowledge ledger.
+*.json -text
