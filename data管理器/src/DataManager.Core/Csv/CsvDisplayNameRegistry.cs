@@ -48,7 +48,8 @@ public static class CsvDisplayNameRegistry
         ["strategy-damage-type"] = "策略伤血类型",
         ["strategy-damage-ratio"] = "策略伤害系数",
         ["strategy-hit-rate"] = "策略命中率",
-        ["strategy-learning"] = "策略效果索引",
+        ["strategy-learning"] = "策略类型索引",
+        ["strategy-effect-class"] = "策略效果类",
         ["strategy-battle-ai"] = "策略战场智能限制",
         ["strategy-training-ai"] = "策略练武场智能限制",
         ["strategy-terrain-availability"] = "策略施展地形",
@@ -59,6 +60,31 @@ public static class CsvDisplayNameRegistry
         ["strategy-study-extended"] = "拓展策略学习",
         ["forge"] = "锻造"
     };
+
+    // 旧策略表名继续作为导入别名；导出统一使用原有显示名。
+    private static readonly IReadOnlyDictionary<string, string> LegacyStrategyAliases =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["策略类型索引"] = "strategy-learning",
+            ["策略效果索引"] = "strategy-learning",
+            ["效果索引"] = "strategy-learning",
+            ["策略扩展标记"] = "strategy-extension",
+            ["策略启用标志"] = "strategy-extension",
+            ["策略伤血类型"] = "strategy-damage-type",
+            ["策略伤害类型"] = "strategy-damage-type",
+            ["策略是否伤血"] = "strategy-damage-type",
+            ["策略伤害系数"] = "strategy-damage-ratio",
+            ["策略伤害百分比"] = "strategy-damage-ratio",
+            ["策略命中率"] = "strategy-hit-rate",
+            ["策略命中模式"] = "strategy-hit-rate",
+            ["策略战场智能限制"] = "strategy-battle-ai",
+            ["战场AI策略限制"] = "strategy-battle-ai",
+            ["策略战场AI评分"] = "strategy-battle-ai",
+            ["策略练武场智能限制"] = "strategy-training-ai",
+            ["练武场AI策略限制"] = "strategy-training-ai",
+            ["策略练武场AI评分"] = "strategy-training-ai",
+            ["策略AI类别掩码"] = "strategy-learning"
+        };
 
     private static readonly IReadOnlyDictionary<string, string> FieldNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
     {
@@ -95,7 +121,11 @@ public static class CsvDisplayNameRegistry
     {
         var fileName = Path.GetFileName(keyOrFileName);
         var token = fileName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase) ? fileName[..^4] : fileName;
-        var matches = definitions.Where(definition => token.Equals(definition.Key, StringComparison.OrdinalIgnoreCase) ||
+        var available = definitions.ToArray();
+        if (LegacyStrategyAliases.TryGetValue(token, out var legacyKey) &&
+            available.Any(definition => definition.Key == legacyKey))
+            return legacyKey;
+        var matches = available.Where(definition => token.Equals(definition.Key, StringComparison.OrdinalIgnoreCase) ||
             token.Equals(definition.DisplayName, StringComparison.OrdinalIgnoreCase) ||
             token.Equals(GetTableDisplayName(definition), StringComparison.OrdinalIgnoreCase) ||
             token.Equals(SanitizeFileName(GetTableDisplayName(definition)), StringComparison.OrdinalIgnoreCase) ||

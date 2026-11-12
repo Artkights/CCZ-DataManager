@@ -137,12 +137,30 @@ internal static class EngineEffectUiTests
             Pump();
 
             var suffix = detail.SuffixComboForSmokeTest;
+            TestSupport.Assert(suffix.Items.Count >= EngineEffectSuffixLabels.MaximumSuffix(version) + 1,
+                $"{version} 后缀下拉未按基底生成：{suffix.Items.Count}");
             if (suffix.Items.Count > 1)
             {
                 suffix.SelectedIndex = suffix.SelectedIndex == 0 ? 1 : 0;
                 Pump();
                 TestSupport.Assert(detail.HasPendingChanges, "后缀修改没有进入待写入状态。");
                 detail.DiscardPendingChanges();
+                Pump();
+            }
+
+            var rawSuffixEffect = version switch { "6.5" => 254, "6.6" => 108, _ => -1 };
+            if (rawSuffixEffect >= 0)
+            {
+                var rawIndex = FindEffectIndex(list, rawSuffixEffect);
+                TestSupport.Assert(rawIndex >= 0, $"{version} 左侧列表缺少特效 {rawSuffixEffect}。");
+                var currentIndex = list.SelectedIndex;
+                list.SelectedIndex = rawIndex;
+                Pump();
+                var rawText = version == "6.5" ? "0x64" : "0x12";
+                TestSupport.Assert(detail.SuffixComboForSmokeTest.Items.Cast<object>()
+                        .Any(item => item.ToString()?.Contains(rawText, StringComparison.Ordinal) == true),
+                    $"{version} 特效 {rawSuffixEffect} 的后缀下拉缺少 {rawText} 原始值项。");
+                list.SelectedIndex = currentIndex >= 0 ? currentIndex : 0;
                 Pump();
             }
 
@@ -277,11 +295,11 @@ internal static class EngineEffectUiTests
 
             form.SelectModuleForSmokeTest("__engine");
             var engineTabs = form.EngineSubTabsForSmokeTest;
-            engineTabs.SelectedIndex = 3;
+            engineTabs.SelectedIndex = 4;
             Pump();
             var constants = form.ConstantsForSmokeTest;
             TestSupport.Assert(constants.Visible, "常量页未显示。");
-            TestSupport.Assert(constants.GridForSmokeTest.Rows.Count == EngineConstantService.Definitions.Count,
+            TestSupport.Assert(constants.GridForSmokeTest.Rows.Count == EngineConstantService.Definitions.Count + 5,
                 "常量页条目数量不正确。");
             TestSupport.Assert(constants.GridForSmokeTest.Rows.Cast<DataGridViewRow>()
                 .Any(row => row.Cells[1].Value?.ToString() == "引导攻击追加次数"), "常量页缺少引导攻击次数。");
@@ -655,11 +673,20 @@ internal static class EngineEffectUiTests
         }
     }
 
+    private static int FindEffectIndex(ListBox list, int effectId)
+    {
+        var prefix = effectId.ToString(System.Globalization.CultureInfo.InvariantCulture) + "：";
+        for (var index = 0; index < list.Items.Count; index++)
+            if (list.Items[index]?.ToString()?.StartsWith(prefix, StringComparison.Ordinal) == true)
+                return index;
+        return -1;
+    }
+
     private static void Pump(int rounds = 6)
     {
         for (var index = 0; index < rounds; index++)
         {
-            Application.DoEvents();
+            TestSupport.PumpUi();
             Thread.Sleep(8);
         }
     }

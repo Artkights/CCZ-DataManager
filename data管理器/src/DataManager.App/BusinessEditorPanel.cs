@@ -7,6 +7,7 @@ using DataManager.Core.Editing;
 using DataManager.Core.Models;
 using DataManager.Images;
 using ImageManager.App;
+using Ccz.ManagerUi;
 
 namespace DataManager.App;
 
@@ -15,8 +16,112 @@ namespace DataManager.App;
 /// its physical table, row and field, so edits use the workspace's validated,
 /// undoable transaction rather than writing bytes from the UI.
 /// </summary>
-public sealed partial class BusinessEditorPanel : UserControl
+public sealed partial class BusinessEditorPanel : UserControl, IEditorViewLifecycle
 {
+    private readonly LayoutScheduler _viewLayouts;
+    private readonly List<(Control Owner, Action Arrange)> _viewLayoutActions = [];
+    private bool _viewActive;
+    private readonly List<Control> _previewAncestors = [];
+    private readonly HashSet<System.Windows.Forms.Timer> _suspendedPreviewTimers = [];
+
+    public void ActivateView()
+    {
+        if (IsDisposed || Disposing) return;
+        _viewActive = true;
+        UpdatePreviewActivity();
+        ApplyDeferredResourceRefresh();
+        AutoValidate = AutoValidate.Inherit;
+        _viewLayouts.Activate();
+    }
+
+    public void DeactivateView()
+    {
+        _viewActive = false;
+        UpdatePreviewActivity();
+        AutoValidate = AutoValidate.Disable;
+        _viewLayouts.Deactivate();
+    }
+
+    public void RequestViewLayout() => _viewLayouts.Request();
+
+    // Module hosts can change effective visibility without notifying every
+    // descendant. The page owns this barrier; preview controls keep their text,
+    // selection and resource binding while releasing work and owned pixels.
+    private void UpdatePreviewActivity()
+    {
+        if (_releaseCompleted || IsDisposed || Disposing) return;
+        var active = _viewActive && Visible;
+        void Apply(Control host)
+        {
+            foreach (Control child in host.Controls)
+            {
+                var visible = active && child.Visible;
+                if (child is ResourcePreviewCard card) card.SetPreviewActive(visible);
+                else if (child is RangePreviewPicker range) range.SetPreviewActive(visible);
+                else if (child is SearchableIdComboBox combo) combo.SetPreviewActive(visible);
+                Apply(child);
+            }
+        }
+        Apply(this);
+        if (!active)
+        {
+            foreach (var timer in _previewTimers.Where(timer => timer.Enabled))
+            { _suspendedPreviewTimers.Add(timer); timer.Stop(); }
+        }
+        else
+        {
+            foreach (var timer in _suspendedPreviewTimers)
+                if (_previewTimers.Contains(timer)) timer.Start();
+            _suspendedPreviewTimers.Clear();
+        }
+    }
+
+    protected override void OnParentChanged(EventArgs e)
+    {
+        base.OnParentChanged(e);
+        BindPreviewAncestors();
+    }
+
+    private void BindPreviewAncestors()
+    {
+        ReleasePreviewAncestors();
+        if (_releaseCompleted || IsDisposed || Disposing) return;
+        for (var ancestor = Parent; ancestor != null; ancestor = ancestor.Parent)
+        {
+            _previewAncestors.Add(ancestor);
+            ancestor.VisibleChanged += PreviewAncestorVisibleChanged;
+            ancestor.ParentChanged += PreviewAncestorParentChanged;
+        }
+        UpdatePreviewActivity();
+    }
+
+    private void PreviewAncestorVisibleChanged(object? sender, EventArgs e) => UpdatePreviewActivity();
+    private void PreviewAncestorParentChanged(object? sender, EventArgs e) => BindPreviewAncestors();
+    private void ReleasePreviewAncestors()
+    {
+        foreach (var ancestor in _previewAncestors)
+        {
+            ancestor.VisibleChanged -= PreviewAncestorVisibleChanged;
+            ancestor.ParentChanged -= PreviewAncestorParentChanged;
+        }
+        _previewAncestors.Clear();
+    }
+
+    private void RegisterViewLayout(Control owner, Action arrange)
+    {
+        var entry = (owner, arrange);
+        _viewLayoutActions.Add(entry);
+        owner.Disposed += (_, _) => _viewLayoutActions.Remove(entry);
+    }
+
+    private void ArrangeActiveView()
+    {
+        if (!_viewActive || _binding || _releaseCompleted || IsDisposed || Disposing) return;
+        _tabs.RefreshHeader();
+        PerformLayout();
+        foreach (var entry in _viewLayoutActions.ToArray())
+            if (!entry.Owner.IsDisposed && entry.Owner.Visible) entry.Arrange();
+    }
     private sealed class PreviewNumericUpDown : NumericUpDown
     {
         public Func<bool>? ValidateInput { get; set; }
@@ -45,18 +150,41 @@ public sealed partial class BusinessEditorPanel : UserControl
 
     private static IReadOnlyList<string> EquipmentColumns => ItemTypeService.EquipmentColumns;
     private static IReadOnlyList<string> TerrainNames => RecordPresentationService.TerrainNames;
-    private static readonly string[] StrategyTypes =
-    [
-        "火系", "水系", "地系", "风系", "眩晕", "诱惑", "谍报", "压迫/威吓", "咒骂/挑拨",
-        "钝兵/钝队", "虚脱/厌战", "士气提升", "防御提升", "攻击提升", "爆发提升", "谎报",
-        "中毒", "定身", "封咒", "补给", "MP补给", "觉醒", "回归", "天气", "八阵图", "四神",
-        "霸气", "强行", "衰气", "疾行", "诅咒", "精妙", "连击", "伪报", "纵火", "修筑",
-        "诱敌", "瞬移", "雷系", "撞心", "扩展策略A", "扩展策略B", "扩展策略C"
-    ];
-    private static readonly string[] AttackRanges = ["四格", "九宫", "近中程弓形", "中程弓形", "远程弓形", "原版少见", "没羽箭", "一转炮车", "二三转炮车", "一转弓骑", "全屏"];
-    private static readonly string[] PierceRanges = ["不穿透", "十字穿透", "九宫穿透", "大没羽箭", "蛇矛", "长蛇矛/穿六", "大大没羽箭"];
+    // These are naming dictionaries only.  They deliberately do not define
+    // the candidate domain: custom bases can add IDs beyond the known names.
+    private static readonly IReadOnlyDictionary<int, string> KnownStrategyTypes =
+        new Dictionary<int, string>
+        {
+            [0] = "火系", [1] = "水系", [2] = "地系", [3] = "风系", [4] = "眩晕", [5] = "诱惑", [6] = "谍报",
+            [7] = "压迫/威吓", [8] = "咒骂/挑拨", [9] = "钝兵/钝队", [10] = "虚脱/厌战", [11] = "士气提升",
+            [12] = "防御提升", [13] = "攻击提升", [14] = "爆发提升", [15] = "谎报", [16] = "中毒", [17] = "定身",
+            [18] = "封咒", [19] = "补给", [20] = "MP补给", [21] = "觉醒", [22] = "回归", [23] = "天气",
+            [24] = "八阵图", [25] = "四神", [26] = "霸气", [27] = "强行", [28] = "衰气", [29] = "疾行",
+            [30] = "诅咒", [31] = "精妙", [32] = "连击", [33] = "伪报", [34] = "纵火", [35] = "修筑",
+            [36] = "诱敌", [37] = "瞬移", [38] = "雷系", [39] = "撞心", [40] = "扩展策略A", [41] = "扩展策略B", [42] = "扩展策略C"
+        };
+    // 6.6 样本中这些 ID 与 6.5 的固定名称不同；只覆盖已从 Data.e5 逐行核对的值。
+    private static readonly IReadOnlyDictionary<int, string> KnownStrategyTypes66 =
+        new Dictionary<int, string>
+        {
+            [0x1F] = "精进", [0x20] = "凤求凰", [0x21] = "反间", [0x24] = "无情铁手",
+            [0x26] = "落雷", [0x29] = "换位", [0x2A] = "号令"
+        };
+    private static readonly IReadOnlyDictionary<int, string> KnownAttackRanges =
+        new Dictionary<int, string>
+        {
+            [0] = "四格", [1] = "九宫", [2] = "近中程弓形", [3] = "中程弓形", [4] = "远程弓形",
+            [5] = "原版少见", [6] = "没羽箭", [7] = "一转炮车", [8] = "二三转炮车", [9] = "一转弓骑", [10] = "全屏"
+        };
+    private static readonly IReadOnlyDictionary<int, string> KnownPierceRanges =
+        new Dictionary<int, string>
+        {
+            [0] = "不穿透", [1] = "十字穿透", [2] = "九宫穿透", [3] = "大没羽箭", [4] = "蛇矛",
+            [5] = "长蛇矛/穿六", [6] = "大大没羽箭"
+        };
     private readonly ProjectWorkspace _workspace;
     private readonly ResourceCatalogAdapter _resources;
+    private readonly WorkspaceRangeCatalog? _rangeCatalog;
     private readonly bool _ownsResources;
     private bool _releaseCompleted;
     private bool _disposingDetailPages;
@@ -83,23 +211,36 @@ public sealed partial class BusinessEditorPanel : UserControl
     private Action? _itemSemanticRefresh;
     private ExtendDataEditorPanel? _extendEditor;
 
-    public BusinessEditorPanel(ProjectWorkspace workspace, ResourceCatalogAdapter? resources = null)
+    public BusinessEditorPanel(ProjectWorkspace workspace, ResourceCatalogAdapter? resources = null,
+        WorkspaceRangeCatalog? rangeCatalog = null)
     {
         _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
         _ownsResources = resources == null;
         _resources = resources ?? new ResourceCatalogAdapter();
+        _rangeCatalog = rangeCatalog;
         _business = new BusinessDataService(workspace);
+        AutoScaleMode = AutoScaleMode.Inherit;
         Dock = DockStyle.Fill;
         Controls.Add(_tabs);
         Controls.Add(_status);
         Controls.Add(_title);
         _errors.ContainerControl = this;
+        _viewLayouts = new LayoutScheduler(this, ArrangeActiveView);
+        VisibleChanged += (_, _) => { if (Visible) ActivateView(); else DeactivateView(); };
+        _tabs.SelectedIndexChanged += (_, _) =>
+        {
+            UpdatePreviewActivity(); RequestViewLayout();
+            // Native tab visibility can settle after SelectedIndexChanged.
+            if (IsHandleCreated && !_releaseCompleted)
+                BeginInvoke((Action)UpdatePreviewActivity);
+        };
     }
 
     public event EventHandler? Edited;
     public event EventHandler? PendingChangesChanged;
     public event EventHandler? SaveRequested;
     public event Action<int, int, int>? SImageLocationRequested;
+    public event Action<string, int, int>? PersonImageLocationRequested;
     public event EventHandler? ExtendCategoryChanged;
     public TabControl DetailTabs => _kind == BusinessPageKind.ExtendData && _extendEditor != null ? _extendEditor.DetailTabs : _tabs;
     public ExtendDataEditorPanel? ExtendEditor => _extendEditor;
@@ -107,15 +248,41 @@ public sealed partial class BusinessEditorPanel : UserControl
     public BusinessPageKind CurrentKind => _kind;
     public int CurrentId => _kind == BusinessPageKind.ExtendData && _extendEditor != null ? _extendEditor.CurrentId : _id;
 
+    /// <summary>
+    /// Rebuilds resource-backed candidate lists after Hitarea/Effarea or another
+    /// image archive has changed.  The callbacks retain the active text and
+    /// selection, so an in-progress numeric edit is not overwritten.
+    /// </summary>
+    public void RefreshResourcePickers()
+    {
+        if (_releaseCompleted || IsDisposed || Disposing) return;
+        if (!Visible) { _resourceRefreshPending = true; return; }
+        _resourceRefreshPending = false;
+        foreach (var refresh in _resourcePickerRefreshers.ToArray())
+        {
+            try { refresh(); }
+            catch (ObjectDisposedException) { }
+            catch (InvalidOperationException) when (IsDisposed || Disposing) { }
+        }
+    }
+
     public void Bind(BusinessPageKind kind, int id)
     {
+        if (CanReuseStableBinding(kind, id))
+        {
+            RefreshChangedResourceBinding();
+            RequestViewLayout();
+            return;
+        }
         _binding = true;
         SuspendLayout();
         _tabs.SuspendLayout();
         try
         {
             _lookup.Prune(_workspace.Documents.Values);
-            if (kind == BusinessPageKind.ExtendData && _kind == kind && _extendEditor is { Visible: true })
+            // A cached module is effectively invisible while its owner is
+            // inactive; that does not invalidate its bound editor.
+            if (kind == BusinessPageKind.ExtendData && _kind == kind && _extendEditor != null)
             {
                 _extendEditor.BindEntity(id);
                 return;
@@ -127,6 +294,7 @@ public sealed partial class BusinessEditorPanel : UserControl
             BeginPreviewBinding();
             _entityRebinders.Clear();
             _resourcePickerRefreshers.Clear();
+            _rangePickerRefreshers.Clear();
             _compactLayoutSignature = null;
             _kind = kind;
             _id = id;
@@ -139,6 +307,7 @@ public sealed partial class BusinessEditorPanel : UserControl
             _pendingChecks.Clear();
             foreach (var timer in _previewTimers) timer.Dispose();
             _previewTimers.Clear();
+            _suspendedPreviewTimers.Clear();
             foreach (var image in _images) image.Dispose();
             _images.Clear();
             DisposeDetailPages();
@@ -153,7 +322,7 @@ public sealed partial class BusinessEditorPanel : UserControl
                 _title.Visible = false;
                 if (_extendEditor == null)
                 {
-                    _extendEditor = new ExtendDataEditorPanel(_workspace) { Dock = DockStyle.Fill };
+                    _extendEditor = new ExtendDataEditorPanel(_workspace) { Dock = DockStyle.Fill, AutoScaleMode = AutoScaleMode.Inherit };
                     _extendEditor.Edited += (_, _) => OnEdited();
                     _extendEditor.PendingChangesChanged += (_, _) => PendingChangesChanged?.Invoke(this, EventArgs.Empty);
                     _extendEditor.CategoryChanged += (_, _) => ExtendCategoryChanged?.Invoke(this, EventArgs.Empty);
@@ -192,12 +361,22 @@ public sealed partial class BusinessEditorPanel : UserControl
             if (kind is BusinessPageKind.Persons or BusinessPageKind.DetailedJobs or BusinessPageKind.Items or BusinessPageKind.Strategies) AddPreviewTab();
             if (_tabs.TabPages.Count == 0) AddNoticeTab("数据", "当前实体没有可读取的数据。请查看扫描诊断中的表能力与文件状态。");
         }
-        finally { _binding = false; _tabs.RefreshHeader(); _tabs.ResumeLayout(true); ResumeLayout(true); }
+        finally
+        {
+            _binding = false;
+            RecordStableBinding();
+            _tabs.RefreshHeader();
+            _tabs.ResumeLayout(true);
+            ResumeLayout(true);
+            UpdatePreviewActivity();
+            RequestViewLayout();
+        }
     }
 
     /// <summary>Validates and commits pending text/grid values before a save or selection change.</summary>
     public bool Flush()
     {
+        LastValidationError = null;
         if (_extendEditor != null && !_extendEditor.Flush()) return false;
         foreach (var flusher in _flushers.ToArray())
             if (!flusher()) { PendingChangesChanged?.Invoke(this, EventArgs.Empty); return false; }
@@ -266,11 +445,15 @@ public sealed partial class BusinessEditorPanel : UserControl
                         BeginInvoke(() => { if (!IsDisposed && _kind == BusinessPageKind.Items && _id == editedId) Bind(_kind, editedId); });
                     }
                     if (field.Name is "头像" or "R形象ID" or "S形象ID" or "兵种" or "图标" or "策略图标" or "动画ID") RefreshCompactPreviews();
-                    if (field.Name == "兵种") foreach (var refresh in _resourcePickerRefreshers) refresh();
+                    if (field.Name == "兵种") RefreshResourcePickers();
                 }
                 return true;
             }
-            catch (Exception ex) { ShowEditorError(control, ex.Message); return false; }
+            catch (Exception ex)
+            {
+                ShowEditorError(control, $"{document.Definition.DisplayName} ID={_id} / {field.Name}：{ex.Message}");
+                return false;
+            }
         }
         if (field.Kind == FieldKind.FixedString || field.Kind == FieldKind.RawBytes)
         {
@@ -314,21 +497,53 @@ public sealed partial class BusinessEditorPanel : UserControl
         var flags = GetFlags(document.Definition.Key, field.Name);
         if (flags != null)
         {
-            var panel = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true };
+            var panel = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true, Name = $"Flags_{document.Definition.Key}" };
             var original = Convert.ToInt32(current ?? 0, CultureInfo.InvariantCulture);
-            var checkboxes = flags.Select((name, bit) => new CheckBox { Text = name, AutoSize = true, Margin = new Padding(2, 1, 2, 1), Checked = (original & (1 << bit)) != 0, Enabled = editable }).ToArray();
-            for (var bit = 0; bit < checkboxes.Length; bit++)
+            var mask = flags.Aggregate(0, (value, flag) => value | (1 << flag.Bit));
+            var checkboxes = flags.Select(flag => new CheckBox
             {
-                var check = checkboxes[bit];
+                Text = flag.Name,
+                Name = $"Flag_{document.Definition.Key}_{flag.Bit}",
+                AutoSize = true,
+                Margin = new Padding(2, 1, 2, 1),
+                Checked = (original & (1 << flag.Bit)) != 0,
+                Enabled = editable
+            }).ToArray();
+            var loading = false;
+            for (var index = 0; index < checkboxes.Length; index++)
+            {
+                var check = checkboxes[index];
+                var flag = flags[index];
                 panel.Controls.Add(check);
-                _diagnosticTips.SetToolTip(check, $"位标记 0x{1 << bit:X2}");
-                check.CheckedChanged += (_, _) => Commit(panel, checkboxes.Select((item, bit) => item.Checked ? 1 << bit : 0).Sum());
+                var tip = string.IsNullOrWhiteSpace(flag.Tip) ? $"位标记 0x{1 << flag.Bit:X2}" : $"位标记 0x{1 << flag.Bit:X2}；{flag.Tip}";
+                _diagnosticTips.SetToolTip(check, tip);
+                check.CheckedChanged += (_, _) =>
+                {
+                    if (loading) return;
+                    var value = Convert.ToInt32(current ?? 0, CultureInfo.InvariantCulture);
+                    var selected = 0;
+                    for (var item = 0; item < checkboxes.Length; item++)
+                        if (checkboxes[item].Checked) selected |= 1 << flags[item].Bit;
+                    var next = document.Definition.Key == StrategyExtensionSemantics.TableKey
+                        ? StrategyExtensionSemantics.PreserveReserved((byte)value, selected)
+                        : (value & ~mask) | selected;
+                    Commit(panel, next);
+                };
             }
             Register(panel, () =>
             {
                 panel.Enabled = true;
                 var value = Convert.ToInt32(current ?? 0, CultureInfo.InvariantCulture);
-                for (var bit = 0; bit < checkboxes.Length; bit++) { checkboxes[bit].Enabled = editable; checkboxes[bit].Checked = (value & (1 << bit)) != 0; }
+                loading = true;
+                try
+                {
+                    for (var index = 0; index < checkboxes.Length; index++)
+                    {
+                        checkboxes[index].Enabled = editable;
+                        checkboxes[index].Checked = (value & (1 << flags[index].Bit)) != 0;
+                    }
+                }
+                finally { loading = false; }
             });
             return panel;
         }
@@ -339,14 +554,22 @@ public sealed partial class BusinessEditorPanel : UserControl
             Register(check, () => { check.Enabled = editable; check.Checked = Convert.ToInt32(current ?? 0, CultureInfo.InvariantCulture) != 0; });
             return check;
         }
+        var isE5RangeField = IsE5RangeField(document.Definition.Key, field.Name);
+        var isNativeRangeField = IsNativeRangeField(document.Definition.Key, field.Name);
+        var isRangeField = isE5RangeField || isNativeRangeField;
         var options = GetOptions(document, rowIndex, field);
         if (options != null)
         {
             var idOnly = ResourceKindForField(document.Definition.Key, field.Name) is
                 ResourceBindingKind.Portrait or ResourceBindingKind.CharacterR or ResourceBindingKind.CharacterS;
-            var combo = new SearchableIdComboBox { Dock = DockStyle.Fill, Enabled = editable, IdOnly = idOnly };
+            var combo = new SearchableIdComboBox
+            {
+                Dock = DockStyle.Fill,
+                Enabled = editable,
+                IdOnly = idOnly,
+                RangePreviewMode = isRangeField
+            };
             combo.SetOptions(options);
-            var isRangeField = field.Name is "攻击范围" or "施法范围" or "穿透" or "穿透范围";
             RangePreviewPicker? rangePicker = isRangeField ? new RangePreviewPicker(combo) : null;
             if (rangePicker != null)
             {
@@ -354,6 +577,10 @@ public sealed partial class BusinessEditorPanel : UserControl
                 rangePicker.MinimumId = (int)field.Minimum;
                 rangePicker.MaximumId = (int)field.Maximum;
             }
+            // A detached new editor reports Visible=true. Keep it inactive
+            // until Bind finishes attaching it to the actual selected page.
+            combo.SetPreviewActive(false);
+            rangePicker?.SetPreviewActive(false);
             CancellationTokenSource? optionCancellation = null;
             string? previewContext = null;
             combo.Disposed += (_, _) => { optionCancellation?.Cancel(); optionCancellation?.Dispose(); optionCancellation = null; };
@@ -410,8 +637,25 @@ public sealed partial class BusinessEditorPanel : UserControl
                 combo.SetPreviewLoader(loader);
                 rangePicker?.SetPreviewLoader(loader);
             }
+            void RefreshRangeOptions()
+            {
+                if (!isRangeField) return;
+                // Range drafts, project reloads and image replacement can all
+                // change this picker. Keep the text being edited while reading
+                // the current definition catalog and compatible table values.
+                var refreshed = GetOptions(document, rowIndex, field) ?? [];
+                options = refreshed;
+                var text = combo.Text;
+                combo.SetOptions(refreshed, preserveEditSelection: true);
+                if (!string.IsNullOrWhiteSpace(text)) combo.SetBoundValue(text, preserveEditSelection: true);
+            }
             void RefreshRangeLoader()
             {
+                RefreshRangeLoaderCore(true);
+            }
+            void RefreshRangeLoaderCore(bool refreshOptions)
+            {
+                if (refreshOptions) RefreshRangeOptions();
                 if (ResourceKindForField(document.Definition.Key, field.Name) is { } resourceKind)
                 {
                     var job = resourceKind == ResourceBindingKind.CharacterS ? EntityNumber("persons", "兵种") : 0;
@@ -419,34 +663,70 @@ public sealed partial class BusinessEditorPanel : UserControl
                     var context = $"{_workspace.RootPath}|{resourceKind}|{job}|{turn}|{_resources.Revision}";
                     if (previewContext == context) return;
                     previewContext = context;
-                    if (!idOnly)
-                        SetPreviewLoader((id, token) => _resources.DecodeBindingThumbnailAsync(_workspace.RootPath,
-                            resourceKind, id, new Size(48, 48), job, turn, token));
+                    var previewRoot = _workspace.RootPath;
+                    SetPreviewLoader((id, token) => _resources.DecodeBindingThumbnailAsync(previewRoot,
+                        resourceKind, id, new Size(48, 48), job, turn, token));
                     LoadResourceOptions(resourceKind, job, turn);
                     return;
                 }
-                if (field.Name is not ("攻击范围" or "施法范围" or "穿透" or "穿透范围")) return;
+                if (!isRangeField) return;
                 var attack = field.Name is "攻击范围" or "施法范围";
-                var rangeContext = $"{_workspace.RootPath}|{attack}|{_resources.Revision}";
+                var rangeRoot = _workspace.RootPath;
+                var hasRangeDraft = CurrentRangeSnapshot(attack) != null;
+                var rangeContext = $"{rangeRoot}|{attack}|{_resources.Revision}|{(hasRangeDraft ? _rangeCatalog!.Revision : -1)}";
                 if (previewContext == rangeContext) return;
                 previewContext = rangeContext;
-                SetPreviewLoader((id, token) => _resources.DecodeRangeFirstFrameAsync(_workspace.RootPath, attack, id, new Size(48, 48), token));
+                SetPreviewLoader(hasRangeDraft
+                    ? (id, token) => _rangeCatalog!.DecodePreviewAsync(attack, id, token)
+                    : (id, token) => _resources.DecodeRangeNativeFrameAsync(rangeRoot, attack, id, token));
             }
             var number = Convert.ToInt32(current ?? 0, CultureInfo.InvariantCulture);
             var selected = options.FirstOrDefault(item => item.Id == number);
             string EquipmentDisplay(int value, IReadOnlyList<IdNameOption> choices)
-                => idOnly ? value.ToString(CultureInfo.InvariantCulture) : choices.FirstOrDefault(item => item.Id == value)?.Display ??
+                => idOnly || isRangeField ? value.ToString(CultureInfo.InvariantCulture) : choices.FirstOrDefault(item => item.Id == value)?.Display ??
                     (document.Definition.Key == "persons" && PersonEquipmentService.CategoryForField(field.Name).HasValue
                         ? $"{value}：原值（类别不匹配）" : $"{value}：未确认");
             combo.SetBoundValue(EquipmentDisplay(number, options));
             RefreshRangeLoader();
-            if (ResourceKindForField(document.Definition.Key, field.Name) != null) _resourcePickerRefreshers.Add(RefreshRangeLoader);
+            if (ResourceKindForField(document.Definition.Key, field.Name) != null || isRangeField)
+                _resourcePickerRefreshers.Add(RefreshRangeLoader);
+            if (isRangeField)
+                _rangePickerRefreshers.Add((field.Name is "攻击范围" or "施法范围" ? RangeManager.App.RangeKind.Attack : RangeManager.App.RangeKind.Pierce,
+                    change =>
+                    {
+                        if (change.Reset) { RefreshRangeLoaderCore(true); return; }
+                        if (change.DirectoryChanged) RefreshRangeOptions();
+                        var rangeKind = field.Name is "攻击范围" or "施法范围" ? RangeManager.App.RangeKind.Attack : RangeManager.App.RangeKind.Pierce;
+                        var ids = change.AffectedKeys.Where(key => key.Kind == rangeKind).Select(key => key.Id).ToHashSet();
+                        combo.InvalidatePreviewIds(ids);
+                        rangePicker?.InvalidatePreviewIds(ids);
+                    }));
             bool SaveCombo()
             {
+                if (_binding || !editable || !active || _confirmingStrategyEffect) return true;
                 if (!combo.TryGetSelectedId(out var id))
                 {
-                    _errors.SetError(combo, "请输入数字 ID，或从列表中选择。");
+                    ShowEditorError(combo, $"{document.Definition.DisplayName} ID={_id} / {field.Name}：请输入数字 ID，或从列表中选择。");
                     return false;
+                }
+                if (document.Definition.Key == StrategyEffectClassService.TableKey &&
+                    id.ToString(CultureInfo.InvariantCulture) != lastSubmitted)
+                {
+                    try { _workspace.ValidateCellValue(document, rowIndex, field.Name, id); }
+                    catch (Exception ex) { ShowEditorError(combo, ex.Message); return false; }
+                    if (!ConfirmStrategyEffect(combo, rowIndex, id))
+                    {
+                        var wasBinding = _binding;
+                        _binding = true;
+                        try
+                        {
+                            var previous = Convert.ToInt32(document.Data.Rows[rowIndex][field.Name], CultureInfo.InvariantCulture);
+                            combo.SetBoundValue(EquipmentDisplay(previous, options));
+                        }
+                        finally { _binding = wasBinding; }
+                        NotifyPendingChanges();
+                        return true;
+                    }
                 }
                 return Commit(combo, id);
             }
@@ -715,7 +995,7 @@ public sealed partial class BusinessEditorPanel : UserControl
         }
         var grid = GridFor(table); grid.AllowUserToAddRows = false; grid.AllowUserToDeleteRows = false;
         grid.Columns["策略ID"].ReadOnly = true; grid.Columns["策略名称"].ReadOnly = true;
-        var bar = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 64, WrapContents = true };
+        var bar = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = true };
         var select = new SearchableIdComboBox { Width = 185 }; select.SetOptions(OptionsFor("strategies"));
         var levelEditor = new NumericUpDown { Minimum = 1, Maximum = 255, Value = 1, Width = 54 };
         var add = new Button { Text = "新增/更新", AutoSize = true }; var remove = new Button { Text = "删除", AutoSize = true };
@@ -828,6 +1108,7 @@ public sealed partial class BusinessEditorPanel : UserControl
             if (loadedRevision == _editRevision) return;
             foreach (var timer in _previewTimers) timer.Dispose();
             _previewTimers.Clear();
+            _suspendedPreviewTimers.Clear();
             foreach (var control in flow.Controls.Cast<Control>().ToArray()) control.Dispose();
             foreach (var image in _images) image.Dispose();
             _images.Clear();
@@ -944,12 +1225,15 @@ public sealed partial class BusinessEditorPanel : UserControl
 
     private IReadOnlyList<IdNameOption>? GetOptions(TableDocument document, int rowIndex, TableFieldDefinition field)
     {
+        if (document.Definition.Key == StrategyEffectClassService.TableKey)
+            return StrategyEffectClassService.GetOptions(_workspace, rowIndex)
+                .Select(option => new IdNameOption(option.Id, option.Name)).ToArray();
         var tableKey = document.Definition.Key;
         if (ResourceKindForField(tableKey, field.Name) != null) return [];
         if (tableKey == "persons" && PersonEquipmentService.CategoryForField(field.Name).HasValue)
             return PersonEquipmentService.GetOptions(_workspace.Documents, field.Name, field.Minimum, field.Maximum)
                 .Select(option => new IdNameOption(option.Id, option.Name)).ToArray();
-        if (tableKey == "job-series-attributes") return JobAttributeOptions(rowIndex);
+        if (tableKey == "job-series-attributes") return JobAttributeOptions(document, rowIndex, field);
         if (tableKey is "items-low" or "items-high" or "items-extended")
         {
             var semantics = ItemTypeService.Resolve(document, rowIndex);
@@ -959,7 +1243,7 @@ public sealed partial class BusinessEditorPanel : UserControl
             var effectField = semantics.IsCategoryMarker || semantics.Category is ItemCategory.Weapon or ItemCategory.Armor
                 ? "装备特效号" : "宝物类型";
             if (field.Name == effectField && semantics.Category == ItemCategory.Consumable)
-                return ConsumableEffectCatalog.GetAll().Select(effect => new IdNameOption(effect.Id, effect.Name)).ToArray();
+                return ConsumableEffectOptions(document, field);
             if (field.Name == "装备特效号" && legacyAuxiliary)
                 return [new(2, "辅助装备类别"), new(3, "道具/消耗品类别"), new(0, "预留/未指定"), new(102, "预留"), new(255, "空/保留")];
             if (field.Name == "宝物类型")
@@ -968,7 +1252,7 @@ public sealed partial class BusinessEditorPanel : UserControl
                 {
                     try
                     {
-                        return ItemEffectOptions();
+                        return ItemEffectOptions(document, field);
                     }
                     catch { }
                 }
@@ -977,18 +1261,265 @@ public sealed partial class BusinessEditorPanel : UserControl
         }
         if (field.Name == "装备特效号")
         {
-            return ItemEffectOptions();
+            return ItemEffectOptions(document, field);
         }
+        // Resolve semantic fields before generic reference-table handling.  A
+        // profile may add a reference table to a byte field, but that does not
+        // change whether the value is an E5 range, an Ekd5 native shape, or a
+        // strategy/target code.
+        if (tableKey.Equals("strategies", StringComparison.OrdinalIgnoreCase) && field.Name == "策略类型")
+            return StrategyTypeOptions(document, rowIndex, field);
+        if (tableKey.Equals("strategies", StringComparison.OrdinalIgnoreCase) && field.Name == "施展对象")
+            return StrategyTargetOptions(document, field);
+        if (IsE5RangeField(tableKey, field.Name))
+            return RangeOptions(document, rowIndex, field, attack: field.Name is "攻击范围" or "施法范围");
+        if (field.Name == "穿透" && tableKey.Equals("detailed-job-penetration", StringComparison.OrdinalIgnoreCase))
+            return NativePenetrationOptions(document, rowIndex, field);
         if (!string.IsNullOrWhiteSpace(field.ReferenceTable))
         {
             var options = OptionsFor(field.ReferenceTable);
             return options;
         }
-        if (field.Name == "策略类型") return StrategyTypes.Select((name, id) => new IdNameOption(id, name)).ToArray();
-        if (field.Name == "施展对象") return [new(0, "敌方"), new(1, "我方"), new(2, "全屏/天气"), new(5, "全屏己方气合"), new(6, "全屏对方反气合")];
-        if (field.Name is "攻击范围" or "施法范围") return AttackRanges.Select((name, id) => new IdNameOption(id, name)).ToArray();
-        if (field.Name is "穿透" or "穿透范围") return PierceRanges.Select((name, id) => new IdNameOption(id, name)).ToArray();
         return null;
+    }
+
+    private static bool IsE5RangeField(string tableKey, string fieldName)
+        => (tableKey == "detailed-job-growth" && fieldName == "攻击范围") ||
+           (tableKey is "strategies" or "finishing-moves" &&
+            fieldName is "攻击范围" or "施法范围" or "穿透范围");
+
+    private static bool IsNativeRangeField(string tableKey, string fieldName)
+        => tableKey.Equals("detailed-job-penetration", StringComparison.OrdinalIgnoreCase) && fieldName == "穿透";
+
+    private IReadOnlyList<IdNameOption> RangeOptions(TableDocument document, int rowIndex,
+        TableFieldDefinition field, bool attack)
+    {
+        if (WorkspaceRangeOptions(document, rowIndex, field, attack) is { } liveOptions) return liveOptions;
+        var minimum = ClampToInt(field.Minimum, int.MinValue);
+        var maximum = ClampToInt(field.Maximum, int.MaxValue);
+        var current = TryReadInt(document, rowIndex, field.Name);
+        var known = attack ? KnownAttackRanges : KnownPierceRanges;
+        // A missing or unreadable E5 resource does not prove that the old
+        // seven/eleven-item lists are the real domain.  Keep the verified
+        // labels and values already present in the base, but only synthesize
+        // the complete 0..N-1 range when the resource scan supplies N.
+        int? count = null;
+        try
+        {
+            var key = attack ? "Hitarea.e5" : "Effarea.e5";
+            var resource = _resources.Scan(_workspace.RootPath).Resources
+                .FirstOrDefault(item => item.Key.Equals(key, StringComparison.OrdinalIgnoreCase));
+            if (resource is { EntryCount: > 0 }) count = resource.EntryCount;
+        }
+        catch
+        {
+            // A missing or malformed image catalog must not prevent the data
+            // page from opening. The base value is still retained below.
+        }
+
+        var snapshot = new OptionCatalogService().Build(new OptionCatalogRequest(
+            _workspace.ActiveProfile.ProfileId,
+            _workspace.ActiveProfile.VariantId,
+            _workspace.ActiveProfile.Profile.Version,
+            ExecutableFingerprint(),
+            document.Definition.Key,
+            field.Name,
+            attack ? document.Definition.Key == "detailed-job-growth"
+                ? OptionCatalogKind.LegacyDataAttackRange : OptionCatalogKind.E5AttackRange
+                : OptionCatalogKind.E5PierceRange,
+            minimum,
+            maximum,
+            current,
+            ReadColumnValues(document, field.Name),
+            known,
+            count,
+            ResourceAvailable: count.HasValue));
+        return snapshot.Options.Select(option => new IdNameOption(option.Id, option.Label)).ToArray();
+    }
+
+    private IReadOnlyList<IdNameOption> NativePenetrationOptions(TableDocument document, int rowIndex,
+        TableFieldDefinition field)
+    {
+        if (WorkspaceRangeOptions(document, rowIndex, field, attack: false) is { } liveOptions) return liveOptions;
+        var minimum = ClampToInt(field.Minimum, int.MinValue);
+        var maximum = ClampToInt(field.Maximum, int.MaxValue);
+        var current = TryReadInt(document, rowIndex, field.Name);
+        var nativeDomain = NativeRangeDomainReader.Read(_workspace.RootPath,
+            _workspace.ActiveProfile.ProfileId, _workspace.ActiveProfile.VariantId);
+        var nativeMaximum = nativeDomain.PierceMaximum >= 0
+            ? nativeDomain.PierceMaximum
+            : NativeRangeDomain.PierceMaximum(_workspace.ActiveProfile.ProfileId);
+        var actualValues = ReadColumnValues(document, field.Name)
+            .Concat(nativeDomain.JobPierceValues)
+            .Distinct()
+            .ToArray();
+        var snapshot = new OptionCatalogService().Build(new OptionCatalogRequest(
+            _workspace.ActiveProfile.ProfileId,
+            _workspace.ActiveProfile.VariantId,
+            _workspace.ActiveProfile.Profile.Version,
+            string.IsNullOrWhiteSpace(nativeDomain.ExecutableHash) ? ExecutableFingerprint() : nativeDomain.ExecutableHash,
+            document.Definition.Key,
+            field.Name,
+            OptionCatalogKind.NativeJobShape,
+            minimum,
+            maximum,
+            current,
+            actualValues,
+            KnownPierceRanges,
+            NativeMaximum: nativeMaximum));
+        return snapshot.Options.Select(option => new IdNameOption(option.Id, option.Label)).ToArray();
+    }
+
+    private WorkspaceRangeCatalogSnapshot? CurrentRangeSnapshot(bool attack)
+    {
+        if (_rangeCatalog == null || !_rangeCatalog.HasSession ||
+            !string.Equals(Path.TrimEndingDirectorySeparator(_rangeCatalog.RootPath),
+                Path.TrimEndingDirectorySeparator(_workspace.RootPath), StringComparison.OrdinalIgnoreCase)) return null;
+        var snapshot = _rangeCatalog.GetSnapshot(attack);
+        return snapshot.Available ? snapshot : null;
+    }
+
+    private IReadOnlyList<IdNameOption>? WorkspaceRangeOptions(TableDocument document, int rowIndex,
+        TableFieldDefinition field, bool attack)
+    {
+        if (CurrentRangeSnapshot(attack) is not { } snapshot) return null;
+        // A saved-history restore replaces workspace documents before hidden
+        // cached pages are rebound. Read compatibility values from that new
+        // document, never from the page's previous table snapshot.
+        if (_workspace.Documents.TryGetValue(document.Definition.Key, out var liveDocument)) document = liveDocument;
+        var known = attack ? KnownAttackRanges : KnownPierceRanges;
+        var entries = snapshot.Entries.ToDictionary(entry => entry.Id);
+        var current = TryReadInt(document, rowIndex, field.Name);
+        // Only actual bindings define new choices. Existing table values are
+        // retained for custom bases, including reserved values such as FF.
+        var ids = new SortedSet<int>(snapshot.Ids.Concat(ReadColumnValues(document, field.Name))
+            .Where(id => id >= field.Minimum && id <= field.Maximum));
+        if (current is { } value) ids.Add(value);
+        return ids.Select(id => new IdNameOption(id, known.TryGetValue(id, out var label) ? label
+            : entries.TryGetValue(id, out var entry) ? entry.Name : "基底原值/保留")).ToArray();
+    }
+
+    private static IReadOnlyList<IdNameOption> ConsumableEffectOptions(TableDocument document, TableFieldDefinition field)
+    {
+        var actual = document.Data.Columns.Contains(field.Name)
+            ? document.Data.Rows.Cast<DataRow>()
+                .Where(row => row.RowState != DataRowState.Deleted)
+                .Select(row => TryConvertInt(row[field.Name], out var value) ? (int?)value : null)
+                .Where(value => value.HasValue).Select(value => value!.Value).ToArray()
+            : [];
+        var known = ConsumableEffectCatalog.GetAll(actual).ToDictionary(effect => effect.Id, effect => effect.Name);
+        var values = new SortedSet<int>(known.Keys);
+        // 0xFF is used as an empty/reserved marker by item records in
+        // several profiles.  Keep it discoverable even when the current
+        // table happens not to contain one yet; the byte remains editable.
+        values.Add(0xFF);
+        values.UnionWith(actual);
+        values.RemoveWhere(id => id < field.Minimum || id > field.Maximum);
+        return values.Select(id => new IdNameOption(id,
+            known.TryGetValue(id, out var name) ? name : $"未确认道具特效 0x{id:X2}（基底原值）")).ToArray();
+    }
+
+    private static void AddColumnValues(ISet<int> values, TableDocument document, string fieldName,
+        int minimum = int.MinValue, int maximum = int.MaxValue)
+    {
+        if (!document.Data.Columns.Contains(fieldName)) return;
+        foreach (DataRow row in document.Data.Rows)
+            if (row.RowState != DataRowState.Deleted && TryConvertInt(row[fieldName], out var value) &&
+                value >= minimum && value <= maximum) values.Add(value);
+    }
+
+    private static IReadOnlyList<int> ReadColumnValues(TableDocument document, string fieldName)
+    {
+        if (!document.Data.Columns.Contains(fieldName)) return [];
+        return document.Data.Rows.Cast<DataRow>()
+            .Where(row => row.RowState != DataRowState.Deleted)
+            .Select(row => TryConvertInt(row[fieldName], out var value) ? (int?)value : null)
+            .Where(value => value.HasValue)
+            .Select(value => value!.Value)
+            .ToArray();
+    }
+
+    private string ExecutableFingerprint()
+        => _workspace.ProfileMatch?.CoreFileFingerprints.TryGetValue("Ekd5.exe", out var hash) == true
+            ? hash : string.Empty;
+
+    private static IReadOnlyList<IdNameOption> StrategyTargetOptions(TableDocument document, TableFieldDefinition field)
+    {
+        var known = new Dictionary<int, string>
+        {
+            [0] = "敌方", [1] = "我方", [2] = "全屏/天气"
+        };
+        var minimum = ClampToInt(field.Minimum, int.MinValue);
+        var maximum = ClampToInt(field.Maximum, int.MaxValue);
+        var ids = new SortedSet<int>(known.Keys);
+        AddColumnValues(ids, document, field.Name);
+        ids.RemoveWhere(id => id < minimum || id > maximum);
+        return ids.Select(id => new IdNameOption(id,
+            known.TryGetValue(id, out var name) ? name : $"施展对象 {id}（基底原值）")).ToArray();
+    }
+
+    private IReadOnlyList<IdNameOption> StrategyTypeOptions(TableDocument document, int rowIndex,
+        TableFieldDefinition field)
+    {
+        var minimum = ClampToInt(field.Minimum, int.MinValue);
+        var maximum = ClampToInt(field.Maximum, int.MaxValue);
+        var ids = new SortedSet<int>(KnownStrategyTypes.Keys);
+        if (_workspace.ActiveProfile.ProfileId == "ccz-6.6") ids.UnionWith(KnownStrategyTypes66.Keys);
+        ids.RemoveWhere(id => id < minimum || id > maximum);
+
+        if (document.Data.Columns.Contains(field.Name))
+        {
+            foreach (DataRow row in document.Data.Rows)
+            {
+                if (row.RowState == DataRowState.Deleted) continue;
+                if (!TryConvertInt(row[field.Name], out var value)) continue;
+                if (value >= minimum && value <= maximum) ids.Add(value);
+            }
+        }
+        if (TryReadInt(document, rowIndex, field.Name) is { } current) ids.Add(current);
+        return ids.Select(id => new IdNameOption(id, StrategyTypeName(id) ?? $"策略类型 {id}（基底原值）")).ToArray();
+    }
+
+    private string? StrategyTypeName(int id)
+    {
+        if (_workspace.ActiveProfile.ProfileId == "ccz-6.6" && KnownStrategyTypes66.TryGetValue(id, out var name66))
+            return name66;
+        return KnownStrategyTypes.TryGetValue(id, out var name) ? name : null;
+    }
+
+    private static string RangeName(bool attack, int id, int? previewEntryCount = null)
+    {
+        var known = attack ? KnownAttackRanges : KnownPierceRanges;
+        var name = known.TryGetValue(id, out var knownName)
+            ? knownName
+            : $"基底范围 {id}（图号 {id + 1}；基底原值/未确认）";
+        if (previewEntryCount is { } count && (id < 0 || id >= count))
+            name += "（无图）";
+        return name;
+    }
+
+    private static int ClampToInt(long value, int fallback)
+        => value < int.MinValue ? int.MinValue : value > int.MaxValue ? int.MaxValue : (int)value;
+
+    private static int? TryReadInt(TableDocument document, int rowIndex, string fieldName)
+    {
+        if (rowIndex < 0 || rowIndex >= document.Data.Rows.Count || !document.Data.Columns.Contains(fieldName)) return null;
+        return TryConvertInt(document.Data.Rows[rowIndex][fieldName], out var value) ? value : null;
+    }
+
+    private static bool TryConvertInt(object? value, out int result)
+    {
+        try
+        {
+            if (value == null || value == DBNull.Value) { result = 0; return false; }
+            result = Convert.ToInt32(value, CultureInfo.InvariantCulture);
+            return true;
+        }
+        catch (Exception) when (value is not null)
+        {
+            result = 0;
+            return false;
+        }
     }
 
     private static ResourceBindingKind? ResourceKindForField(string tableKey, string fieldName) => (tableKey, fieldName) switch
@@ -1054,12 +1585,25 @@ public sealed partial class BusinessEditorPanel : UserControl
         return fallback;
     }
 
-    private static string[]? GetFlags(string key, string field)
+    private readonly record struct FlagChoice(string Name, int Bit, string? Tip = null);
+
+    private static FlagChoice[]? GetFlags(string key, string field)
         => key switch
         {
-            "strategy-learning" => ["四系", "降能力", "妨碍", "补给", "升能力", "气候", "绝", "四神"],
-            "strategy-extension" => ["策略模仿", "辅助穿透", "保留1", "保留2", "保留3", "保留4", "保留5", "保留6"],
-            "strategy-terrain-availability" => ["火", "水", "风", "地"],
+            "strategy-learning" =>
+            [
+                new("四系", 0), new("降能力", 1), new("妨碍", 2), new("补给", 3),
+                new("升能力", 4), new("气候", 5), new("绝", 6), new("四神", 7)
+            ],
+            "strategy-extension" =>
+            [
+                new("策略模仿", 0, "6.6：bit0=1 时，该策略可被策略模仿/AI 选用；bit0=0 时不会被选择。"),
+                new("辅助穿透", 1, "6.6：bit1=1 且拥有特效168(0xA8) 时，按穿透码查 0x45D343 表增强（01/02/03/08/07/05/06/05/06/02/0A）；bit1=0 不增强。")
+            ],
+            "strategy-terrain-availability" =>
+            [
+                new("火", 0), new("水", 1), new("风", 2), new("地", 3)
+            ],
             _ => null
         };
 
@@ -1069,7 +1613,8 @@ public sealed partial class BusinessEditorPanel : UserControl
             "strategy-damage-type" => "是否伤血",
             "strategy-damage-ratio" => "伤害系数",
             "strategy-hit-rate" => "命中上限",
-            "strategy-learning" => "效果索引",
+            "strategy-learning" => "类型索引",
+            "strategy-effect-class" => "效果索引",
             "strategy-battle-ai" => "战场AI策略",
             "strategy-training-ai" => "练武场AI策略",
             "strategy-extension" => "策略扩展标记",
@@ -1189,6 +1734,9 @@ public sealed partial class BusinessEditorPanel : UserControl
     {
         if (disposing && !_releaseCompleted)
         {
+            ReleasePreviewAncestors();
+            _suspendedPreviewTimers.Clear();
+            _viewLayouts.Dispose();
             lock (_resourceOptionUiGate)
             {
                 _releaseCompleted = true;

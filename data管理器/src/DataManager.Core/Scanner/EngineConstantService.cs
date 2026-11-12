@@ -1,10 +1,10 @@
-using System.Text;
+﻿using System.Text;
 using DataManager.Core.Editing;
 using DataManager.Core.Models;
 
 namespace DataManager.Core.Scanner;
 
-public enum EngineConstantKind { Byte, Int32, Text }
+public enum EngineConstantKind { Byte, Int32, Text, Word, SignedByte }
 
 /// <summary>One signature-guarded location of a constant; different bases may use different code shapes.</summary>
 /// <param name="SecondaryFieldVa">Optional second byte that must carry the same value (paired clamp).</param>
@@ -36,7 +36,7 @@ public sealed record EngineConstantLayout(string Label, uint FieldVa, long Field
 /// duplicated across more than two sites (for example the six-stat clamp of 夺锐攻击).
 /// </summary>
 public sealed record EngineConstantExtraField(uint FieldVa, long FieldFileOffset, byte[] Prefix, byte[] Suffix,
-    int Length = 0, byte[]? PrefixMask = null, byte[]? SuffixMask = null);
+    int Length = 0, byte[]? PrefixMask = null, byte[]? SuffixMask = null, int ValueOffset = 0);
 
 /// <summary>A confirmed engine constant: one immediate byte or one fixed text slot.</summary>
 public sealed record EngineConstantDefinition(string Id, string Module, string DisplayName, string Unit,
@@ -93,7 +93,7 @@ public sealed class EngineConstantService
     private static readonly byte[] JaeSuffix = [0x73];
     private static readonly byte[] BreakthroughDamageSuffix = [0x83, 0x7D, 0x08, 0x01, 0x74];
 
-    public static readonly IReadOnlyList<EngineConstantDefinition> Definitions =
+    public static readonly IReadOnlyList<EngineConstantDefinition> Definitions = NormalizeDefinitions(
     [
         new("guided-attack-count", "连击次数", "引导攻击追加次数", "次",
             "击杀目标后最多再引导几次；总攻击次数 = 这个值 + 1。6.4 默认 4（共五次），6.5/6.6 默认 2（共三次）。部分改版基底写 255 表示基本不限次数。",
@@ -235,7 +235,8 @@ public sealed class EngineConstantService
                     SecondaryFieldVa: 0x0043C51E, SecondaryFileOffset: 0x3B91E,
                     SecondaryPrefix: [0x72, 0x05, 0xB8], SecondarySuffix: [0x8B, 0xE5, 0x5D],
                     Bases: ["6.5"], Relocate: true),
-                new("6.6", 0x0043C522, 0x3B922, 4, [0x3D], [0x72, 0x05],
+                new("6.6", 0x0043C522, 0x3B922, 4,
+                    [0x03, 0x45, 0xFC, 0x8B, 0x4D, 0xF8, 0xFF, 0x75, 0x08, 0xE8, 0xDF, 0x3D, 0x08, 0x00, 0x3D], [0x72, 0x05],
                     SecondaryFieldVa: 0x0043C529, SecondaryFileOffset: 0x3B929,
                     SecondaryPrefix: [0x72, 0x05, 0xB8], SecondarySuffix: [0x8B, 0xE5, 0x5D],
                     Bases: ["6.6"], Relocate: true),
@@ -618,8 +619,96 @@ public sealed class EngineConstantService
                 [0x6B, 0xC0, 0x64, 0x6B, 0xC0],
                 [0x99, 0x83, 0xE2, 0x03, 0x03, 0xC2, 0xC1, 0xF8, 0x02],
                 Relocate: true)]),
-        ..BattleFormulaConstantDefinitions.All
-    ];
+        ..BattleFormulaConstantDefinitions.All,
+        ..EngineGeneralConstantDefinitions.All
+    ]);
+
+    // An adjacent editable immediate is part of the context, not an immutable signature byte.
+    // Mask every registered field so editing two neighboring constants preserves both guards.
+    private static IReadOnlyList<EngineConstantDefinition> NormalizeDefinitions(
+        IReadOnlyList<EngineConstantDefinition> definitions)
+    {
+        definitions = definitions.Select(EngineGeneralConstantDefinitions.Enrich)
+            .Select(definition => definition with
+            {
+                Layouts = definition.Layouts.Select(BroadenSecondaryContext).ToArray()
+            }).ToArray();
+        var fields = definitions.SelectMany(definition => definition.Layouts.SelectMany(layout =>
+            new[] { (layout.FieldVa, layout.Length), (layout.SecondaryFieldVa, SecondaryLengthOf(layout)) }
+                .Concat((layout.ExtraFields ?? []).Select(extra =>
+                    (extra.FieldVa, extra.Length > 0 ? extra.Length : layout.Length)))
+                .Select(field => (Va: field.Item1, Length: field.Item2, Bases: layout.Bases))))
+            .Where(field => field.Va != 0).ToArray();
+        byte[] Mask(EngineConstantLayout target, uint start, int length, byte[]? original)
+        {
+            var mask = original?.ToArray() ?? Enumerable.Repeat((byte)1, length).ToArray();
+            for (var index = 0; index < length; index++)
+                if (fields.Any(field => (field.Bases == null || target.Bases == null ||
+                        field.Bases.Intersect(target.Bases, StringComparer.Ordinal).Any()) &&
+                    (long)start + index >= field.Va &&
+                    (long)start + index < (long)field.Va + field.Length)) mask[index] = 0;
+            return mask;
+        }
+        return definitions.Select(definition => definition with
+        {
+            Layouts = definition.Layouts.Select(layout => layout with
+            {
+                PrefixMask = Mask(layout, layout.FieldVa - (uint)layout.Prefix.Length, layout.Prefix.Length, layout.PrefixMask),
+                SuffixMask = Mask(layout, layout.FieldVa + (uint)layout.Length, layout.Suffix.Length, layout.SuffixMask),
+                SecondaryPrefixMask = layout.SecondaryPrefix == null ? null : Mask(layout,
+                    layout.SecondaryFieldVa - (uint)layout.SecondaryPrefix.Length,
+                    layout.SecondaryPrefix.Length, layout.SecondaryPrefixMask),
+                SecondarySuffixMask = layout.SecondarySuffix == null ? null : Mask(layout,
+                    layout.SecondaryFieldVa + (uint)SecondaryLengthOf(layout),
+                    layout.SecondarySuffix.Length, layout.SecondarySuffixMask),
+                ExtraFields = layout.ExtraFields?.Select(extra => extra with
+                {
+                    PrefixMask = Mask(layout, extra.FieldVa - (uint)extra.Prefix.Length, extra.Prefix.Length, extra.PrefixMask),
+                    SuffixMask = Mask(layout, extra.FieldVa + (uint)(extra.Length > 0 ? extra.Length : layout.Length),
+                        extra.Suffix.Length, extra.SuffixMask)
+                }).ToArray()
+            }).ToArray()
+        }).ToArray();
+    }
+
+    // Short mov-immediate guards can repeat in several handlers. Reuse the nearby
+    // primary guard when its known context covers every intervening instruction.
+    // The primary value itself remains a wildcard, so both copies can still change.
+    private static EngineConstantLayout BroadenSecondaryContext(EngineConstantLayout layout)
+    {
+        if (layout.SecondaryFieldVa <= layout.FieldVa ||
+            layout.SecondaryFieldVa - layout.FieldVa > 64 ||
+            layout.SecondaryPrefix is not { } oldPrefix) return layout;
+        var start = (long)layout.FieldVa - layout.Prefix.Length;
+        var length = checked((int)(layout.SecondaryFieldVa - start));
+        if (length <= oldPrefix.Length) return layout;
+        var prefix = new byte[length];
+        var mask = new byte[length];
+        var covered = new bool[length];
+        void Add(long address, byte[] bytes, byte[]? sourceMask)
+        {
+            for (var index = 0; index < bytes.Length; index++)
+            {
+                var target = address + index - start;
+                if (target < 0 || target >= length) continue;
+                prefix[target] = bytes[index];
+                mask[target] = sourceMask == null ? (byte)1 : sourceMask[index];
+                covered[target] = true;
+            }
+        }
+        Add(start, layout.Prefix, layout.PrefixMask);
+        Add((long)layout.FieldVa + layout.Length, layout.Suffix, layout.SuffixMask);
+        Add((long)layout.SecondaryFieldVa - oldPrefix.Length, oldPrefix, layout.SecondaryPrefixMask);
+        for (var index = 0; index < layout.Length; index++)
+        {
+            var target = checked((int)(layout.FieldVa + index - start));
+            mask[target] = 0;
+            covered[target] = true;
+        }
+        return covered.All(value => value)
+            ? layout with { SecondaryPrefix = prefix, SecondaryPrefixMask = mask }
+            : layout;
+    }
 
     public IReadOnlyList<EngineConstantValue> Read(ProjectWorkspace workspace)
     {
@@ -641,7 +730,7 @@ public sealed class EngineConstantService
         var result = new List<EngineConstantValue>(Definitions.Count);
         foreach (var definition in Definitions)
         {
-            if (definition.Kind is EngineConstantKind.Byte or EngineConstantKind.Int32)
+            if (definition.Kind != EngineConstantKind.Text)
             {
                 TryReadNumber(image, bytes, definition, version, out var byteValue);
                 result.Add(byteValue!);
@@ -696,7 +785,7 @@ public sealed class EngineConstantService
             checks.Add(new(definition.Id, label, applicable, layout.Relocate, exact, hits.Count, hits, layout.Optional));
         }
 
-        foreach (var definition in Definitions.Where(item => item.Kind is EngineConstantKind.Byte or EngineConstantKind.Int32))
+        foreach (var definition in Definitions.Where(item => item.Kind != EngineConstantKind.Text))
         foreach (var layout in definition.Layouts)
         {
             Add(definition, layout, layout.Label, layout.FieldVa, layout.Prefix, layout.PrefixMask,
@@ -760,7 +849,7 @@ public sealed class EngineConstantService
                 bestAddress, bestHits == 1));
         }
 
-        foreach (var definition in Definitions.Where(item => item.Kind is EngineConstantKind.Byte or EngineConstantKind.Int32))
+        foreach (var definition in Definitions.Where(item => item.Kind != EngineConstantKind.Text))
         foreach (var layout in definition.Layouts.Where(item => item.AppliesTo(version)))
         {
             Add(definition, layout.Label, layout.FieldVa, layout.Prefix, layout.Suffix, layout.Length);
@@ -835,7 +924,7 @@ public sealed class EngineConstantService
         }
         diagnostic = signatureDiagnostic ?? relativeDiagnostic;
         var original = bytes.AsSpan(checked((int)offset), layout.Length).ToArray();
-        var number = layout.Length == 1 ? original[0] : BitConverter.ToInt32(original, 0);
+        var number = DecodeNumber(original, definition.Kind);
         if (signatureDiagnostic != null && (number < definition.Minimum || number > definition.Maximum))
         {
             diagnostic = $"重定位值 {number} 超出范围 {definition.Minimum}..{definition.Maximum}，保持只读。";
@@ -868,7 +957,7 @@ public sealed class EngineConstantService
                 return false;
             }
             var secondaryBytes = bytes.AsSpan(checked((int)secondary), secondaryLength).ToArray();
-            var secondaryNumber = secondaryLength == 1 ? secondaryBytes[0] : BitConverter.ToInt32(secondaryBytes, 0);
+            var secondaryNumber = DecodeNumber(secondaryBytes, definition.Kind);
             if (number != secondaryNumber)
             {
                 diagnostic = "成对地址的值不一致，保持只读。";
@@ -902,8 +991,8 @@ public sealed class EngineConstantService
                     return false;
                 }
                 var extraBytes = bytes.AsSpan(checked((int)extraOffset), extraLength).ToArray();
-                var extraNumber = extraLength == 1 ? extraBytes[0] : BitConverter.ToInt32(extraBytes, 0);
-                if (extraNumber != number)
+                var extraNumber = DecodeNumber(extraBytes, definition.Kind);
+                if (extraNumber != number + extra.ValueOffset)
                 {
                     diagnostic = "附加同步字段的值不一致，保持只读。";
                     return false;
@@ -920,8 +1009,21 @@ public sealed class EngineConstantService
     private static int SecondaryLengthOf(EngineConstantLayout layout)
         => layout.SecondaryLength > 0 ? layout.SecondaryLength : layout.Length;
 
-    private static byte[] EncodeNumber(int numeric, int length)
-        => length == 1 ? [(byte)numeric] : BitConverter.GetBytes(numeric);
+    private static int DecodeNumber(ReadOnlySpan<byte> bytes, EngineConstantKind kind) => bytes.Length switch
+    {
+        1 => kind == EngineConstantKind.SignedByte ? unchecked((sbyte)bytes[0]) : bytes[0],
+        2 => System.Buffers.Binary.BinaryPrimitives.ReadUInt16LittleEndian(bytes),
+        4 => System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(bytes),
+        _ => throw new InvalidDataException("常量宽度只能为 1、2、4 字节。")
+    };
+
+    private static byte[] EncodeNumber(int numeric, int length) => length switch
+    {
+        1 => [unchecked((byte)numeric)],
+        2 => BitConverter.GetBytes(checked((ushort)numeric)),
+        4 => BitConverter.GetBytes(numeric),
+        _ => throw new InvalidDataException("常量宽度只能为 1、2、4 字节。")
+    };
 
     private static uint? ResolveFieldVa(EngineEffectBinaryImage image, byte[] bytes,
         EngineConstantLayout layout, out string? diagnostic)
@@ -1034,29 +1136,28 @@ public sealed class EngineConstantService
     private static EngineConstantValue Unmatched(EngineConstantDefinition definition, string diagnostic)
         => new(definition, definition.Layouts[0], -1, null, string.Empty, [], false, diagnostic);
 
-    public EngineConstantCommitResult Commit(ProjectWorkspace workspace, IReadOnlyList<EngineConstantEdit> edits)
+    /// <summary>Build a guarded candidate for the workspace's common Save transaction; does not write.</summary>
+    public WorkspaceBinaryCandidate PrepareBinaryEdit(ProjectWorkspace workspace, IReadOnlyList<EngineConstantEdit> edits)
     {
         ArgumentNullException.ThrowIfNull(workspace);
-        if (edits.Count == 0) return EngineConstantCommitResult.Failed("没有修改。");
         var path = Path.Combine(workspace.RootPath, "Ekd5.exe");
-        if (!File.Exists(path)) return EngineConstantCommitResult.Failed("找不到 Ekd5.exe。");
+        if (!File.Exists(path)) throw new InvalidDataException("找不到 Ekd5.exe。");
         var before = File.ReadAllBytes(path);
         var after = (byte[])before.Clone();
         var version = workspace.ActiveProfile.Profile.Version;
         var current = Read(path, version).ToDictionary(value => value.Definition.Id, StringComparer.Ordinal);
         var changes = new List<string>();
-        var expected = new List<(EngineConstantDefinition Definition, int? Numeric, string? Text)>();
         foreach (var edit in edits)
         {
             if (!current.TryGetValue(edit.Id, out var value))
-                return EngineConstantCommitResult.Failed($"未知常量：{edit.Id}");
+                throw new InvalidDataException($"未知常量：{edit.Id}");
             if (!value.SignatureMatches)
-                return EngineConstantCommitResult.Failed($"{value.Definition.DisplayName}：{value.Diagnostic}");
+                throw new InvalidDataException($"{value.Definition.DisplayName}：{value.Diagnostic}");
             var definition = value.Definition;
-            if (definition.Kind is EngineConstantKind.Byte or EngineConstantKind.Int32)
+            if (definition.Kind != EngineConstantKind.Text)
             {
                 if (edit.NumericValue is not { } numeric || numeric < definition.Minimum || numeric > definition.Maximum)
-                    return EngineConstantCommitResult.Failed(
+                    throw new InvalidDataException(
                         $"{definition.DisplayName}：请输入 {definition.Minimum}..{definition.Maximum}。");
                 if (value.NumericValue == numeric) continue;
                 var encoded = EncodeNumber(numeric, value.Layout.Length);
@@ -1066,45 +1167,61 @@ public sealed class EngineConstantService
                         .CopyTo(after, checked((int)value.SecondaryFileOffset));
                 if (value.ExtraFileOffsets is { Count: > 0 } extraOffsets)
                 {
-                    var extraEncoded = EncodeNumber(numeric, value.Layout.Length);
-                    foreach (var extraOffset in extraOffsets)
-                        extraEncoded.CopyTo(after, checked((int)extraOffset));
+                    for (var index = 0; index < extraOffsets.Count; index++)
+                    {
+                        var extra = value.Layout.ExtraFields![index];
+                        EncodeNumber(checked(numeric + extra.ValueOffset),
+                            extra.Length > 0 ? extra.Length : value.Layout.Length)
+                            .CopyTo(after, checked((int)extraOffsets[index]));
+                    }
                 }
                 changes.Add($"{definition.DisplayName} {value.NumericValue} → {numeric}");
-                expected.Add((definition, numeric, null));
             }
             else
             {
                 var text = (edit.TextValue ?? string.Empty).Trim();
                 var encoded = EncodeText(text, value.Layout.Length);
                 if (encoded == null)
-                    return EngineConstantCommitResult.Failed(
+                    throw new InvalidDataException(
                         $"{definition.DisplayName}：最多 {value.Layout.Length} 字节 GBK（约 8 个汉字）。");
                 var slot = new byte[value.Layout.Length];
                 encoded.CopyTo(slot, 0);
                 if (after.AsSpan(checked((int)value.FileOffset), value.Layout.Length).SequenceEqual(slot)) continue;
                 slot.CopyTo(after, checked((int)value.FileOffset));
                 changes.Add($"{definition.DisplayName} \"{value.TextValue}\" → \"{text}\"");
-                expected.Add((definition, null, text));
             }
         }
-        if (changes.Count == 0) return new(true, "没有需要写入的常量。");
-        var candidate = new WorkspaceBinaryCandidate(path, before, after, "引擎常量");
+        return new WorkspaceBinaryCandidate(path, before, after, "引擎常量");
+    }
+
+    public EngineConstantCommitResult Commit(ProjectWorkspace workspace, IReadOnlyList<EngineConstantEdit> edits)
+    {
+        if (edits.Count == 0) return EngineConstantCommitResult.Failed("没有修改。");
+        WorkspaceBinaryCandidate candidate;
+        try { candidate = PrepareBinaryEdit(workspace, edits); }
+        catch (Exception ex) when (ex is InvalidDataException or OverflowException or IOException)
+        { return EngineConstantCommitResult.Failed(ex.Message); }
+        if (candidate.BeforeBytes.AsSpan().SequenceEqual(candidate.AfterBytes))
+            return new(true, "没有需要写入的常量。");
         var result = new EngineEffectTransactionService().Commit(workspace,
-            "写入引擎常量：" + string.Join("、", changes), [candidate], () =>
+            "写入引擎常量：" + string.Join("、", edits.Select(edit => edit.Id)), [candidate], () =>
+            ValidateSavedEdits(workspace, edits));
+        return new(result.Success, result.Message, result.BackupPath,
+            candidate.BeforeBytes.Zip(candidate.AfterBytes).Count(pair => pair.First != pair.Second));
+    }
+
+    public void ValidateSavedEdits(ProjectWorkspace workspace, IReadOnlyList<EngineConstantEdit> edits)
+    {
+        var current = Read(workspace).ToDictionary(value => value.Definition.Id, StringComparer.Ordinal);
+        foreach (var edit in edits)
         {
-            var verify = Read(path, version).ToDictionary(item => item.Definition.Id, StringComparer.Ordinal);
-            foreach (var (definition, numeric, text) in expected)
-            {
-                if (!verify.TryGetValue(definition.Id, out var actual))
-                    throw new InvalidDataException($"{definition.DisplayName} 复读不到。");
-                if (numeric is { } number && actual.NumericValue != number)
-                    throw new InvalidDataException($"{definition.DisplayName} 复读值 {actual.NumericValue} 与写入 {number} 不符。");
-                if (text != null && !actual.TextValue.Equals(text, StringComparison.Ordinal))
-                    throw new InvalidDataException($"{definition.DisplayName} 复读文本与写入不符。");
-            }
-        });
-        return new(result.Success, result.Message, result.BackupPath, changes.Count);
+            if (!current.TryGetValue(edit.Id, out var actual) || !actual.SignatureMatches)
+                throw new InvalidDataException($"{edit.Id} 保存后无法通过签名校验。");
+            if (edit.NumericValue is { } number && actual.NumericValue != number)
+                throw new InvalidDataException($"{actual.Definition.DisplayName} 复读值与写入值不符。");
+            if (edit.TextValue is { } text && actual.TextValue != text.Trim())
+                throw new InvalidDataException($"{actual.Definition.DisplayName} 复读文本与写入值不符。");
+        }
     }
 
     private static string? DecodeText(ReadOnlySpan<byte> bytes, out string? error)

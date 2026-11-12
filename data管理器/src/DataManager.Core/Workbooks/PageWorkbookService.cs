@@ -65,8 +65,18 @@ public sealed class PageWorkbookService(ProjectWorkspace workspace)
         var current = _registry.Build(kind).ToDictionary(d => d.Key, StringComparer.Ordinal);
         if (manifest.Datasets == null || manifest.Datasets.Any(d => d == null) ||
             manifest.Datasets.GroupBy(d => d.Key).Any(g => g.Count() != 1) ||
-            !manifest.Datasets.Select(d => d.Key).ToHashSet(StringComparer.Ordinal).SetEquals(current.Keys))
+            !RegisteredDatasetsMatch())
             throw new InvalidDataException("已登记的数据集缺失、重复或不属于当前业务页。");
+        bool RegisteredDatasetsMatch()
+        {
+            var keys = manifest.Datasets.Select(d => d.Key).ToHashSet(StringComparer.Ordinal);
+            if (keys.SetEquals(current.Keys)) return true;
+            // The preceding workbook predates the new independent effect table.
+            // Its exact revision was checked above; every other dataset remains mandatory.
+            return manifest.Layout != workspace.ActiveProfile.LayoutRevision &&
+                !keys.Contains(StrategyEffectClassService.TableKey) &&
+                keys.SetEquals(current.Keys.Where(key => key != StrategyEffectClassService.TableKey));
+        }
         var referenced = manifest.Datasets.SelectMany(d => new[] { d.SheetId, d.BaselineSheetId }).ToArray();
         if (referenced.Distinct().Count() != referenced.Length || referenced.Contains(meta.SheetId!.Value))
             throw new InvalidDataException("工作表与基线的标识重复。");
@@ -129,7 +139,11 @@ public sealed class PageWorkbookService(ProjectWorkspace workspace)
             var native = changes.Where(c => proposals.Any(p => p.Id == c.Id && p.After == c.NewValue && p.Dataset.StartsWith("native-", StringComparison.Ordinal))).FirstOrDefault();
             throw new InvalidDataException($"{(native == null ? "原生数据集" : $"工作表 {native.Sheet} / 单元格 {native.Cell} / ID={native.Id} / 字段“{native.Field}”")}：{ex.Message}", ex);
         }
-        return new() { Changes = changes.AsReadOnly(), ProjectIdentity = Identity, Page = kind, Proposals = proposals.AsReadOnly() };
+        var warnings = pendingPhysical.Where(edit => edit.TableKey == StrategyEffectClassService.TableKey)
+            .Select(edit => StrategyEffectClassService.GetCompatibilityWarning(workspace, edit.RowIndex,
+                Convert.ToInt32(edit.NewValue, System.Globalization.CultureInfo.InvariantCulture), pendingPhysical))
+            .Where(warning => !string.IsNullOrEmpty(warning)).Select(warning => warning!).Distinct().ToArray();
+        return new() { Changes = changes.AsReadOnly(), Warnings = warnings, ProjectIdentity = Identity, Page = kind, Proposals = proposals.AsReadOnly() };
 
         WorksheetPart Worksheet(Sheet sheet)
             => sheet.Id != null && part.GetPartById(sheet.Id!) is WorksheetPart worksheet ? worksheet : throw new InvalidDataException($"工作表 {sheet.Name} 数据关系损坏。");

@@ -8,9 +8,40 @@ internal static class EngineEffectScanTests
 {
     public static void Run(string root, string? outputDirectory = null)
     {
+        RunSuffixCatalogTests();
         var workspace = new ProjectWorkspace();
         workspace.Open(root);
         var report = new EngineEffectScanService().Scan(workspace);
+        foreach (var row in report.Effects.Where(row => row.SuffixByte is not null))
+            TestSupport.Assert(row.SuffixLabel == EngineEffectSuffixLabels.Label(report.EngineVersion, row.SuffixByte!.Value),
+                $"后缀标签未按基底生成：{row.EffectId} 0x{row.SuffixByte:X2} {row.SuffixLabel}");
+        var suffixSamples = report.EngineVersion switch
+        {
+            "6.4" => new (int Id, string Fragment)[] { (83, "不处理"), (84, "不处理") },
+            "6.5" => new (int Id, string Fragment)[] { (128, "位掩码"), (93, "策略名"), (84, "属性名") },
+            "6.6" => new (int Id, string Fragment)[]
+            {
+                (59, "次"), (149, "范围"), (155, "阵型"), (159, "地形"),
+                (51, "攻击/策略/ALL"), (108, "不处理")
+            },
+            _ => []
+        };
+        foreach (var sample in suffixSamples)
+        {
+            var row = report.Effects.FirstOrDefault(item => item.EffectId == sample.Id);
+            TestSupport.Assert(row is { HasNameSlot: true } &&
+                               row.SuffixLabel.Contains(sample.Fragment, StringComparison.Ordinal),
+                $"{report.EngineVersion} 特效 {sample.Id} 后缀标签不符：{row?.SuffixLabel}");
+        }
+        var invalidSuffix = (byte)(EngineEffectSuffixLabels.MaximumSuffix(report.EngineVersion) + 1);
+        var suffixRow = report.Effects.FirstOrDefault(item => item.HasNameSlot && item.SuffixByte != invalidSuffix);
+        if (suffixRow != null && invalidSuffix <= byte.MaxValue)
+        {
+            var suffixEdit = new EngineEffectSlotService().PreviewSuffix(workspace, suffixRow.EffectId, invalidSuffix);
+            TestSupport.Assert(suffixEdit.ValidationError != null &&
+                               suffixEdit.ValidationError.Contains(report.EngineVersion, StringComparison.Ordinal),
+                $"{report.EngineVersion} 未拒绝超范围后缀 0x{invalidSuffix:X2}：{suffixEdit.ValidationError}");
+        }
         WriteBaselineDiagnostics(report, root, outputDirectory);
         foreach (var line in report.Diagnostics.Where(line =>
                      line.StartsWith("指令边界图", StringComparison.Ordinal) ||
@@ -968,7 +999,10 @@ internal static class EngineEffectScanTests
         }
         var first = report.Effects.FirstOrDefault(row => row.EffectId == 0);
         TestSupport.Assert(first is { HasNameSlot: true }, "ID 0 没有名称槽。");
-        TestSupport.Assert(first!.SuffixByte is >= 0 and <= 0x14, $"ID 0 后缀超出范围：{first.SuffixByte}");
+        TestSupport.Assert(first!.SuffixByte is { } firstSuffix &&
+                           (EngineEffectSuffixLabels.Supports(report.EngineVersion, firstSuffix) ||
+                            first.SuffixLabel.Contains("不处理", StringComparison.Ordinal)),
+            $"ID 0 后缀超出范围或标签不符：{first.SuffixByte} {first.SuffixLabel}");
         TestSupport.Assert(first.DescriptionByteCount is >= 0 and <= 199, "ID 0 说明字节数异常。");
         foreach (var row in report.Effects.Where(row => row.HasCalls))
             foreach (var call in row.CallSiteDetails)
@@ -1059,6 +1093,31 @@ internal static class EngineEffectScanTests
 
     private static string Short(string value)
         => value.Length <= 18 ? value : value[..18] + "…";
+
+    private static void RunSuffixCatalogTests()
+    {
+        TestSupport.Assert(EngineEffectSuffixLabels.MaximumSuffix("6.4") == 0x05, "6.4 后缀上限不是 0x05。");
+        TestSupport.Assert(EngineEffectSuffixLabels.MaximumSuffix("6.5") == 0x0A, "6.5 后缀上限不是 0x0A。");
+        TestSupport.Assert(EngineEffectSuffixLabels.MaximumSuffix("6.6") == 0x0F, "6.6 后缀上限不是 0x0F。");
+        TestSupport.Assert(!EngineEffectSuffixLabels.Supports("6.4", 0x06) &&
+                           EngineEffectSuffixLabels.Label("6.4", 0x06).Contains("不处理", StringComparison.Ordinal),
+            "6.4 0x06 应显示为选择器不处理。");
+        TestSupport.Assert(EngineEffectSuffixLabels.Name("6.5", 0x06).Contains("位掩码", StringComparison.Ordinal),
+            "6.5 0x06 应为位掩码组合。");
+        TestSupport.Assert(EngineEffectSuffixLabels.Name("6.6", 0x06).Contains("次", StringComparison.Ordinal),
+            "6.6 0x06 应为次数后缀。");
+        TestSupport.Assert(EngineEffectSuffixLabels.Name("6.6", 0x0C).Contains("范围", StringComparison.Ordinal),
+            "6.6 0x0C 应为范围/形状名。");
+        TestSupport.Assert(EngineEffectSuffixLabels.Name("6.6", 0x0D).Contains("阵型", StringComparison.Ordinal),
+            "6.6 0x0D 应为阵型/范围名。");
+        TestSupport.Assert(EngineEffectSuffixLabels.Name("6.6", 0x0E).Contains("地形", StringComparison.Ordinal),
+            "6.6 0x0E 应为地形名。");
+        TestSupport.Assert(EngineEffectSuffixLabels.Name("6.6", 0x0F).Contains("攻击/策略/ALL", StringComparison.Ordinal),
+            "6.6 0x0F 应为攻击/策略/ALL。");
+        TestSupport.Assert(!EngineEffectSuffixLabels.Supports("6.6", 0x10) &&
+                           EngineEffectSuffixLabels.Name("6.6", 0x12).Contains("不处理", StringComparison.Ordinal),
+            "6.6 0x10+ 应显示为选择器不处理。");
+    }
 
     private static void WriteBaselineDiagnostics(EngineEffectScanReport report, string root, string? outputDirectory)
     {

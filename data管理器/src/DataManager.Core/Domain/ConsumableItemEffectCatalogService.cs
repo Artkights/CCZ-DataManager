@@ -90,5 +90,17 @@ public static class ConsumableEffectCatalog
     public static ConsumableItemEffectEntry Resolve(int id) => ConsumableItemEffectCatalogService.Resolve(id);
     public static IReadOnlyList<ConsumableItemEffectEntry> GetAll(int minimum = 0x1A, int maximum = 0x3D)
         => ConsumableItemEffectCatalogService.GetAll(minimum, maximum);
+    /// <summary>
+    /// Returns the verified catalogue plus bytes explicitly referenced by the
+    /// active base. The parameterless overload remains the historical known
+    /// range for callers that have no project context.
+    /// </summary>
+    public static IReadOnlyList<ConsumableItemEffectEntry> GetAll(IEnumerable<int> referencedIds)
+    {
+        ArgumentNullException.ThrowIfNull(referencedIds);
+        return GetAll().Concat(referencedIds.Where(id => id is >= 0 and <= 0xFF).Distinct().Select(Resolve))
+            .GroupBy(entry => entry.Id).Select(group => group.First())
+            .OrderBy(entry => entry.Id).ToArray();
+    }
     public static string DisplayName(int id) => ConsumableItemEffectCatalogService.DisplayName(id);
 }

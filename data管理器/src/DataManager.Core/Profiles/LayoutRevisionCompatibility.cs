@@ -47,6 +47,29 @@ public static class LayoutRevisionCompatibility
     private static IReadOnlyList<string> GetRecognizedRevisions(string projectRoot, string profileId, string variantId,
         ResolvedProfile currentBase, ResolvedProfile current)
     {
+        var preceding = new ProfileAugmentationService().ApplyPreStrategyEffects(projectRoot, currentBase);
+        if (preceding.LayoutRevision.Equals(current.LayoutRevision, StringComparison.OrdinalIgnoreCase))
+            return GetRecognizedPreStrategyRevisions(projectRoot, profileId, variantId, currentBase, preceding);
+        // Only one independently located handler-class byte table is added in
+        // this transition. Every earlier physical field must retain its exact
+        // identity, policy and runtime geometry before its history is accepted.
+        var effect = current.Tables.SingleOrDefault(table => table.Key == "strategy-effect-class");
+        var strategies = preceding.Tables.SingleOrDefault(table => table.Key == "strategies");
+        if (effect is not { FileName: "Ekd5.exe", RowSize: 1, BeginId: 0, ParentKey: "strategies" } ||
+            strategies == null || effect.RowCount != strategies.RowCount || effect.Fields.Count != 1 ||
+            effect.Fields[0] is not { Name: "效果类", Offset: 0, Size: 1, Kind: FieldKind.UInt8, Policy: FieldPolicy.Editable } ||
+            !ProfileRegistry.ComputeLayoutRevision(profileId, variantId, current.Tables.Where(table => table.Key != effect.Key))
+                .Equals(ProfileRegistry.ComputeLayoutRevision(profileId, variantId, preceding.Tables), StringComparison.Ordinal))
+            return [];
+        return GetRecognizedPreStrategyRevisions(projectRoot, profileId, variantId, currentBase, preceding)
+            .Prepend(preceding.LayoutRevision)
+            .Where(revision => !revision.Equals(current.LayoutRevision, StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    private static IReadOnlyList<string> GetRecognizedPreStrategyRevisions(string projectRoot, string profileId, string variantId,
+        ResolvedProfile currentBase, ResolvedProfile current)
+    {
         // Earlier releases assigned these keys exclusively to root Item/Itemmsg.
         // Never authorize replay or CSV import under an old identity after a key
         // moves into Star/Imsg, even when all records have the same width.
@@ -62,7 +85,7 @@ public static class LayoutRevisionCompatibility
         if (!IsRegisteredSimplification(precedingBase, currentBase))
             return GetPreviousAugmentationRevisions(currentBase, current);
         var oldBase = Legacy.Value.Resolve(profileId, variantId);
-        var preceding = new ProfileAugmentationService().Apply(projectRoot, precedingBase);
+        var preceding = new ProfileAugmentationService().ApplyPreStrategyEffects(projectRoot, precedingBase);
         return GetPreviousAugmentationRevisions(currentBase, current)
             .Append(preceding.LayoutRevision)
             .Concat(GetPreviousAugmentationRevisions(precedingBase, current))

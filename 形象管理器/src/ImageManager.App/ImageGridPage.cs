@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Buffers.Binary;
 using System.Drawing.Imaging;
 using ImageManager.Core;
@@ -32,6 +32,7 @@ public sealed class ImageGridPage : UserControl
     private readonly Dictionary<string, Button> _buttons = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<int> _usedIds = [];
     private readonly ToolTip _paletteTip = new();
+    private readonly Dictionary<PictureBox, ImageResourceCoordinator.PixelLease> _thumbnailLeases = new();
     private ProjectProfile? _project;
     private List<ImageResourceDescriptor> _resources = [];
     private List<LogicalImageAsset> _assets = [];
@@ -47,6 +48,8 @@ public sealed class ImageGridPage : UserControl
     private bool _initializing;
     private bool _previewLayoutInitialized;
     private bool _isActive = true;
+    private bool? _effectiveViewActive;
+    private readonly List<Control> _visibilityAncestors = [];
     private string? _focusedAssetId;
     private Task _loadingTask = Task.CompletedTask;
     private CancellationTokenSource? _terrainLoadCancellation;
@@ -101,7 +104,7 @@ public sealed class ImageGridPage : UserControl
         _sMode.Items.AddRange(["将领", "兵种"]);
         _sMode.SelectedIndex = 0;
         _sMode.SelectedIndexChanged += (_, _) => LoadSelectedResource();
-        VisibleChanged += (_, _) => { if (!Visible) _animationPreview.Pause(); };
+        VisibleChanged += (_, _) => UpdateViewActivity();
     }
 
     public void LoadProject(ProjectProfile project, IEnumerable<ImageResourceDescriptor> resources, IReadOnlySet<int>? usedIds = null)
@@ -172,6 +175,30 @@ public sealed class ImageGridPage : UserControl
         return true;
     }
 
+    /// <summary>Uses the resource's logical ID, preserving Face=0 and paired R numbering.</summary>
+    public async Task<bool> LocateLogicalImageAsync(string resourceKey, int logicalId)
+    {
+        if (logicalId < 0 || _project == null) return false;
+        var resourceIndex = _resources.FindIndex(resource => resource.Key.Equals(resourceKey, StringComparison.OrdinalIgnoreCase));
+        if (resourceIndex < 0) return false;
+        var project = _project;
+        _search = string.Empty;
+        _idle.Checked = false;
+        if (_resourceSelector.SelectedIndex != resourceIndex) _resourceSelector.SelectedIndex = resourceIndex;
+        var revision = _loadRevision;
+        await _loadingTask;
+        if (IsDisposed || !ReferenceEquals(project, _project) || revision != _loadRevision) return false;
+        var asset = _assets.FirstOrDefault(item => item.ResourceKey.Equals(resourceKey, StringComparison.OrdinalIgnoreCase) &&
+            item.LogicalId == logicalId);
+        if (asset == null) { _status.Text = $"未找到 {resourceKey} 编号 {logicalId} 的图片。"; return false; }
+        RenderGallery(preserveSelection: false);
+        _gallery.SelectItem(asset.StablePhysicalId);
+        ActivatePreview(asset);
+        _gallery.ScrollToItem(FilteredAssets().FindIndex(item => item.StablePhysicalId == asset.StablePhysicalId));
+        _status.Text = $"已定位 {asset.DisplayName}（编号 {logicalId}）";
+        return true;
+    }
+
     public void ActivateGallery()
     {
         SetActive(true);
@@ -179,7 +206,51 @@ public sealed class ImageGridPage : UserControl
         if (FocusedAsset() is { } focused && IsAnimatedAsset(focused))
             ActivatePreview(focused);
     }
-    public void SetActive(bool active) { _isActive = active; _animationPreview.SetActive(active); }
+    public void SetActive(bool active) { _isActive = active; UpdateViewActivity(); }
+
+    private void UpdateViewActivity()
+    {
+        if (IsDisposed || Disposing) return;
+        var active = _isActive && Visible;
+        if (_effectiveViewActive == active) return;
+        _effectiveViewActive = active;
+        _animationPreview.SetActive(active);
+        _gallery.SetActive(active);
+    }
+
+    protected override void OnParentChanged(EventArgs e)
+    {
+        base.OnParentChanged(e);
+        BindVisibilityAncestors();
+    }
+
+    private void BindVisibilityAncestors()
+    {
+        ReleaseVisibilityAncestors();
+        if (IsDisposed || Disposing) return;
+        // Ancestor hiding can change effective visibility without delivering
+        // this page's VisibleChanged event. Observe the owning hosts directly.
+        for (var ancestor = Parent; ancestor != null; ancestor = ancestor.Parent)
+        {
+            _visibilityAncestors.Add(ancestor);
+            ancestor.VisibleChanged += AncestorVisibilityChanged;
+            ancestor.ParentChanged += AncestorParentChanged;
+        }
+        UpdateViewActivity();
+    }
+
+    private void AncestorVisibilityChanged(object? sender, EventArgs e) => UpdateViewActivity();
+    private void AncestorParentChanged(object? sender, EventArgs e) => BindVisibilityAncestors();
+
+    private void ReleaseVisibilityAncestors()
+    {
+        foreach (var ancestor in _visibilityAncestors)
+        {
+            ancestor.VisibleChanged -= AncestorVisibilityChanged;
+            ancestor.ParentChanged -= AncestorParentChanged;
+        }
+        _visibilityAncestors.Clear();
+    }
 
     public void UpdateUsedIds(IReadOnlySet<int>? usedIds)
     {
@@ -304,7 +375,7 @@ public sealed class ImageGridPage : UserControl
         }
         ConfigurePreviewLayout(resources);
         ConfigureWriteButtons(selected.Descriptor);
-        _animationPreview.SetActive(_isActive);
+        _animationPreview.SetActive(_isActive && Visible);
         _gallery.Enabled = false;
         foreach (var button in _buttons.Values) button.Enabled = false;
         _status.Text = "正在读取 " + selected.Descriptor.DisplayName + "…";
@@ -479,20 +550,22 @@ public sealed class ImageGridPage : UserControl
             var box = new PictureBox { SizeMode = PictureBoxSizeMode.Zoom, Margin = Padding.Empty,
                 BackColor = Color.FromArgb(225, 228, 232), Tag = descriptor };
             viewport.Controls.Add(box);
+            box.Disposed += (_, _) => { if (_thumbnailLeases.Remove(box, out var lease)) lease.Dispose(); };
             viewport.SizeChanged += (_, _) => ArrangePreview(box);
-            var tip = new ToolTip();
-            tip.SetToolTip(box, descriptor.Action switch { "small" => "小图", "large" => "大图", _ => descriptor.Action });
+            _paletteTip.SetToolTip(box, descriptor.Action switch { "small" => "小图", "large" => "大图", _ => descriptor.Action });
             previewPanel.Controls.Add(viewport, index, 0);
             box.Click += (_, _) => ActivatePreview(asset);
             viewport.Click += (_, _) => ActivatePreview(asset);
             var started = false;
-            void StartLoading()
+            async void StartLoading()
             {
-                if (started || box.IsDisposed) return;
+                if (started || box.IsDisposed || box.Image != null || !_isActive || !box.Visible) return;
                 started = true;
-                _ = LoadThumbnailAsync(asset, descriptor, box, generation,
-                    cardCancellation.Token);
+                try { await LoadThumbnailAsync(asset, descriptor, box, generation, cardCancellation.Token); }
+                finally { started = false; }
             }
+            box.MouseEnter += (_, _) => StartLoading();
+            box.VisibleChanged += (_, _) => { if (box.Visible) StartLoading(); };
             box.HandleCreated += (_, _) => StartLoading();
             if (box.IsHandleCreated) StartLoading();
         }
@@ -571,14 +644,28 @@ public sealed class ImageGridPage : UserControl
                 return;
             }
             var old = target.Image;
+            if (_thumbnailLeases.Remove(target, out var previousLease)) previousLease.Dispose();
             target.Image = bitmap;
             ArrangePreview(target);
             old?.Dispose();
+            var owned = bitmap;
+            _thumbnailLeases[target] = ImageResourceCoordinator.Shared.RegisterPixels((long)bitmap.Width * bitmap.Height * 4, "gallery-thumbnail", () =>
+            {
+                void Reclaim()
+                {
+                    if (target.IsDisposed || !ReferenceEquals(target.Image, owned)) return;
+                    target.Image = null; owned.Dispose();
+                    if (_thumbnailLeases.Remove(target, out var lease)) lease.Dispose();
+                }
+                if (target.IsDisposed) return;
+                if (target.InvokeRequired) { try { target.BeginInvoke((Action)Reclaim); } catch (InvalidOperationException) { } } else Reclaim();
+            });
+            ImageResourceCoordinator.Shared.TrimPixels();
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)
         {
-            if (!target.IsDisposed) new ToolTip().SetToolTip(target, "预览失败：" + ex.Message);
+            if (!target.IsDisposed) _paletteTip.SetToolTip(target, "预览失败：" + ex.Message);
         }
     }
 
@@ -1834,6 +1921,7 @@ public sealed class ImageGridPage : UserControl
     {
         if (disposing)
         {
+            ReleaseVisibilityAncestors();
             var cancellation = _renderCancellation;
             _renderCancellation = null;
             cancellation?.Cancel();

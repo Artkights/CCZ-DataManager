@@ -64,8 +64,11 @@ internal static class Ccz64CompatibilityTests
             "6.4已验证人物默认装备和兵种装备许可未开放");
         foreach (var category in Enum.GetValues<ExtendDataCategory>())
             TestSupport.Assert(!new ExtendDataService(workspace).GetStatus(category).Available, "洗隋不应自动生成拓展表");
-        TestSupport.Assert(LayoutRevisionCompatibility.GetLegacyRevisions(workspace.RootPath, "ccz-6.4", "64-xisui-v1").Count == 1,
-            "6.4必须只接受严格冻结的上一版独立修订");
+        var previousRevisions = LayoutRevisionCompatibility.GetLegacyRevisions(workspace.RootPath, "ccz-6.4", "64-xisui-v1");
+        TestSupport.Assert(previousRevisions.Contains(StrategyEffectClassTests.PreviousLayoutRevision(workspace)) &&
+            previousRevisions.All(revision => revision != workspace.ActiveProfile.LayoutRevision &&
+                LayoutRevisionCompatibility.IsCompatible(workspace.RootPath, "ccz-6.4", "64-xisui-v1", revision, workspace.ActiveProfile.LayoutRevision)),
+            "6.4必须接受精确的策略效果表升级前布局并严格验证既有修订");
         TestSupport.Assert(!LayoutRevisionCompatibility.IsCompatible(workspace.RootPath, "ccz-6.4", "64-xisui-v1", "DEADBEEF", workspace.ActiveProfile.LayoutRevision),
             "6.4 接受了未知旧修订");
     }

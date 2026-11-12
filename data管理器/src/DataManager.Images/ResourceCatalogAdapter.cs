@@ -1,4 +1,4 @@
-using System.Drawing;
+﻿using System.Drawing;
 using System.Security.Cryptography;
 using ImageManager.Core;
 
@@ -20,10 +20,24 @@ public sealed partial class ResourceCatalogAdapter : IDisposable
     // mutation methods always detect a fresh profile before committing.
     private readonly object _cacheGate = new();
     private readonly Dictionary<string, CatalogCache> _catalogCache = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ImagePreviewService _previews = new();
-    private readonly SemaphoreSlim _decodeSlots = new(2, 2);
+    private readonly ImagePreviewService _previews = ImagePreviewService.Shared;
+
     private long _revision;
     private bool _disposed;
+
+    /// <summary>Project owner calls this once on activation, never from a background decoder.</summary>
+    public void SetActiveRoot(string rootPath)
+    {
+        var root = Path.GetFullPath(rootPath);
+        lock (_cacheGate)
+        {
+            foreach (var old in _catalogCache.Keys.Where(key => !key.Equals(root, StringComparison.OrdinalIgnoreCase)).ToArray())
+                _catalogCache.Remove(old);
+        }
+        _catalogService.RetainRoot(root);
+        _previews.RetainRoot(root);
+        E5Archive.RetainRoot(root);
+    }
 
     /// <summary>Read cache generation for callers that retain resource picker thumbnails.</summary>
     public long Revision => Interlocked.Read(ref _revision);
@@ -112,6 +126,32 @@ public sealed partial class ResourceCatalogAdapter : IDisposable
             cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Decodes a range image at its source dimensions. Range archives contain
+    /// square pixel art (the native RAW form is 64x64); the compact range
+    /// picker performs the final nearest-neighbour integer scaling itself.
+    /// Keeping this path separate from <see cref="DecodeRangeFirstFrameAsync"/>
+    /// prevents the 48px resource-picker thumbnail from being enlarged again
+    /// and losing source pixels.
+    /// </summary>
+    public async Task<Bitmap?> DecodeRangeNativeFrameAsync(string rootPath, bool attack, int fieldValue,
+        CancellationToken cancellationToken = default)
+    {
+        var info = await Task.Run(() => ResolveRangePreview(rootPath, attack, fieldValue), cancellationToken)
+            .ConfigureAwait(false);
+        if (!info.CanPreview) return null;
+
+        // ResolveRangePreview exposes the zero-based field value while the E5
+        // archive catalog is one-based. Preserve the existing +1 mapping.
+        var frames = await DecodeFramesAsync(rootPath, info.ResourceKey, info.PhysicalImageNumber,
+            cancellationToken).ConfigureAwait(false);
+        if (frames.Count == 0) return null;
+
+        var first = frames[0];
+        for (var index = 1; index < frames.Count; index++) frames[index].Dispose();
+        return first;
+    }
+
     /// <summary>Person assignments preview the first promotion's movement frame zero.</summary>
     public ResourcePreviewAnimation DecodeCharacterS(string rootPath, int sId, int jobId, int turn = 1)
     {
@@ -123,9 +163,19 @@ public sealed partial class ResourceCatalogAdapter : IDisposable
         return preview with { Mapping = $"人物 S{sId} / 兵种 {jobId} → {preview.Mapping}（{mapping.Reason}）{incomplete}" };
     }
 
-    public Task<ResourcePreviewAnimation> DecodeCharacterSAsync(string rootPath, int sId, int jobId, int turn = 1,
+    public async Task<ResourcePreviewAnimation> DecodeCharacterSAsync(string rootPath, int sId, int jobId, int turn = 1,
         CancellationToken cancellationToken = default)
-        => RunDecodeAsync(() => DecodeCharacterS(rootPath, sId, jobId, turn), animation => animation.Dispose(), cancellationToken);
+    {
+        var request = await Task.Run(() =>
+        {
+            var mapping = new SPhysicalMappingService().Resolve(sId, jobId, 1);
+            var common = BindingDescriptor(GetCatalog(rootPath), ResourceBindingKind.CharacterS)?.EntryCount ?? 0;
+            var required = sId is >= 1 and <= 32 ? mapping.ImageNumber + 2 : mapping.ImageNumber;
+            return (mapping.ImageNumber, mapping.Reason, Incomplete: required > common ? "；对应资源不完整" : string.Empty);
+        }, cancellationToken).ConfigureAwait(false);
+        var preview = await DecodePhysicalSFirstFrameAsync(rootPath, request.ImageNumber, cancellationToken).ConfigureAwait(false);
+        return preview with { Mapping = $"人物 S{sId} / 兵种 {jobId} → {preview.Mapping}（{request.Reason}）{request.Incomplete}" };
+    }
 
     /// <summary>The job ID identifies the exact job; each faction owns a separate physical entry.</summary>
     public ResourcePreviewAnimation DecodeJobSFirstFrame(string rootPath, int jobId)
@@ -167,11 +217,16 @@ public sealed partial class ResourceCatalogAdapter : IDisposable
 
     public Task<ResourcePreviewAnimation> DecodeJobSFirstFrameAsync(string rootPath, int jobId,
         CancellationToken cancellationToken = default)
-        => RunDecodeAsync(() => DecodeJobSFirstFrame(rootPath, jobId), animation => animation.Dispose(), cancellationToken);
+        => DecodeJobSFirstFrameAsync(rootPath, jobId, 0, cancellationToken);
 
-    public Task<ResourcePreviewAnimation> DecodeJobSFirstFrameAsync(string rootPath, int jobId, int faction,
+    public async Task<ResourcePreviewAnimation> DecodeJobSFirstFrameAsync(string rootPath, int jobId, int faction,
         CancellationToken cancellationToken = default)
-        => RunDecodeAsync(() => DecodeJobSFirstFrame(rootPath, jobId, faction), animation => animation.Dispose(), cancellationToken);
+    {
+        if (jobId is < 0 or > 79) throw new ArgumentOutOfRangeException(nameof(jobId));
+        if (faction is < 0 or > 2) throw new ArgumentOutOfRangeException(nameof(faction));
+        var preview = await DecodePhysicalSFirstFrameAsync(rootPath, jobId * 3 + faction + 1, cancellationToken).ConfigureAwait(false);
+        return preview with { Mapping = $"兵种 {jobId} / {new[] { "我军", "友军", "敌军" }[faction]} → {preview.Mapping}" };
+    }
 
     public async Task<ResourcePreviewAnimation> DecodePhysicalSFirstFrameAsync(string rootPath, int imageNumber,
         CancellationToken cancellationToken = default)
@@ -181,6 +236,9 @@ public sealed partial class ResourceCatalogAdapter : IDisposable
     }
 
     public ResourcePreviewAnimation DecodeStrategyAnimation(string rootPath, bool large, int fieldValue)
+        => DecodeStrategyAnimationCore(rootPath, large, fieldValue, CancellationToken.None);
+
+    private ResourcePreviewAnimation DecodeStrategyAnimationCore(string rootPath, bool large, int fieldValue, CancellationToken token)
     {
         var profile = GetCatalog(rootPath).Profile;
         if (fieldValue == 255 || large && fieldValue < 100)
@@ -211,13 +269,13 @@ public sealed partial class ResourceCatalogAdapter : IDisposable
             bytes = File.ReadAllBytes(path);
             description = $"字段 {fieldValue} → {Path.GetFileName(path)}";
         }
-        using var animation = StrategyAnimationDecoder.Decode(profile, bytes);
-        return new ResourcePreviewAnimation(animation.Frames.Select(frame => new Bitmap(frame)).ToArray(), animation.IntervalMs, description);
+        var window = StrategyPreviewPlayback.OpenAsync(profile, bytes, token).GetAwaiter().GetResult();
+        return ResourcePreviewAnimation.FromWindow(window, description);
     }
 
     public Task<ResourcePreviewAnimation> DecodeStrategyAnimationAsync(string rootPath, bool large, int fieldValue,
         CancellationToken cancellationToken = default)
-        => RunDecodeAsync(() => DecodeStrategyAnimation(rootPath, large, fieldValue), animation => animation.Dispose(), cancellationToken);
+        => RunDecodeAsync(() => DecodeStrategyAnimationCore(rootPath, large, fieldValue, cancellationToken), animation => animation.Dispose(), cancellationToken);
 
     public IReadOnlyList<LogicalImageAsset> ReadAssets(string rootPath, string resourceKey)
     {
@@ -509,25 +567,9 @@ public sealed partial class ResourceCatalogAdapter : IDisposable
     private IReadOnlyList<DecodedFrame> DecodeAssetFrames(ProjectProfile profile, LogicalImageAsset asset)
         => asset.ResourceKey == "Tou" ? new FaceResourceCodec().DecodeFrames(profile, asset) : _catalogService.DecodeFrames(profile, asset);
 
-    private async Task<T> RunDecodeAsync<T>(Func<T> decode, Action<T> release, CancellationToken cancellationToken)
-    {
-        await _decodeSlots.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            return await Task.Run(() =>
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                var result = decode();
-                if (cancellationToken.IsCancellationRequested)
-                {
-                    release(result);
-                    cancellationToken.ThrowIfCancellationRequested();
-                }
-                return result;
-            }, cancellationToken).ConfigureAwait(false);
-        }
-        finally { _decodeSlots.Release(); }
-    }
+    private Task<T> RunDecodeAsync<T>(Func<T> decode, Action<T> release, CancellationToken cancellationToken)
+        => ImageResourceCoordinator.Shared.DecodeAsync(token => { token.ThrowIfCancellationRequested(); return decode(); },
+            release, cancellationToken);
 
     private static void EnsureMutable(ImageResourceDescriptor descriptor)
     {
@@ -548,13 +590,13 @@ public sealed partial class ResourceCatalogAdapter : IDisposable
             if (_disposed) return;
             _disposed = true;
             _catalogCache.Clear();
-            _previews.Dispose();
+
         }
         // Pending callers may still be unwinding a decode slot. Leaving the
         // managed semaphore alive avoids Release racing its disposal.
     }
 
-    private sealed class CachedImageCatalogService(ResourceCatalogAdapter owner) : IImageCatalogService
+    private sealed class CachedImageCatalogService(ResourceCatalogAdapter owner) : IImageCatalogService, IBoundedAnimationPreviewCatalog
     {
         public IReadOnlyList<ImageResourceDescriptor> BuildCatalog(ProjectProfile project) => owner.GetDescriptors(project.RootPath);
         public IReadOnlyList<LogicalImageAsset> ReadAssets(ProjectProfile project, ImageResourceDescriptor resource)
@@ -619,6 +661,13 @@ public sealed record ResourceCatalogItem(
 
 public sealed record ResourcePreviewAnimation(IReadOnlyList<Bitmap> Frames, int IntervalMs, string Mapping) : IDisposable
 {
+    public int WindowStart { get; init; }
+    public int TotalFrameCount { get; init; } = Frames.Count;
+    public Func<int, CancellationToken, Task<AnimationFrameWindow>>? LoadWindowAsync { get; init; }
+    public long PixelBytes => Frames.Sum(frame => (long)frame.Width * frame.Height * 4);
+    public static ResourcePreviewAnimation FromWindow(AnimationFrameWindow window, string mapping)
+        => new(window.Frames, window.IntervalMs, mapping)
+            { WindowStart = window.Start, TotalFrameCount = window.TotalFrames, LoadWindowAsync = window.LoadWindowAsync };
     public void Dispose() { foreach (var frame in Frames) frame.Dispose(); }
 }
 

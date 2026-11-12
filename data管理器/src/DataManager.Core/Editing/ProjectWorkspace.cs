@@ -25,6 +25,7 @@ public sealed class ProjectWorkspace
     private readonly ProfileRegistry _profiles = new();
     private readonly ProfileDetector _detector;
     private bool _recordingCellEdit;
+    private int _asyncSaveActive;
     private readonly List<IWorkspaceDraftParticipant> _draftParticipants = [];
 
     public ProjectWorkspace()
@@ -53,6 +54,9 @@ public sealed class ProjectWorkspace
         if (!_draftParticipants.Contains(participant)) _draftParticipants.Add(participant);
     }
 
+    public void UnregisterDraftParticipant(IWorkspaceDraftParticipant participant)
+        => _draftParticipants.Remove(participant);
+
     public void DiscardNativeDrafts()
     {
         foreach (var draft in _draftParticipants.ToArray()) draft.Discard();
@@ -61,10 +65,12 @@ public sealed class ProjectWorkspace
     public ScanReport Open(string rootPath, string? profileId = null, string? variantId = null,
         CancellationToken cancellationToken = default)
     {
+        if (Volatile.Read(ref _asyncSaveActive) != 0) throw new InvalidOperationException("正在准备保存，暂不能切换工作区。");
         cancellationToken.ThrowIfCancellationRequested();
         if (!Directory.Exists(rootPath)) throw new DirectoryNotFoundException(rootPath);
         _draftParticipants.Clear();
         RootPath = ProjectRootLocator.Resolve(rootPath);
+        _history.Recover(RootPath);
         _documents.Clear();
         var detected = _detector.Detect(RootPath);
         cancellationToken.ThrowIfCancellationRequested();
@@ -141,6 +147,11 @@ public sealed class ProjectWorkspace
             : throw new InvalidOperationException($"表未加载：{tableKey}");
 
     public IReadOnlyList<HistoryEntry> GetHistory() => _history.Load(RootPath);
+    public IReadOnlyList<HistoryEntry> GetHistoryMetadata()
+    {
+        Ccz.HistoryStorage.IHistoryRepository<string, HistoryEntry, HistoryEntry> repository = _history;
+        return repository.ListMetadata(RootPath);
+    }
 
     public void RecordCellEdit(TableDocument document, int rowIndex, string columnName, object? oldValue, object? newValue)
     {
@@ -191,6 +202,8 @@ public sealed class ProjectWorkspace
         try
         {
             _ = _codecs.Get(document.Definition.RecordCodecKey).EncodeChangedField(row, field, value);
+            if (document.Definition.Key == StrategyEffectClassService.TableKey)
+                StrategyEffectClassService.ValidateValue(this, document, rowIndex, value);
             if (document.Definition.Key == "shops" && field.ReferenceTable == "items" && !ValuesEqual(document.GetOriginal(rowIndex, field.Name), value))
                 ShopValueValidator.ValidateItem(this, Convert.ToInt32(value, CultureInfo.InvariantCulture));
             if (validateEquipment && document.Definition.Key == "persons" && PersonEquipmentService.CategoryForField(field.Name).HasValue &&
@@ -449,13 +462,19 @@ public sealed class ProjectWorkspace
         => Save(extraEdits, []);
 
     public SaveResult Save(IReadOnlyList<PreparedBinaryEdit> extraEdits, IReadOnlyList<PreparedFileEdit> fileEdits)
+        => Save(extraEdits, fileEdits, []);
+
+    public SaveResult Save(IReadOnlyList<PreparedBinaryEdit> extraEdits, IReadOnlyList<PreparedFileEdit> fileEdits,
+        IReadOnlyList<PreparedFileTransform> fileTransforms)
     {
+        if (Volatile.Read(ref _asyncSaveActive) != 0) return new SaveResult(false, 0, 0, 0, null, ["当前保存事务尚未完成。"]);
         try
         {
             var participants = _draftParticipants.Where(draft => draft.HasPendingChanges).ToArray();
             var binary = extraEdits.Concat(participants.SelectMany(draft => draft.PrepareBinaryEdits())).ToArray();
             var files = fileEdits.Concat(participants.SelectMany(draft => draft.PrepareFileEdits())).ToArray();
-            return SaveCore(recordCellHistory: true, binary, files, participants);
+            var transforms = fileTransforms.Concat(participants.SelectMany(draft => draft.PrepareFileTransforms())).ToArray();
+            return SaveCore(recordCellHistory: true, binary, files, participants, transforms);
         }
         catch (Exception ex) { return new SaveResult(false, 0, 0, 0, null, [$"保存中止：{ex.Message}"]); }
     }
@@ -465,13 +484,39 @@ public sealed class ProjectWorkspace
     // every scalar cell; ordinary editing keeps detailed field history.
     internal SaveResult SaveMigration() => SaveCore(recordCellHistory: false, []);
 
+    public async Task<SaveResult> SaveAsync(CancellationToken cancellationToken = default)
+    {
+        if (Interlocked.CompareExchange(ref _asyncSaveActive, 1, 0) != 0) return new SaveResult(false, 0, 0, 0, null, ["当前保存事务尚未完成。"]);
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var participants = _draftParticipants.Where(draft => draft.HasPendingChanges).ToArray();
+            var binary = participants.SelectMany(draft => draft.PrepareBinaryEdits()).ToArray();
+            var files = participants.SelectMany(draft => draft.PrepareFileEdits()).ToArray();
+            var transforms = participants.SelectMany(draft => draft.PrepareFileTransforms()).ToArray();
+            return await SaveCoreAsync(true, binary, files, participants, transforms, backgroundIo: true, cancellationToken);
+        }
+        catch (Exception ex) { return new SaveResult(false, 0, 0, 0, null, [$"保存中止：{ex.Message}"]); }
+        finally { Volatile.Write(ref _asyncSaveActive, 0); }
+    }
+
     private SaveResult SaveCore(bool recordCellHistory, IReadOnlyList<PreparedBinaryEdit> extraEdits,
-        IReadOnlyList<PreparedFileEdit>? fileEdits = null, IReadOnlyList<IWorkspaceDraftParticipant>? participants = null)
+        IReadOnlyList<PreparedFileEdit>? fileEdits = null, IReadOnlyList<IWorkspaceDraftParticipant>? participants = null,
+        IReadOnlyList<PreparedFileTransform>? fileTransforms = null)
+        => SaveCoreAsync(recordCellHistory, extraEdits, fileEdits, participants, fileTransforms, false, CancellationToken.None).GetAwaiter().GetResult();
+
+    private async Task<SaveResult> SaveCoreAsync(bool recordCellHistory, IReadOnlyList<PreparedBinaryEdit> extraEdits,
+        IReadOnlyList<PreparedFileEdit>? fileEdits, IReadOnlyList<IWorkspaceDraftParticipant>? participants,
+        IReadOnlyList<PreparedFileTransform>? fileTransforms, bool backgroundIo, CancellationToken cancellationToken)
     {
         fileEdits ??= [];
+        fileTransforms ??= [];
         participants ??= [];
         if (string.IsNullOrWhiteSpace(RootPath)) return new SaveResult(false, 0, 0, 0, null, ["尚未打开项目。"]);
+        _history.Recover(RootPath);
         var changesByFile = new Dictionary<string, List<TableCellChange>>(StringComparer.OrdinalIgnoreCase);
+        try { StrategyEffectClassService.ValidateCurrentExecutable(this); }
+        catch (Exception ex) { return new SaveResult(false, 0, 0, 0, null, [$"保存中止：{ex.Message}"]); }
         var allChanges = new List<TableCellChange>();
         foreach (var document in _documents.Values)
         {
@@ -514,6 +559,18 @@ public sealed class ProjectWorkspace
                 throw new InvalidDataException($"完整候选与普通字节修改不能同时覆盖文件：{edit.RelativePath}。");
             changesByFile.Add(path, []);
         }
+        var transformsByFile = new Dictionary<string, PreparedFileTransform>(StringComparer.OrdinalIgnoreCase);
+        foreach (var transform in fileTransforms)
+        {
+            var path = Path.GetFullPath(Path.Combine(RootPath, transform.RelativePath));
+            if (!path.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("文件候选转换超出当前项目目录。");
+            if (!transformsByFile.TryAdd(path, transform))
+                throw new InvalidDataException($"同一文件有多个候选转换：{transform.RelativePath}。");
+            if (replacements.ContainsKey(path))
+                throw new InvalidDataException($"完整候选与候选转换不能同时覆盖文件：{transform.RelativePath}。");
+            changesByFile.TryAdd(path, []);
+        }
         if (changesByFile.Count == 0) return new SaveResult(true, 0, 0, 0, null, ["没有未保存修改。"]);
         var recoverDrafts = _documents.Values.Select(document => document.CaptureSaveRecovery())
             .Concat(participants.Select(draft => draft.CaptureSaveRecovery())).ToArray();
@@ -521,11 +578,19 @@ public sealed class ProjectWorkspace
         var fileChanges = new List<FileByteChange>();
         var tableHistory = new List<HistoryTableChange>();
         var candidateBytes = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
+        var ordinaryPatchesByFile = new Dictionary<string, IReadOnlyList<PreparedBytePatch>>(StringComparer.OrdinalIgnoreCase);
+        var baselineHashesByFile = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var group in changesByFile)
         {
             var current = File.ReadAllBytes(group.Key);
             var expectedHashes = _documents.Values.Where(document => string.Equals(Path.GetFullPath(document.FilePath), group.Key, StringComparison.OrdinalIgnoreCase)).Select(document => document.OriginalFileHash).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
             var beforeHash = HashService.Sha256(current);
+            baselineHashesByFile.Add(group.Key, beforeHash);
+            if (expectedHashes.Any(hash => !hash.Equals(beforeHash, StringComparison.OrdinalIgnoreCase)))
+                return new SaveResult(false, 0, allChanges.Count, 0, null, [$"保存中止：{Path.GetFileName(group.Key)} 已被工具外修改。"]);
+            transformsByFile.TryGetValue(group.Key, out var transform);
+            if (transform != null && !beforeHash.Equals(transform.ExpectedFileHash, StringComparison.OrdinalIgnoreCase))
+                throw new IOException($"文件候选转换基线冲突：{transform.RelativePath} 已在载入后发生变化。");
             if (replacements.TryGetValue(group.Key, out var replacement))
             {
                 if (!beforeHash.Equals(replacement.ExpectedFileHash, StringComparison.OrdinalIgnoreCase))
@@ -533,30 +598,9 @@ public sealed class ProjectWorkspace
                 var replacementBytes = (byte[])replacement.CandidateBytes.Clone();
                 replacement.CandidateVerifier?.Invoke((byte[])replacementBytes.Clone());
                 candidateBytes[group.Key] = replacementBytes;
-                // Equal-length complete candidates can replay through the
-                // existing sparse-patch format. Keep complete snapshots when
-                // length changes; all paths still retain whole-file hashes.
-                var changesLength = current.Length != replacementBytes.Length;
-                IReadOnlyList<ByteChunk> replacementChunks = changesLength
-                    ? [new ByteChunk(0, current, replacementBytes)] : BuildDifferenceChunks(current, replacementBytes);
-                var wholeSnapshot = changesLength;
-                if (!changesLength && replacementChunks.Sum(chunk => 80L + 8L * ((chunk.Length + 2L) / 3)) >=
-                    8L * ((current.LongLength + 2L) / 3) + 80)
-                {
-                    // Many scattered edits can cost more JSON metadata than a
-                    // snapshot. Preserve the compact existing whole-file form
-                    // in that case instead of growing history unexpectedly.
-                    replacementChunks = [new ByteChunk(0, current, replacementBytes)]; wholeSnapshot = true;
-                }
-                fileChanges.Add(new FileByteChange(Path.GetRelativePath(RootPath, group.Key), beforeHash,
-                    HashService.Sha256(replacementBytes), replacementBytes.Length,
-                    replacementChunks)
-                    { WholeFileReplacement = wholeSnapshot, BeforeLength = wholeSnapshot ? current.Length : null });
+                fileChanges.Add(BuildCompleteCandidateChange(Path.GetRelativePath(RootPath, group.Key), beforeHash,
+                    current, replacementBytes));
                 continue;
-            }
-            if (expectedHashes.Count > 0 && expectedHashes.Any(hash => !hash.Equals(beforeHash, StringComparison.OrdinalIgnoreCase)))
-            {
-                return new SaveResult(false, 0, allChanges.Count, 0, null, [$"保存中止：{Path.GetFileName(group.Key)} 已被工具外修改。"]);
             }
 
             var after = (byte[])current.Clone();
@@ -565,8 +609,7 @@ public sealed class ProjectWorkspace
             foreach (var change in group.Value)
             {
                 var rowOffset = checked((int)(change.Table.DataOffset + (long)change.RowIndex * change.Table.RowSize));
-                var originalRow = current.AsSpan(rowOffset, change.Table.RowSize);
-                var patches = _codecs.Get(change.Table.RecordCodecKey).EncodeChangedField(originalRow, change.Field, change.NewValue);
+                var patches = _codecs.Get(change.Table.RecordCodecKey).EncodeChangedField(current.AsSpan(rowOffset, change.Table.RowSize), change.Field, change.NewValue);
                 foreach (var patch in patches)
                 {
                     if (patch.Offset < 0 || patch.Offset + patch.Bytes.Length > change.Table.RowSize)
@@ -622,11 +665,34 @@ public sealed class ProjectWorkspace
                     }
                 }
             }
+            if (transform != null)
+            {
+                var ordinaryPatches = BuildDifferenceChunks(current, after)
+                    .Select(chunk => new PreparedBytePatch(chunk.Offset, chunk.OldBytes, chunk.NewBytes)).ToArray();
+                ordinaryPatchesByFile.Add(group.Key, ordinaryPatches);
+                var context = new PreparedFileTransformContext((byte[])current.Clone(), (byte[])after.Clone(),
+                    ordinaryPatches.Select(patch => new PreparedBytePatch(patch.Offset,
+                        (byte[])patch.ExpectedBytes.Clone(), (byte[])patch.NewBytes.Clone())).ToArray());
+                after = (byte[])(transform.Transform(context)
+                    ?? throw new InvalidDataException($"候选转换没有返回文件：{transform.RelativePath}。")).Clone();
+                VerifyAppliedPatches(group.Key, after, ordinaryPatches);
+                transform.CandidateVerifier?.Invoke((byte[])after.Clone());
+            }
             VerifySemantics(group.Key, after, group.Value, prepared);
             candidateBytes[group.Key] = after;
-            IReadOnlyList<ByteChunk> historyChunks = !recordCellHistory && chunks.Count > 4096
-                ? [new ByteChunk(0, current, after)] : BuildDifferenceChunks(current, after);
-            fileChanges.Add(new FileByteChange(Path.GetRelativePath(RootPath, group.Key), beforeHash, HashService.Sha256(after), after.Length, historyChunks));
+            if (transform != null)
+                fileChanges.Add(BuildCompleteCandidateChange(Path.GetRelativePath(RootPath, group.Key), beforeHash, current, after));
+            else
+            {
+                // Empty patch contributions are dependency guards. They must
+                // participate in baseline and final verification without a
+                // redundant file replacement or saved-history file entry.
+                if (group.Value.Count == 0 && prepared?.All(edit => edit.Patches.Count == 0) == true)
+                    continue;
+                IReadOnlyList<ByteChunk> historyChunks = !recordCellHistory && chunks.Count > 4096
+                    ? [new ByteChunk(0, current, after)] : BuildDifferenceChunks(current, after);
+                fileChanges.Add(new FileByteChange(Path.GetRelativePath(RootPath, group.Key), beforeHash, HashService.Sha256(after), after.Length, historyChunks));
+            }
         }
 
         AppearanceSyncSession? appearanceSync = null;
@@ -641,25 +707,42 @@ public sealed class ProjectWorkspace
 
         var history = new HistoryEntry
         {
-            SchemaVersion = fileEdits.Count > 0 ? "2.1" : "2.0",
-            OperationKind = allChanges.Count == 0 && (extraEdits.Count > 0 || fileEdits.Count > 0) ? "专用二进制保存" : "数据保存",
+            SchemaVersion = fileEdits.Count > 0 || fileTransforms.Count > 0 ? "2.1" : "2.0",
+            OperationKind = allChanges.Count == 0 && (extraEdits.Count > 0 || fileEdits.Count > 0 || fileTransforms.Count > 0) ? "专用二进制保存" : "数据保存",
             Status = HistoryStatus.Pending,
             ProfileId = ActiveProfile.ProfileId,
             VariantId = ActiveProfile.VariantId,
             LayoutRevision = ActiveProfile.LayoutRevision,
             DetectionMethod = ProfileMatch?.DetectionMethod ?? "未知",
             CoreFileFingerprints = CaptureCoreFileFingerprints(),
-            Summary = $"保存 {changesByFile.Count} 个文件、{allChanges.Count} 个字段",
+            Summary = $"保存 {fileChanges.Count} 个文件、{allChanges.Count} 个字段",
             Modules = allChanges.Select(change => change.Table.Module).Concat(extraEdits.Select(edit => edit.Module))
-                .Concat(fileEdits.Select(edit => edit.Module)).Distinct(StringComparer.Ordinal).ToList(),
+                .Concat(fileEdits.Select(edit => edit.Module)).Concat(fileTransforms.Select(edit => edit.Module))
+                .Distinct(StringComparer.Ordinal).ToList(),
             Files = fileChanges,
             Tables = tableHistory
         };
         var written = new List<FileByteChange>();
         var historyRegistered = false;
+        // The following worker owns byte snapshots only; live tables and draft participants stay on the caller's context.
+        history.Files = fileChanges.Concat(appearanceSync?.PreparedFiles.Select(file => file.Change) ?? [])
+            .DistinctBy(file => file.RelativePath, StringComparer.OrdinalIgnoreCase).ToList();
+        PreparedHistoryWrite? preparedHistory = null;
+        if (backgroundIo)
+        {
+            using var frozenHistory = _history.FreezeWrite(RootPath, history);
+            preparedHistory = await _history.PrepareWriteAsync(frozenHistory, cancellationToken);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
+        using var projectWriteLock = Ccz.HistoryStorage.ProjectWriteLock.Acquire(RootPath);
         try
         {
-            _history.Append(RootPath, history);
+            foreach (var baseline in baselineHashesByFile)
+                if (!HashService.Sha256(baseline.Key).Equals(baseline.Value, StringComparison.OrdinalIgnoreCase))
+                    throw new IOException($"提交前文件基线已改变：{Path.GetFileName(baseline.Key)}。");
+            // Recovery must know about optional companions before any primary file changes.
+            if (preparedHistory != null) _history.AppendPrepared(preparedHistory);
+            else _history.Append(RootPath, history);
             historyRegistered = true;
             foreach (var fileChange in fileChanges)
             {
@@ -680,6 +763,11 @@ public sealed class ProjectWorkspace
                 VerifySemantics(file.Key, bytes, file.Value, prepared);
                 if (replacements.TryGetValue(file.Key, out var replacement))
                     replacement.CandidateVerifier?.Invoke((byte[])bytes.Clone());
+                if (transformsByFile.TryGetValue(file.Key, out var transform))
+                {
+                    VerifyAppliedPatches(file.Key, bytes, ordinaryPatchesByFile[file.Key]);
+                    transform.CandidateVerifier?.Invoke((byte[])bytes.Clone());
+                }
                 foreach (var document in _documents.Values.Where(document => Path.GetFullPath(document.FilePath).Equals(file.Key, StringComparison.OrdinalIgnoreCase)))
                     verifiedDocuments[document.Definition.Key] = _reader.ReadBytes(file.Key, document.Definition, bytes);
             }
@@ -692,7 +780,9 @@ public sealed class ProjectWorkspace
                 if (appearanceSync.AppliedFiles.Count > 0) history.Modules.Add("存档形象同步");
             }
             history.Status = HistoryStatus.Active;
-            _history.Update(RootPath, history);
+            history.Files = fileChanges;
+            if (preparedHistory != null) _history.AppendPrepared(_history.UpdatePreparedMetadata(preparedHistory, history));
+            else _history.Update(RootPath, history);
             foreach (var document in _documents.Values)
             {
                 if (changesByFile.ContainsKey(Path.GetFullPath(document.FilePath)))
@@ -746,7 +836,11 @@ public sealed class ProjectWorkspace
             if (historyRegistered)
             {
                 history.Status = rollbackErrors.Count == 0 ? HistoryStatus.Failed : HistoryStatus.Conflict;
-                try { _history.Update(RootPath, history); }
+                try
+                {
+                    if (preparedHistory != null) _history.AppendPrepared(_history.UpdatePreparedMetadata(preparedHistory, history));
+                    else _history.Update(RootPath, history);
+                }
                 catch (Exception historyException) { rollbackErrors.Add($"历史状态更新失败：{historyException.Message}"); }
             }
             var details = rollbackErrors.Count == 0 ? string.Empty : $" 回滚异常：{string.Join("；", rollbackErrors)}";
@@ -764,7 +858,37 @@ public sealed class ProjectWorkspace
                 throw new InvalidDataException($"语义复读不一致：{Path.GetFileName(path)} / {change.Table.DisplayName} ID={change.Id} {change.Field.Name}。");
         }
         if (prepared != null)
-            foreach (var edit in prepared) edit.CandidateVerifier?.Invoke((byte[])candidate.Clone());
+            foreach (var edit in prepared)
+            {
+                VerifyAppliedPatches(path, candidate, edit.Patches);
+                edit.CandidateVerifier?.Invoke((byte[])candidate.Clone());
+            }
+    }
+
+    private static void VerifyAppliedPatches(string path, byte[] candidate, IReadOnlyList<PreparedBytePatch> patches)
+    {
+        foreach (var patch in patches)
+            if (patch.Offset < 0 || patch.Offset > candidate.LongLength - patch.NewBytes.Length ||
+                !candidate.AsSpan(checked((int)patch.Offset), patch.NewBytes.Length).SequenceEqual(patch.NewBytes))
+                throw new InvalidDataException($"候选转换未保留原字段/补丁落点：{Path.GetFileName(path)} +0x{patch.Offset:X}。");
+    }
+
+    private static FileByteChange BuildCompleteCandidateChange(string relativePath, string beforeHash,
+        byte[] before, byte[] after)
+    {
+        // A changed length requires whole-file snapshots for atomic rollback and
+        // history replay. Equal-length candidates retain sparse byte history.
+        var wholeSnapshot = before.Length != after.Length;
+        IReadOnlyList<ByteChunk> chunks = wholeSnapshot
+            ? [new ByteChunk(0, before, after)] : BuildDifferenceChunks(before, after);
+        if (!wholeSnapshot && chunks.Sum(chunk => 80L + 8L * ((chunk.Length + 2L) / 3)) >=
+            8L * ((before.LongLength + 2L) / 3) + 80)
+        {
+            chunks = [new ByteChunk(0, before, after)];
+            wholeSnapshot = true;
+        }
+        return new FileByteChange(relativePath, beforeHash, HashService.Sha256(after), after.Length, chunks)
+            { WholeFileReplacement = wholeSnapshot, BeforeLength = wholeSnapshot ? before.Length : null };
     }
 
     private static IReadOnlyList<ByteChunk> BuildDifferenceChunks(byte[] before, byte[] after)

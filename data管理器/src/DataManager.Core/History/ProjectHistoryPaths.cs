@@ -8,6 +8,7 @@ public static class ProjectHistoryPaths
 {
     private static readonly AsyncLocal<string?> BaseDirectoryOverride = new();
     private static readonly AsyncLocal<IReadOnlyDictionary<string, string>?> ProjectOverrides = new();
+    private static readonly AsyncLocal<IReadOnlyDictionary<string, string>?> EvidenceOverrides = new();
 
     public static string BaseDirectory => BaseDirectoryOverride.Value ?? AppContext.BaseDirectory;
 
@@ -30,6 +31,22 @@ public static class ProjectHistoryPaths
     public static string GetDataRoot(string projectRoot) => Path.Combine(GetProjectStorageRoot(projectRoot), "数据");
     public static string GetImageRoot(string projectRoot) => Path.Combine(GetProjectStorageRoot(projectRoot), "形象");
     public static string GetMigrationRoot(string projectRoot) => Path.Combine(GetProjectStorageRoot(projectRoot), "迁移备份");
+    internal static string? GetEvidenceSource(string projectRoot)
+    {
+        var identity = NormalizeProjectRoot(projectRoot);
+        if (OperatingSystem.IsWindows()) identity = identity.ToUpperInvariant();
+        return EvidenceOverrides.Value?.GetValueOrDefault(identity);
+    }
+    internal static IDisposable UseHistoryEvidence(string projectRoot, string evidenceProjectRoot)
+    {
+        var previous = EvidenceOverrides.Value;
+        var identity = NormalizeProjectRoot(projectRoot);
+        if (OperatingSystem.IsWindows()) identity = identity.ToUpperInvariant();
+        var values = previous?.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal) ?? new Dictionary<string, string>(StringComparer.Ordinal);
+        values[identity] = NormalizeProjectRoot(evidenceProjectRoot);
+        EvidenceOverrides.Value = values;
+        return new Scope(() => EvidenceOverrides.Value = previous);
+    }
     public static string GetLegacyDataManifest(string projectRoot)
         => ResolveInside(projectRoot, Path.Combine(".data管理器历史", "manifest.jsonl"));
 

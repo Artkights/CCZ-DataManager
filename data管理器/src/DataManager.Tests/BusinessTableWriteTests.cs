@@ -35,9 +35,16 @@ internal static class BusinessTableWriteTests
             Toggle("job-series-attributes", "兵种系 0");
             Toggle("detailed-job-growth", "攻击成长");
             Toggle("detailed-job-growth", "移动力成长");
-            Toggle("detailed-job-growth", "攻击范围");
+            Set("detailed-job-growth", 0, "攻击范围", 32);
             Toggle("detailed-job-growth", "普通剑");
-            Toggle("detailed-job-penetration", "穿透");
+            Set("detailed-job-penetration", 0, "穿透", 11);
+            Set("strategies", 0, "施法范围", 22);
+            Set("strategies", 0, "穿透范围", 11);
+            if (workspace.Documents.ContainsKey("finishing-moves"))
+            {
+                Set("finishing-moves", 0, "攻击范围", 32);
+                Set("finishing-moves", 0, "穿透范围", 11);
+            }
             Toggle("strategies", "兵种00学习等级");
             Toggle("items-low", "初始能力");
             Toggle("items-low", "能力成长");

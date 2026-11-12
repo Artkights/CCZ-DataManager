@@ -191,12 +191,13 @@ internal static class SaveHistory21RegressionTests
                 LayoutRevisionCompatibility.IsCompatible(root, workspace.ActiveProfile.ProfileId, workspace.ActiveProfile.VariantId,
                     priorRevision, workspace.ActiveProfile.LayoutRevision), "不能精确识别本次前版本的布局修订。");
             var json = JsonSerializer.SerializeToNode(saved.History)!.AsObject();
+            json["OperationId"] = Guid.NewGuid().ToString("N");
             json["SchemaVersion"] = "2.0"; json["LayoutRevision"] = priorRevision;
             foreach (var file in json["Files"]!.AsArray().OfType<JsonObject>())
             { file.Remove("WholeFileReplacement"); file.Remove("BeforeLength"); }
             var manifest = Path.Combine(workspace.History.GetRoot(root), "manifest.jsonl");
             File.WriteAllText(manifest, json.ToJsonString() + Environment.NewLine, new UTF8Encoding(true));
-            var loaded = workspace.History.Load(root).Single();
+            var loaded = workspace.History.LoadOperation(root, json["OperationId"]!.GetValue<string>());
             TestSupport.Assert(loaded.SchemaVersion == "2.0" && loaded.Files.All(file => !file.WholeFileReplacement && file.BeforeLength == null),
                 "缺少2.1新增属性的旧2.0 JSON不能无损读取。");
             var profile = workspace.ActiveProfile;

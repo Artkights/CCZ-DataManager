@@ -164,8 +164,19 @@ internal static class SaveAppearanceSyncTests
         var temporary = CreateTemporary();
         try
         {
-            var save = Put(temporary, "SV/SV000.E5S", before);
             var executable = File.ReadAllBytes(Path.Combine(realRoot, "Ekd5.exe"));
+            var version = BinaryPrimitives.ReadUInt32LittleEndian(before.AsSpan(before.Length - 168 + 8));
+            if (version != 2)
+            {
+                var unknown = Put(temporary, "SV/SV000.E5S", before);
+                var rejectedVersion = SaveAppearanceSyncService.Prepare(temporary, "ccz-6.6", executable, [new(0, RId: 900, SId: 901)]);
+                rejectedVersion.Commit();
+                TestSupport.Assert(rejectedVersion.Report.SkippedSaves == 1 &&
+                    File.ReadAllBytes(unknown).AsSpan().SequenceEqual(before), "未知统计版本被同步或原存档被改变。");
+                Console.WriteLine($"[SAVE_APPEARANCE] 真实样本统计尾部版本{version}按现有兼容边界安全跳过；版本2正向覆盖使用受控临时夹具。");
+                before = SupportedV2Envelope(before[..0x43A86]);
+            }
+            var save = Put(temporary, "SV/SV000.E5S", before);
             var session = SaveAppearanceSyncService.Prepare(temporary, "ccz-6.6", executable, [new(0, RId: 900, SId: 901)]);
             session.Commit();
             TestSupport.Assert(session.Report.UpdatedSaves == 1, "真实schema2档不能同步：" + string.Join("；", session.Report.Diagnostics));
@@ -182,6 +193,25 @@ internal static class SaveAppearanceSyncTests
         }
         finally { DeleteTemporary(temporary); }
         TestSupport.Assert(HashService.Sha256(sourceSave) == originalSourceHash, "实档测试污染了原基底。");
+    }
+
+    private static byte[] SupportedV2Envelope(byte[] native)
+    {
+        // A deliberately minimal valid v2 payload keeps the positive compatibility
+        // contract stable when a mutable local mod upgrades its own statistics format.
+        var payload = new byte[68]; "XASTAT2P"u8.CopyTo(payload);
+        BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(8), 2);
+        BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(12), 68);
+        BinaryPrimitives.WriteInt32LittleEndian(payload.AsSpan(36), -1);
+        var footer = new byte[168]; "XASTAT2F"u8.CopyTo(footer);
+        BinaryPrimitives.WriteUInt32LittleEndian(footer.AsSpan(8), 2);
+        BinaryPrimitives.WriteUInt32LittleEndian(footer.AsSpan(12), 168);
+        BinaryPrimitives.WriteUInt64LittleEndian(footer.AsSpan(16), (ulong)native.Length);
+        BinaryPrimitives.WriteUInt64LittleEndian(footer.AsSpan(24), (ulong)payload.Length);
+        Encoding.ASCII.GetBytes(HashService.Sha256(native)).CopyTo(footer, 32);
+        Encoding.ASCII.GetBytes(HashService.Sha256(payload)).CopyTo(footer, 96);
+        "XASTATEN"u8.CopyTo(footer.AsSpan(160));
+        return [..native, ..payload, ..footer];
     }
 
     private static void AutomaticSavesAndDirectoryLock(string source)

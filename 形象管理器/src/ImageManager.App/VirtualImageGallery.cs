@@ -1,4 +1,4 @@
-using ImageManager.Core;
+﻿using ImageManager.Core;
 
 namespace ImageManager.App;
 
@@ -15,7 +15,9 @@ public sealed class VirtualImageGallery : UserControl
     private IReadOnlyList<LogicalImageAsset> _items = Array.Empty<LogicalImageAsset>();
     private Func<LogicalImageAsset, Control>? _cardFactory;
     private int _realizeQueued;
+    private bool _realizing, _realizeAgain;
     private bool _updatingSelection;
+    private bool _active = true;
     private string? _focusedId;
 
     public event Action? SelectionChanged;
@@ -46,6 +48,14 @@ public sealed class VirtualImageGallery : UserControl
             _focusedId = value;
             foreach (var card in _realized.Values) UpdateFocus(card);
         }
+    }
+
+    public void SetActive(bool active)
+    {
+        if (_active == active) return;
+        _active = active;
+        if (!active) RecycleAll();
+        else if (IsHandleCreated && !IsDisposed) RealizeVisibleRows();
     }
 
     public void RefreshViewport() { UpdateScrollExtent(); QueueRealize(); }
@@ -155,7 +165,10 @@ public sealed class VirtualImageGallery : UserControl
 
     private void RealizeVisibleRows()
     {
-        if (_cardFactory == null || _items.Count == 0 || ClientSize.Width <= 0 || ClientSize.Height <= 0 || !Visible) return;
+        // Native handle creation can dispatch another scroll/layout callback.
+        // Finish the current card creation before recycling that card.
+        if (_realizing) { _realizeAgain = true; return; }
+        if (!_active || _cardFactory == null || _items.Count == 0 || ClientSize.Width <= 0 || ClientSize.Height <= 0 || !Visible) return;
         var columns = ColumnCount();
         var scrollY = -AutoScrollPosition.Y;
         var rowHeight = CardHeight + VerticalGap;
@@ -163,6 +176,7 @@ public sealed class VirtualImageGallery : UserControl
         var lastRow = Math.Min((_items.Count - 1) / columns, (scrollY + ClientSize.Height) / rowHeight + BufferRows);
         var firstIndex = firstRow * columns;
         var lastIndex = Math.Min(_items.Count - 1, (lastRow + 1) * columns - 1);
+        _realizing = true;
         _canvas.SuspendLayout();
         try
         {
@@ -193,7 +207,12 @@ public sealed class VirtualImageGallery : UserControl
                 if (isNew) _canvas.Controls.Add(card);
             }
         }
-        finally { _canvas.ResumeLayout(false); }
+        finally
+        {
+            _canvas.ResumeLayout(false);
+            _realizing = false;
+            if (_realizeAgain) { _realizeAgain = false; QueueRealize(); }
+        }
     }
 
     private void UpdateFocus(Control card)
@@ -217,11 +236,11 @@ public sealed class VirtualImageGallery : UserControl
 
     private void QueueRealize()
     {
-        if (!IsHandleCreated || IsDisposed || Interlocked.Exchange(ref _realizeQueued, 1) == 1) return;
+        if (!_active || !Visible || !IsHandleCreated || IsDisposed || Interlocked.Exchange(ref _realizeQueued, 1) == 1) return;
         BeginInvoke((Action)(() =>
         {
             Interlocked.Exchange(ref _realizeQueued, 0);
-            if (!IsDisposed) RealizeVisibleRows();
+            if (!IsDisposed && _active && Visible) RealizeVisibleRows();
         }));
     }
 

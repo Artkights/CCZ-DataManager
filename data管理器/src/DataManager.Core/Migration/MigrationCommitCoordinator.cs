@@ -21,14 +21,19 @@ internal static class MigrationCommitCoordinator
     {
         string? stagingRoot = null;
         IDisposable? stagingHistoryScope = null;
+        IDisposable? stagingEvidenceScope = null;
         string? backupRoot = null;
         bool? historyManifestExisted = null;
         var installed = new List<PreparedFile>();
         var temporaryPaths = new List<string>();
         AppearanceSyncSession? appearanceSync = null;
         var appearanceDiagnostics = new List<string>();
+        var appendedHistoryIds = new List<string>();
+        IDisposable? projectWriteLock = null;
         try
         {
+            projectWriteLock = Ccz.HistoryStorage.ProjectWriteLock.Acquire(plan.TargetRoot);
+            new HistoryStore().Recover(plan.TargetRoot);
             cancellationToken.ThrowIfCancellationRequested();
             progress?.Report(new("校验迁移快照", "检查源与目标是否在预览后改变"));
             MigrationService.ValidateRoots(plan.SourceRoot, plan.TargetRoot);
@@ -55,9 +60,9 @@ internal static class MigrationCommitCoordinator
             // Specialized codecs may verify an already customized name pool by
             // replaying checked target history. Carry that evidence into staging,
             // then append only entries created by this migration to the real target.
-            var existingHistory = new HistoryStore().Load(plan.TargetRoot);
+            var existingHistory = new HistoryStore().ListMetadata(plan.TargetRoot);
             var existingHistoryIds = existingHistory.Select(entry => entry.OperationId).ToHashSet(StringComparer.Ordinal);
-            if (existingHistory.Count > 0) new HistoryStore().Replace(stagingRoot, existingHistory);
+            stagingEvidenceScope = ProjectHistoryPaths.UseHistoryEvidence(stagingRoot, plan.TargetRoot);
             foreach (var pair in plan.TargetCoreFileFingerprints.Where(pair => pair.Value.Length > 0))
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -126,7 +131,8 @@ internal static class MigrationCommitCoordinator
             // still match the preview before entering the commit phase.
             var stagedWorkspace = new ProjectWorkspace();
             stagedWorkspace.Open(stagingRoot, plan.TargetProfileId, plan.TargetVariantId);
-            var createdHistory = stagedWorkspace.GetHistory().Where(entry => !existingHistoryIds.Contains(entry.OperationId)).ToArray();
+            var createdHistory = stagedWorkspace.GetHistoryMetadata().Where(entry => !existingHistoryIds.Contains(entry.OperationId))
+                .Select(entry => stagedWorkspace.History.LoadOperation(stagingRoot, entry.OperationId)).ToArray();
             if (createdHistory.Any(entry => entry.Status == HistoryStatus.Active && entry.LayoutRevision != stagedWorkspace.ActiveProfile.LayoutRevision))
                 throw new InvalidOperationException("所选配置/资源改变了迁移后的布局能力，保存历史无法按原布局撤回；请分开迁移配置/资源并重新预览数据。");
             var candidatePaths = plan.TargetCoreFileFingerprints.Keys
@@ -273,6 +279,7 @@ internal static class MigrationCommitCoordinator
             {
                 entry.OperationKind = "一键迁移";
                 entry.Summary = $"迁移 {new DirectoryInfo(plan.SourceRoot).Name} → {new DirectoryInfo(plan.TargetRoot).Name}：{entry.Summary}";
+                appendedHistoryIds.Add(entry.OperationId);
                 targetWorkspace.History.Append(plan.TargetRoot, entry);
             }
             targetWorkspace.Open(plan.TargetRoot, plan.TargetProfileId, plan.TargetVariantId);
@@ -368,6 +375,9 @@ internal static class MigrationCommitCoordinator
                 }
                 catch (Exception rollback) { failures.Add($"历史记录：{rollback.Message}"); }
             }
+            foreach (var operationId in appendedHistoryIds)
+                try { new HistoryStore().RecordRollback(plan.TargetRoot, operationId, failures.Count != 0); }
+                catch (Exception history) { failures.Add("v3历史状态：" + history.Message); }
             if (backupRoot != null)
             {
                 try
@@ -382,7 +392,9 @@ internal static class MigrationCommitCoordinator
         }
         finally
         {
+            projectWriteLock?.Dispose();
             stagingHistoryScope?.Dispose();
+            stagingEvidenceScope?.Dispose();
             foreach (var path in temporaryPaths)
                 try { if (File.Exists(path)) { MakeWritable(path); File.Delete(path); } } catch { }
             if (stagingRoot != null)

@@ -1,0 +1,1334 @@
+{
+  "schemaVersion": 1,
+  "reviewDate": "2026-11-12",
+  "scope": "133 individually reviewed numeric/address leaves formerly carrying module-level reviewedIds",
+  "records": [
+    {
+      "sourceFile": "engine-ability-display-table.json",
+      "entityId": "mechanism.65.ability-display-table.3ef7",
+      "jsonPath": ".constants[0]",
+      "value": "0x430000",
+      "resolvedStatus": "readOnlyTableAddress",
+      "logicalIds": [],
+      "reason": "6.6 8项dword能力显示分派表0x430000的基址；它不是表内能力封顶值。替换基址会改变调用目标及指针契约。"
+    },
+    {
+      "sourceFile": "engine-ability-display-table.json",
+      "entityId": "mechanism.65.ability-display-table.3ef7",
+      "jsonPath": ".constants[1]",
+      "value": "0x46902B",
+      "resolvedStatus": "readOnlyTableAddress",
+      "logicalIds": [],
+      "reason": "6.4/6.5 8项dword能力显示分派表0x46902B的基址；它不是表内能力封顶值。替换基址会改变调用目标及指针契约。"
+    },
+    {
+      "sourceFile": "engine-ability-display-table.json",
+      "entityId": "mechanism.65.ability-display-table.3ef7",
+      "jsonPath": ".constants[2]",
+      "value": "0x40715A",
+      "resolvedStatus": "readOnlyFunctionAddress",
+      "logicalIds": [],
+      "reason": "0x40715A 是攻击函数入口，地址本身不作为数值常量改写；其内部已确认封顶立即数另有独立定义。"
+    },
+    {
+      "sourceFile": "engine-ability-display-table.json",
+      "entityId": "mechanism.65.ability-display-table.3ef7",
+      "jsonPath": ".constants[3]",
+      "value": "0x40718F",
+      "resolvedStatus": "readOnlyFunctionAddress",
+      "logicalIds": [],
+      "reason": "0x40718F 是防御函数入口，地址本身不作为数值常量改写；其内部已确认封顶立即数另有独立定义。"
+    },
+    {
+      "sourceFile": "engine-ability-display-table.json",
+      "entityId": "mechanism.65.ability-display-table.3ef7",
+      "jsonPath": ".constants[4]",
+      "value": "0x4071C4",
+      "resolvedStatus": "readOnlyFunctionAddress",
+      "logicalIds": [],
+      "reason": "0x4071C4 是精神函数入口，地址本身不作为数值常量改写；其内部已确认封顶立即数另有独立定义。"
+    },
+    {
+      "sourceFile": "engine-ability-display-table.json",
+      "entityId": "mechanism.65.ability-display-table.3ef7",
+      "jsonPath": ".constants[5]",
+      "value": "0x4071F9",
+      "resolvedStatus": "readOnlyFunctionAddress",
+      "logicalIds": [],
+      "reason": "0x4071F9 是爆发函数入口，地址本身不作为数值常量改写；其内部已确认封顶立即数另有独立定义。"
+    },
+    {
+      "sourceFile": "engine-ability-display-table.json",
+      "entityId": "mechanism.65.ability-display-table.3ef7",
+      "jsonPath": ".constants[6]",
+      "value": "0x40722E",
+      "resolvedStatus": "readOnlyFunctionAddress",
+      "logicalIds": [],
+      "reason": "0x40722E 是士气函数入口，地址本身不作为数值常量改写；其内部已确认封顶立即数另有独立定义。"
+    },
+    {
+      "sourceFile": "engine-ability-display-table.json",
+      "entityId": "mechanism.65.ability-display-table.3ef7",
+      "jsonPath": ".constants[7]",
+      "value": "0x407263",
+      "resolvedStatus": "readOnlyFunctionAddress",
+      "logicalIds": [],
+      "reason": "0x407263 是HP函数入口，地址本身不作为数值常量改写；其内部已确认封顶立即数另有独立定义。"
+    },
+    {
+      "sourceFile": "engine-ability-display-table.json",
+      "entityId": "mechanism.65.ability-display-table.3ef7",
+      "jsonPath": ".constants[8]",
+      "value": "0x40728F",
+      "resolvedStatus": "readOnlyFunctionAddress",
+      "logicalIds": [],
+      "reason": "0x40728F 是MP函数入口，地址本身不作为数值常量改写；其内部已确认封顶立即数另有独立定义。"
+    },
+    {
+      "sourceFile": "engine-ability-display-table.json",
+      "entityId": "mechanism.65.ability-display-table.3ef7",
+      "jsonPath": ".constants[9]",
+      "value": "0x4072BB",
+      "resolvedStatus": "readOnlyFunctionAddress",
+      "logicalIds": [],
+      "reason": "0x4072BB 是兵种相关第8项函数入口，地址本身不作为数值常量改写；其内部已确认封顶立即数另有独立定义。"
+    },
+    {
+      "sourceFile": "engine-ability-display-table.json",
+      "entityId": "mechanism.65.ability-display-table.3ef7",
+      "jsonPath": ".constants[10]",
+      "value": "0x47FA89",
+      "resolvedStatus": "readOnlyFunctionAddress",
+      "logicalIds": [],
+      "reason": "0x47FA89 是加总与封顶函数入口，地址本身不作为数值常量改写；其内部已确认封顶立即数另有独立定义。"
+    },
+    {
+      "sourceFile": "engine-ability-display-table.json",
+      "entityId": "mechanism.65.ability-display-table.3ef7",
+      "jsonPath": ".constants[11]",
+      "value": "0x405B86",
+      "resolvedStatus": "readOnlyFunctionAddress",
+      "logicalIds": [],
+      "reason": "0x405B86 是6.6装备/百分比加成函数入口，地址本身不作为数值常量改写；其内部已确认封顶立即数另有独立定义。"
+    },
+    {
+      "sourceFile": "engine-ability-display-table.json",
+      "entityId": "mechanism.65.ability-display-table.3ef7",
+      "jsonPath": ".constants[12]",
+      "value": "0x414D81",
+      "resolvedStatus": "readOnlyFunctionAddress",
+      "logicalIds": [],
+      "reason": "0x414D81 是6.4/6.5装备/百分比加成函数入口，地址本身不作为数值常量改写；其内部已确认封顶立即数另有独立定义。"
+    },
+    {
+      "sourceFile": "engine-ability-display-table.json",
+      "entityId": "mechanism.65.ability-display-table.3ef7",
+      "jsonPath": ".constants[13]",
+      "value": "0x43C5A4",
+      "resolvedStatus": "readOnlyFunctionAddress",
+      "logicalIds": [],
+      "reason": "0x43C5A4 是6.6额外加成函数入口，地址本身不作为数值常量改写；其内部已确认封顶立即数另有独立定义。"
+    },
+    {
+      "sourceFile": "engine-ability-display-table.json",
+      "entityId": "mechanism.65.ability-display-table.3ef7",
+      "jsonPath": ".constants[14]",
+      "value": "0x43C4C0",
+      "resolvedStatus": "readOnlyFunctionAddress",
+      "logicalIds": [],
+      "reason": "0x43C4C0 是6.6人物能力读取函数入口，地址本身不作为数值常量改写；其内部已确认封顶立即数另有独立定义。"
+    },
+    {
+      "sourceFile": "engine-ability-display-table.json",
+      "entityId": "mechanism.65.ability-display-table.3ef7",
+      "jsonPath": ".constants[15]",
+      "value": "0x43C4D3",
+      "resolvedStatus": "readOnlyFunctionAddress",
+      "logicalIds": [],
+      "reason": "0x43C4D3 是6.4/6.5人物能力读取和神魔封顶函数入口，地址本身不作为数值常量改写；其内部已确认封顶立即数另有独立定义。"
+    },
+    {
+      "sourceFile": "engine-ability-display-table.json",
+      "entityId": "mechanism.65.ability-display-table.3ef7",
+      "jsonPath": ".constants[16]",
+      "value": "0x436E02",
+      "resolvedStatus": "readOnlyFunctionAddress",
+      "logicalIds": [],
+      "reason": "0x436E02 是6.6额外档位/修正函数入口，地址本身不作为数值常量改写；其内部已确认封顶立即数另有独立定义。"
+    },
+    {
+      "sourceFile": "engine-ability-display-table.json",
+      "entityId": "mechanism.65.ability-display-table.3ef7",
+      "jsonPath": ".constants[17]",
+      "value": "0x436DE1",
+      "resolvedStatus": "readOnlyFunctionAddress",
+      "logicalIds": [],
+      "reason": "0x436DE1 是6.4/6.5额外档位/修正函数入口，地址本身不作为数值常量改写；其内部已确认封顶立即数另有独立定义。"
+    },
+    {
+      "sourceFile": "engine-ability-display-table.json",
+      "entityId": "mechanism.65.ability-display-table.3ef7",
+      "jsonPath": ".constants[18]",
+      "value": "0x407C29",
+      "resolvedStatus": "readOnlyFunctionAddress",
+      "logicalIds": [],
+      "reason": "0x407C29 是6.6装备加成函数入口，地址本身不作为数值常量改写；其内部已确认封顶立即数另有独立定义。"
+    },
+    {
+      "sourceFile": "engine-ability-display-table.json",
+      "entityId": "mechanism.65.ability-display-table.3ef7",
+      "jsonPath": ".constants[19]",
+      "value": "0x407C35",
+      "resolvedStatus": "readOnlyFunctionAddress",
+      "logicalIds": [],
+      "reason": "0x407C35 是6.4/6.5装备加成函数入口，地址本身不作为数值常量改写；其内部已确认封顶立即数另有独立定义。"
+    },
+    {
+      "sourceFile": "engine-ability-display-table.json",
+      "entityId": "mechanism.65.ability-display-table.3ef7",
+      "jsonPath": ".constants[20]",
+      "value": "0x42518F",
+      "resolvedStatus": "readOnlyFunctionAddress",
+      "logicalIds": [],
+      "reason": "0x42518F 是特效查询包装函数入口，地址本身不作为数值常量改写；其内部已确认封顶立即数另有独立定义。"
+    },
+    {
+      "sourceFile": "engine-ability-display-table.json",
+      "entityId": "mechanism.65.ability-display-table.3ef7",
+      "jsonPath": ".constants[21]",
+      "value": "0x270F",
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "ability-display-cap-0",
+        "ability-display-cap-1",
+        "ability-display-cap-2",
+        "ability-display-cap-3",
+        "ability-display-cap-4",
+        "mp-display-cap",
+        "demon-stat-cap"
+      ],
+      "reason": "0x270F是重复的数值摘要；五维显示在0x407175/1AA/1DF/214/249、MP在0x4072AB，新定义逐站点编辑；神魔封顶沿用demon-stat-cap。"
+    },
+    {
+      "sourceFile": "engine-ability-display-table.json",
+      "entityId": "mechanism.65.ability-display-table.3ef7",
+      "jsonPath": ".constants[22]",
+      "value": "0xFFFF",
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "hp-display-cap"
+      ],
+      "reason": "0xFFFF在0x40727F的push imm32中用作HP封顶，采纳hp-display-cap；不是把所有0xFFFF哨兵开放。"
+    },
+    {
+      "sourceFile": "engine-ability-display-table.json",
+      "entityId": "mechanism.65.ability-display-table.3ef7",
+      "jsonPath": ".constants[23]",
+      "value": "0x7F",
+      "resolvedStatus": "readOnlyEnum",
+      "logicalIds": [],
+      "reason": "0x7F在百分比加成函数0x414D95的cmp edx,0x7F中选择特殊查询分支，属于调用协议选择码；改值会改变调用者路由，未提供协议迁移。"
+    },
+    {
+      "sourceFile": "engine-ability-display-table.json",
+      "entityId": "mechanism.65.ability-display-table.3ef7",
+      "jsonPath": ".constants[24]",
+      "value": "0x32",
+      "resolvedStatus": "readOnlyEnum",
+      "logicalIds": [],
+      "reason": "0x32是能力消费者传给0x414D81/0x405B86的查询参数（例如0x43C4E3），不是已确认的百分比平衡值；它与特效查询协议耦合，保持只读。"
+    },
+    {
+      "sourceFile": "engine-ability-display-table.json",
+      "entityId": "mechanism.65.ability-display-table.3ef7",
+      "jsonPath": ".constants[25]",
+      "value": "0x19",
+      "resolvedStatus": "readOnlyEnum",
+      "logicalIds": [],
+      "reason": "0x19是HP/MP消费者传给百分比加成函数的查询参数（0x407277、0x4072A3）；未闭合为可独立变更的数值单位，保持调用协议。"
+    },
+    {
+      "sourceFile": "engine-ability-display-table.json",
+      "entityId": "mechanism.65.ability-display-table.3ef7",
+      "jsonPath": ".constants[26]",
+      "value": "0x400",
+      "resolvedStatus": "readOnlyUiId",
+      "logicalIds": [],
+      "reason": "0x400是状态对话框SetDlgItemInt控件ID基数，必须对应资源控件ID；不属于能力数值。"
+    },
+    {
+      "sourceFile": "engine-ability-display-table.json",
+      "entityId": "mechanism.65.ability-display-table.3ef7",
+      "jsonPath": ".constants[27]",
+      "value": "0x505FA4",
+      "resolvedStatus": "readOnlyRuntimeAddress",
+      "logicalIds": [],
+      "reason": "0x505FA4为成长开关的运行期全局地址，0x43C4F0读取其状态；不是EXE初始常量。"
+    },
+    {
+      "sourceFile": "engine-ability-display-table.json",
+      "entityId": "mechanism.65.ability-display-table.3ef7",
+      "jsonPath": ".constants[28]",
+      "value": "0x505F38",
+      "resolvedStatus": "readOnlyRuntimeAddress",
+      "logicalIds": [],
+      "reason": "0x505F38为百分比开关的运行期全局地址，0x414D86读取；更改地址会改变状态来源。"
+    },
+    {
+      "sourceFile": "engine-ability-display-table.json",
+      "entityId": "mechanism.65.ability-display-table.3ef7",
+      "jsonPath": ".siteAddresses.bonus66",
+      "value": "0x405B86",
+      "resolvedStatus": "readOnlyFunctionAddress",
+      "logicalIds": [],
+      "reason": "0x405B86记录6.6加成函数入口；本叶子是定位证据，不是函数内部的可写操作数。"
+    },
+    {
+      "sourceFile": "engine-ability-display-table.json",
+      "entityId": "mechanism.65.ability-display-table.3ef7",
+      "jsonPath": ".siteAddresses.bonus65",
+      "value": "0x414D81",
+      "resolvedStatus": "readOnlyFunctionAddress",
+      "logicalIds": [],
+      "reason": "0x414D81记录6.4/6.5加成函数入口；本叶子是定位证据，不是函数内部的可写操作数。"
+    },
+    {
+      "sourceFile": "engine-ability-display-table.json",
+      "entityId": "mechanism.65.ability-display-table.3ef7",
+      "jsonPath": ".siteAddresses.bonus66Extra",
+      "value": "0x43C5A4",
+      "resolvedStatus": "readOnlyFunctionAddress",
+      "logicalIds": [],
+      "reason": "0x43C5A4记录6.6额外加成函数入口；本叶子是定位证据，不是函数内部的可写操作数。"
+    },
+    {
+      "sourceFile": "engine-ability-display-table.json",
+      "entityId": "mechanism.65.ability-display-table.3ef7",
+      "jsonPath": ".siteAddresses.extra66",
+      "value": "0x436E02",
+      "resolvedStatus": "readOnlyFunctionAddress",
+      "logicalIds": [],
+      "reason": "0x436E02记录6.6额外档位函数入口；本叶子是定位证据，不是函数内部的可写操作数。"
+    },
+    {
+      "sourceFile": "engine-ability-display-table.json",
+      "entityId": "mechanism.65.ability-display-table.3ef7",
+      "jsonPath": ".siteAddresses.extra65",
+      "value": "0x436DE1",
+      "resolvedStatus": "readOnlyFunctionAddress",
+      "logicalIds": [],
+      "reason": "0x436DE1记录6.4/6.5额外档位函数入口；本叶子是定位证据，不是函数内部的可写操作数。"
+    },
+    {
+      "sourceFile": "engine-ai-branch-2-13-15.json",
+      "entityId": "mechanism.65.ai-branch-2-13-14-15.3ef7",
+      "jsonPath": ".branches.2.threshold",
+      "value": 40,
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "ai2-threshold"
+      ],
+      "reason": "分支2在0x439B8B比较能力阈值40，精确采纳ai2-threshold。"
+    },
+    {
+      "sourceFile": "engine-ai-branch-2-13-15.json",
+      "entityId": "mechanism.65.ai-branch-2-13-14-15.3ef7",
+      "jsonPath": ".branches.2.weight",
+      "value": 100,
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "ai2-score"
+      ],
+      "reason": "分支2在0x439B9B追加100，精确采纳ai2-score。"
+    },
+    {
+      "sourceFile": "engine-ai-branch-2-13-15.json",
+      "entityId": "mechanism.65.ai-branch-2-13-14-15.3ef7",
+      "jsonPath": ".branches.13.weight",
+      "value": 0,
+      "resolvedStatus": "readOnlyNoOperand",
+      "logicalIds": [],
+      "reason": "分支13直接跳到公共退出0x439C8A，weight=0是“没有追加指令”的结果摘要，不存在可改的加零操作数。"
+    },
+    {
+      "sourceFile": "engine-ai-branch-2-13-15.json",
+      "entityId": "mechanism.65.ai-branch-2-13-14-15.3ef7",
+      "jsonPath": ".branches.14.weight",
+      "value": 10,
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "ai14-score-0",
+        "ai14-score-1"
+      ],
+      "reason": "摘要10对应分支14前两条加分路径；另外两条实际为11/12或11，已分别按ai14-score-2/-3保留真实值，不能将摘要10写遍全部路径。"
+    },
+    {
+      "sourceFile": "engine-ai-branch-2-13-15.json",
+      "entityId": "mechanism.65.ai-branch-2-13-14-15.3ef7",
+      "jsonPath": ".branches.14.threshold",
+      "value": 3,
+      "resolvedStatus": "readOnlyStateThreshold",
+      "logicalIds": [],
+      "reason": "3是分支14对未命名状态字节+0x18/+0x1A的关系界线，多处使用不同的jb/jbe/jae；状态级别编码与互补分支关系未形成独立可写契约，保留状态条件。"
+    },
+    {
+      "sourceFile": "engine-ai-branch-2-13-15.json",
+      "entityId": "mechanism.65.ai-branch-2-13-14-15.3ef7",
+      "jsonPath": ".branches.15.weight",
+      "value": 10,
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "ai15-score-0",
+        "ai15-score-1"
+      ],
+      "reason": "摘要10对应分支15前两条加分路径；另外两条实际为11/12或11，已分别按ai15-score-2/-3保留真实值，不能将摘要10写遍全部路径。"
+    },
+    {
+      "sourceFile": "engine-ai-branch-2-13-15.json",
+      "entityId": "mechanism.65.ai-branch-2-13-14-15.3ef7",
+      "jsonPath": ".branches.15.threshold",
+      "value": 3,
+      "resolvedStatus": "readOnlyStateThreshold",
+      "logicalIds": [],
+      "reason": "3是分支15对未命名状态字节+0x18/+0x1A的关系界线，多处使用不同的jb/jbe/jae；状态级别编码与互补分支关系未形成独立可写契约，保留状态条件。"
+    },
+    {
+      "sourceFile": "engine-ai-branch-2-13-15.json",
+      "entityId": "mechanism.65.ai-branch-2-13-14-15.3ef7",
+      "jsonPath": ".constants[0]",
+      "value": "0x28",
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "ai2-threshold"
+      ],
+      "reason": "该值为上述已定位评分操作数的重复索引；通过列出的逻辑ID编辑，不生成重复常量。",
+      "aliasOfJsonPath": ".branches.2.threshold"
+    },
+    {
+      "sourceFile": "engine-ai-branch-2-13-15.json",
+      "entityId": "mechanism.65.ai-branch-2-13-14-15.3ef7",
+      "jsonPath": ".constants[1]",
+      "value": "0x64",
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "ai2-score"
+      ],
+      "reason": "该值为上述已定位评分操作数的重复索引；通过列出的逻辑ID编辑，不生成重复常量。",
+      "aliasOfJsonPath": ".branches.2.weight"
+    },
+    {
+      "sourceFile": "engine-ai-branch-2-13-15.json",
+      "entityId": "mechanism.65.ai-branch-2-13-14-15.3ef7",
+      "jsonPath": ".constants[2]",
+      "value": "0x1B",
+      "resolvedStatus": "readOnlyFieldOrDispatch",
+      "logicalIds": [],
+      "reason": "0x1B是策略编号减基数，与shr edx,1及状态数组下标联动；改变它会重解释策略到状态的映射。"
+    },
+    {
+      "sourceFile": "engine-ai-branch-2-13-15.json",
+      "entityId": "mechanism.65.ai-branch-2-13-14-15.3ef7",
+      "jsonPath": ".constants[3]",
+      "value": "0x35",
+      "resolvedStatus": "readOnlyFieldOrDispatch",
+      "logicalIds": [],
+      "reason": "0x35是分支15策略编号减基数，与shr edx,1联动；属于数组映射协议。"
+    },
+    {
+      "sourceFile": "engine-ai-branch-2-13-15.json",
+      "entityId": "mechanism.65.ai-branch-2-13-14-15.3ef7",
+      "jsonPath": ".constants[4]",
+      "value": "0x18",
+      "resolvedStatus": "readOnlyFieldOrDispatch",
+      "logicalIds": [],
+      "reason": "0x18是单位状态字节字段偏移，非阈值或评分。"
+    },
+    {
+      "sourceFile": "engine-ai-branch-2-13-15.json",
+      "entityId": "mechanism.65.ai-branch-2-13-14-15.3ef7",
+      "jsonPath": ".constants[5]",
+      "value": "0x1A",
+      "resolvedStatus": "readOnlyFieldOrDispatch",
+      "logicalIds": [],
+      "reason": "0x1A是另一单位状态字节字段偏移，非阈值或评分。"
+    },
+    {
+      "sourceFile": "engine-ai-branch-2-13-15.json",
+      "entityId": "mechanism.65.ai-branch-2-13-14-15.3ef7",
+      "jsonPath": ".constants[6]",
+      "value": 3,
+      "resolvedStatus": "readOnlyStateThreshold",
+      "logicalIds": [],
+      "reason": "3重复表示AI14/15未命名状态级别界线；存在jb/jbe/jae等互补判断，状态编码与联动契约未确定。"
+    },
+    {
+      "sourceFile": "engine-ai-branch-2-13-15.json",
+      "entityId": "mechanism.65.ai-branch-2-13-14-15.3ef7",
+      "jsonPath": ".constants[7]",
+      "value": "0x0A",
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "ai14-score-0",
+        "ai14-score-1",
+        "ai15-score-0",
+        "ai15-score-1"
+      ],
+      "reason": "该值为上述已定位评分操作数的重复索引；通过列出的逻辑ID编辑，不生成重复常量。"
+    },
+    {
+      "sourceFile": "engine-ai-branch-346-scoring.json",
+      "entityId": "mechanism.65.ai-branch-3-4-6-scoring.3ef7",
+      "jsonPath": ".branches.3.weight",
+      "value": 20,
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "ai3-score"
+      ],
+      "reason": "已在该AI分支定位到独立的除数、比较或加分立即数；使用列出的专属逻辑ID，按三基底签名与范围编辑。"
+    },
+    {
+      "sourceFile": "engine-ai-branch-346-scoring.json",
+      "entityId": "mechanism.65.ai-branch-3-4-6-scoring.3ef7",
+      "jsonPath": ".branches.3.thresholds[0]",
+      "value": 5,
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "ai3-hp-divisor"
+      ],
+      "reason": "已在该AI分支定位到独立的除数、比较或加分立即数；使用列出的专属逻辑ID，按三基底签名与范围编辑。"
+    },
+    {
+      "sourceFile": "engine-ai-branch-346-scoring.json",
+      "entityId": "mechanism.65.ai-branch-3-4-6-scoring.3ef7",
+      "jsonPath": ".branches.3.thresholds[1]",
+      "value": 30,
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "ai3-hp-threshold"
+      ],
+      "reason": "已在该AI分支定位到独立的除数、比较或加分立即数；使用列出的专属逻辑ID，按三基底签名与范围编辑。"
+    },
+    {
+      "sourceFile": "engine-ai-branch-346-scoring.json",
+      "entityId": "mechanism.65.ai-branch-3-4-6-scoring.3ef7",
+      "jsonPath": ".branches.4.weight",
+      "value": 26,
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "ai4-score-low",
+        "ai4-score-high"
+      ],
+      "reason": "已在该AI分支定位到独立的除数、比较或加分立即数；使用列出的专属逻辑ID，按三基底签名与范围编辑。"
+    },
+    {
+      "sourceFile": "engine-ai-branch-346-scoring.json",
+      "entityId": "mechanism.65.ai-branch-3-4-6-scoring.3ef7",
+      "jsonPath": ".branches.4.thresholds[0]",
+      "value": 35,
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "ai4-hit-low"
+      ],
+      "reason": "已在该AI分支定位到独立的除数、比较或加分立即数；使用列出的专属逻辑ID，按三基底签名与范围编辑。"
+    },
+    {
+      "sourceFile": "engine-ai-branch-346-scoring.json",
+      "entityId": "mechanism.65.ai-branch-3-4-6-scoring.3ef7",
+      "jsonPath": ".branches.4.thresholds[1]",
+      "value": 80,
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "ai4-hit-high"
+      ],
+      "reason": "已在该AI分支定位到独立的除数、比较或加分立即数；使用列出的专属逻辑ID，按三基底签名与范围编辑。"
+    },
+    {
+      "sourceFile": "engine-ai-branch-346-scoring.json",
+      "entityId": "mechanism.65.ai-branch-3-4-6-scoring.3ef7",
+      "jsonPath": ".branches.6.weight",
+      "value": 25,
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "ai6-score"
+      ],
+      "reason": "已在该AI分支定位到独立的除数、比较或加分立即数；使用列出的专属逻辑ID，按三基底签名与范围编辑。"
+    },
+    {
+      "sourceFile": "engine-ai-branch-346-scoring.json",
+      "entityId": "mechanism.65.ai-branch-3-4-6-scoring.3ef7",
+      "jsonPath": ".branches.6.extra",
+      "value": 7,
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "ai6-extra"
+      ],
+      "reason": "已在该AI分支定位到独立的除数、比较或加分立即数；使用列出的专属逻辑ID，按三基底签名与范围编辑。"
+    },
+    {
+      "sourceFile": "engine-ai-branch-346-scoring.json",
+      "entityId": "mechanism.65.ai-branch-3-4-6-scoring.3ef7",
+      "jsonPath": ".branches.6.thresholds[0]",
+      "value": 60,
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "ai6-hit-low"
+      ],
+      "reason": "已在该AI分支定位到独立的除数、比较或加分立即数；使用列出的专属逻辑ID，按三基底签名与范围编辑。"
+    },
+    {
+      "sourceFile": "engine-ai-branch-346-scoring.json",
+      "entityId": "mechanism.65.ai-branch-3-4-6-scoring.3ef7",
+      "jsonPath": ".branches.6.thresholds[1]",
+      "value": 80,
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "ai6-hit-high"
+      ],
+      "reason": "已在该AI分支定位到独立的除数、比较或加分立即数；使用列出的专属逻辑ID，按三基底签名与范围编辑。"
+    },
+    {
+      "sourceFile": "engine-ai-branch-346-scoring.json",
+      "entityId": "mechanism.65.ai-branch-3-4-6-scoring.3ef7",
+      "jsonPath": ".constants[0]",
+      "value": 5,
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "ai3-hp-divisor"
+      ],
+      "reason": "该数值是branches项已定位操作数的摘要别名；映射到实际消费者，不以数值相等自动合并。",
+      "aliasOfJsonPath": ".branches.3.thresholds[0]"
+    },
+    {
+      "sourceFile": "engine-ai-branch-346-scoring.json",
+      "entityId": "mechanism.65.ai-branch-3-4-6-scoring.3ef7",
+      "jsonPath": ".constants[1]",
+      "value": "0x1E",
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "ai3-hp-threshold"
+      ],
+      "reason": "该数值是branches项已定位操作数的摘要别名；映射到实际消费者，不以数值相等自动合并。",
+      "aliasOfJsonPath": ".branches.3.thresholds[1]"
+    },
+    {
+      "sourceFile": "engine-ai-branch-346-scoring.json",
+      "entityId": "mechanism.65.ai-branch-3-4-6-scoring.3ef7",
+      "jsonPath": ".constants[2]",
+      "value": "0x14",
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "ai3-score"
+      ],
+      "reason": "该数值是branches项已定位操作数的摘要别名；映射到实际消费者，不以数值相等自动合并。",
+      "aliasOfJsonPath": ".branches.3.weight"
+    },
+    {
+      "sourceFile": "engine-ai-branch-346-scoring.json",
+      "entityId": "mechanism.65.ai-branch-3-4-6-scoring.3ef7",
+      "jsonPath": ".constants[3]",
+      "value": "0x23",
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "ai4-hit-low"
+      ],
+      "reason": "该数值是branches项已定位操作数的摘要别名；映射到实际消费者，不以数值相等自动合并。",
+      "aliasOfJsonPath": ".branches.4.thresholds[0]"
+    },
+    {
+      "sourceFile": "engine-ai-branch-346-scoring.json",
+      "entityId": "mechanism.65.ai-branch-3-4-6-scoring.3ef7",
+      "jsonPath": ".constants[4]",
+      "value": "0x1A",
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "ai4-score-low",
+        "ai4-score-high"
+      ],
+      "reason": "该数值是branches项已定位操作数的摘要别名；映射到实际消费者，不以数值相等自动合并。",
+      "aliasOfJsonPath": ".branches.4.weight"
+    },
+    {
+      "sourceFile": "engine-ai-branch-346-scoring.json",
+      "entityId": "mechanism.65.ai-branch-3-4-6-scoring.3ef7",
+      "jsonPath": ".constants[5]",
+      "value": "0x50",
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "ai4-hit-high",
+        "ai6-hit-high"
+      ],
+      "reason": "该数值是branches项已定位操作数的摘要别名；映射到实际消费者，不以数值相等自动合并。"
+    },
+    {
+      "sourceFile": "engine-ai-branch-346-scoring.json",
+      "entityId": "mechanism.65.ai-branch-3-4-6-scoring.3ef7",
+      "jsonPath": ".constants[6]",
+      "value": "0x3C",
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "ai6-hit-low"
+      ],
+      "reason": "该数值是branches项已定位操作数的摘要别名；映射到实际消费者，不以数值相等自动合并。",
+      "aliasOfJsonPath": ".branches.6.thresholds[0]"
+    },
+    {
+      "sourceFile": "engine-ai-branch-346-scoring.json",
+      "entityId": "mechanism.65.ai-branch-3-4-6-scoring.3ef7",
+      "jsonPath": ".constants[7]",
+      "value": "0x19",
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "ai6-score"
+      ],
+      "reason": "该数值是branches项已定位操作数的摘要别名；映射到实际消费者，不以数值相等自动合并。",
+      "aliasOfJsonPath": ".branches.6.weight"
+    },
+    {
+      "sourceFile": "engine-ai-branch-346-scoring.json",
+      "entityId": "mechanism.65.ai-branch-3-4-6-scoring.3ef7",
+      "jsonPath": ".constants[8]",
+      "value": 7,
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "ai6-extra"
+      ],
+      "reason": "该数值是branches项已定位操作数的摘要别名；映射到实际消费者，不以数值相等自动合并。",
+      "aliasOfJsonPath": ".branches.6.extra"
+    },
+    {
+      "sourceFile": "engine-ai-branch-712-scoring.json",
+      "entityId": "mechanism.65.ai-branch-7-12-scoring.3ef7",
+      "jsonPath": ".branches.7_8_9.weight",
+      "value": 50,
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "ai789-score"
+      ],
+      "reason": "已按对应分支的加分操作数定位并采纳列出的逻辑ID。"
+    },
+    {
+      "sourceFile": "engine-ai-branch-712-scoring.json",
+      "entityId": "mechanism.65.ai-branch-7-12-scoring.3ef7",
+      "jsonPath": ".branches.7_8_9.extra.0x28",
+      "value": 5,
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "ai789-extra-a"
+      ],
+      "reason": "已按对应分支的加分操作数定位并采纳列出的逻辑ID。"
+    },
+    {
+      "sourceFile": "engine-ai-branch-712-scoring.json",
+      "entityId": "mechanism.65.ai-branch-7-12-scoring.3ef7",
+      "jsonPath": ".branches.7_8_9.extra.0x2B",
+      "value": 10,
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "ai789-extra-b"
+      ],
+      "reason": "已按对应分支的加分操作数定位并采纳列出的逻辑ID。"
+    },
+    {
+      "sourceFile": "engine-ai-branch-712-scoring.json",
+      "entityId": "mechanism.65.ai-branch-7-12-scoring.3ef7",
+      "jsonPath": ".branches.10.weight",
+      "value": 6,
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "ai10-score"
+      ],
+      "reason": "已按对应分支的加分操作数定位并采纳列出的逻辑ID。"
+    },
+    {
+      "sourceFile": "engine-ai-branch-712-scoring.json",
+      "entityId": "mechanism.65.ai-branch-7-12-scoring.3ef7",
+      "jsonPath": ".branches.11.weight",
+      "value": 5,
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "ai11-score"
+      ],
+      "reason": "已按对应分支的加分操作数定位并采纳列出的逻辑ID。"
+    },
+    {
+      "sourceFile": "engine-ai-branch-712-scoring.json",
+      "entityId": "mechanism.65.ai-branch-7-12-scoring.3ef7",
+      "jsonPath": ".branches.12.weight",
+      "value": 15,
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "ai12-score-a",
+        "ai12-score-b"
+      ],
+      "reason": "按对应分支的加分操作数采纳；分支12摘要15只对应0x439B55/0x439B5F，其他路径10由ai12-score-c与fallback-base独立管理。"
+    },
+    {
+      "sourceFile": "engine-ai-branch-712-scoring.json",
+      "entityId": "mechanism.65.ai-branch-7-12-scoring.3ef7",
+      "jsonPath": ".constants[0]",
+      "value": "0x32",
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "ai789-score"
+      ],
+      "reason": "该值是上方分支评分的重复索引，只通过所列真实站点编辑，不新增重复定义。",
+      "aliasOfJsonPath": ".branches.7_8_9.weight"
+    },
+    {
+      "sourceFile": "engine-ai-branch-712-scoring.json",
+      "entityId": "mechanism.65.ai-branch-7-12-scoring.3ef7",
+      "jsonPath": ".constants[1]",
+      "value": 5,
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "ai789-extra-a",
+        "ai11-score"
+      ],
+      "reason": "该值是上方分支评分的重复索引，只通过所列真实站点编辑，不新增重复定义。"
+    },
+    {
+      "sourceFile": "engine-ai-branch-712-scoring.json",
+      "entityId": "mechanism.65.ai-branch-7-12-scoring.3ef7",
+      "jsonPath": ".constants[2]",
+      "value": "0x0A",
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "ai789-extra-b"
+      ],
+      "reason": "该值是上方分支评分的重复索引，只通过所列真实站点编辑，不新增重复定义。",
+      "aliasOfJsonPath": ".branches.7_8_9.extra.0x2B"
+    },
+    {
+      "sourceFile": "engine-ai-branch-712-scoring.json",
+      "entityId": "mechanism.65.ai-branch-7-12-scoring.3ef7",
+      "jsonPath": ".constants[3]",
+      "value": "0x28",
+      "resolvedStatus": "readOnlyFieldOrDispatch",
+      "logicalIds": [],
+      "reason": "0x28是分支7/8/9识别的策略ID，与extra-a评分5分开；策略到处理体映射没有独立变更契约。"
+    },
+    {
+      "sourceFile": "engine-ai-branch-712-scoring.json",
+      "entityId": "mechanism.65.ai-branch-7-12-scoring.3ef7",
+      "jsonPath": ".constants[4]",
+      "value": "0x2B",
+      "resolvedStatus": "readOnlyFieldOrDispatch",
+      "logicalIds": [],
+      "reason": "0x2B是分支7/8/9第二策略ID，与extra-b评分10分开；不是加分大小。"
+    },
+    {
+      "sourceFile": "engine-ai-branch-712-scoring.json",
+      "entityId": "mechanism.65.ai-branch-7-12-scoring.3ef7",
+      "jsonPath": ".constants[5]",
+      "value": "0x27",
+      "resolvedStatus": "readOnlyFieldOrDispatch",
+      "logicalIds": [],
+      "reason": "0x27是策略/状态分派选择码；6.6改为0x37，需与版本策略表同步，不作为通用评分。"
+    },
+    {
+      "sourceFile": "engine-ai-branch-712-scoring.json",
+      "entityId": "mechanism.65.ai-branch-7-12-scoring.3ef7",
+      "jsonPath": ".constants[6]",
+      "value": 6,
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "ai10-score"
+      ],
+      "reason": "该值是上方分支评分的重复索引，只通过所列真实站点编辑，不新增重复定义。",
+      "aliasOfJsonPath": ".branches.10.weight"
+    },
+    {
+      "sourceFile": "engine-ai-branch-712-scoring.json",
+      "entityId": "mechanism.65.ai-branch-7-12-scoring.3ef7",
+      "jsonPath": ".constants[7]",
+      "value": 9,
+      "resolvedStatus": "readOnlyFieldOrDispatch",
+      "logicalIds": [],
+      "reason": "9是分支10/12的兵种ID筛选条件；其辅助函数的编码与兵种条件联动未闭合，保持分派规则。"
+    },
+    {
+      "sourceFile": "engine-ai-branch-712-scoring.json",
+      "entityId": "mechanism.65.ai-branch-7-12-scoring.3ef7",
+      "jsonPath": ".constants[8]",
+      "value": 4,
+      "resolvedStatus": "readOnlyTableCardinality",
+      "logicalIds": [],
+      "reason": "4是分支11固定四项位掩码/评分表的循环基数；更改会越过四项表边界。"
+    },
+    {
+      "sourceFile": "engine-ai-branch-712-scoring.json",
+      "entityId": "mechanism.65.ai-branch-7-12-scoring.3ef7",
+      "jsonPath": ".constants[9]",
+      "value": "0x39",
+      "resolvedStatus": "readOnlyFieldOrDispatch",
+      "logicalIds": [],
+      "reason": "0x39是分支12的策略ID，6.6资料改为0x59；这是版本分派码，不是15分权重。"
+    },
+    {
+      "sourceFile": "engine-ai-branch-712-scoring.json",
+      "entityId": "mechanism.65.ai-branch-7-12-scoring.3ef7",
+      "jsonPath": ".constants[10]",
+      "value": "0x13",
+      "resolvedStatus": "readOnlyFieldOrDispatch",
+      "logicalIds": [],
+      "reason": "0x13是分支12兵种枚举条件；不与该路径15分共用可写值。"
+    },
+    {
+      "sourceFile": "engine-ai-branch-712-scoring.json",
+      "entityId": "mechanism.65.ai-branch-7-12-scoring.3ef7",
+      "jsonPath": ".constants[11]",
+      "value": "0x0F",
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "ai12-score-a",
+        "ai12-score-b"
+      ],
+      "reason": "该值是上方分支评分的重复索引，只通过所列真实站点编辑，不新增重复定义。",
+      "aliasOfJsonPath": ".branches.12.weight"
+    },
+    {
+      "sourceFile": "engine-ai-handler-constants-66.json",
+      "entityId": "mechanism.65.ai-handler-constants-66.3ef7",
+      "jsonPath": ".constants[0]",
+      "value": "0x1B",
+      "resolvedStatus": "readOnlyVersionDispatch",
+      "logicalIds": [],
+      "reason": "0x1B为6.5策略/状态减基数，6.6记作0x23；属于版本映射，不能按孤立数值替换。"
+    },
+    {
+      "sourceFile": "engine-ai-handler-constants-66.json",
+      "entityId": "mechanism.65.ai-handler-constants-66.3ef7",
+      "jsonPath": ".constants[1]",
+      "value": "0x23",
+      "resolvedStatus": "readOnlyVersionDispatch",
+      "logicalIds": [],
+      "reason": "0x23为上述6.6策略/状态减基数；需要策略ID到状态索引的关系验证。"
+    },
+    {
+      "sourceFile": "engine-ai-handler-constants-66.json",
+      "entityId": "mechanism.65.ai-handler-constants-66.3ef7",
+      "jsonPath": ".constants[2]",
+      "value": "0x35",
+      "resolvedStatus": "readOnlyVersionDispatch",
+      "logicalIds": [],
+      "reason": "0x35为6.5另一策略分组减基数；与状态数组偏移/移位联动。"
+    },
+    {
+      "sourceFile": "engine-ai-handler-constants-66.json",
+      "entityId": "mechanism.65.ai-handler-constants-66.3ef7",
+      "jsonPath": ".constants[3]",
+      "value": "0x41",
+      "resolvedStatus": "readOnlyVersionDispatch",
+      "logicalIds": [],
+      "reason": "0x41为0x35对应6.6映射基数；不是权重。"
+    },
+    {
+      "sourceFile": "engine-ai-handler-constants-66.json",
+      "entityId": "mechanism.65.ai-handler-constants-66.3ef7",
+      "jsonPath": ".constants[4]",
+      "value": "0x39",
+      "resolvedStatus": "readOnlyVersionDispatch",
+      "logicalIds": [],
+      "reason": "0x39为6.5策略ID；本差分清单没有独立可写范围。"
+    },
+    {
+      "sourceFile": "engine-ai-handler-constants-66.json",
+      "entityId": "mechanism.65.ai-handler-constants-66.3ef7",
+      "jsonPath": ".constants[5]",
+      "value": "0x59",
+      "resolvedStatus": "readOnlyVersionDispatch",
+      "logicalIds": [],
+      "reason": "0x59为上述6.6策略ID；需要版本策略表和处理体共同迁移。"
+    },
+    {
+      "sourceFile": "engine-ai-handler-constants-66.json",
+      "entityId": "mechanism.65.ai-handler-constants-66.3ef7",
+      "jsonPath": ".constants[6]",
+      "value": "0x27",
+      "resolvedStatus": "readOnlyVersionDispatch",
+      "logicalIds": [],
+      "reason": "0x27为6.5策略/状态分派码；不能作为评分大小解释。"
+    },
+    {
+      "sourceFile": "engine-ai-handler-constants-66.json",
+      "entityId": "mechanism.65.ai-handler-constants-66.3ef7",
+      "jsonPath": ".constants[7]",
+      "value": "0x37",
+      "resolvedStatus": "readOnlyVersionDispatch",
+      "logicalIds": [],
+      "reason": "0x37为上述6.6分派码；需保留分派协议。"
+    },
+    {
+      "sourceFile": "engine-ai-handler-constants-66.json",
+      "entityId": "mechanism.65.ai-handler-constants-66.3ef7",
+      "jsonPath": ".constants[8]",
+      "value": "0x28",
+      "resolvedStatus": "readOnlyVersionDispatch",
+      "logicalIds": [],
+      "reason": "0x28为6.5策略识别码，实际5分已由ai789-extra-a管理；该ID自身只读。"
+    },
+    {
+      "sourceFile": "engine-ai-handler-constants-66.json",
+      "entityId": "mechanism.65.ai-handler-constants-66.3ef7",
+      "jsonPath": ".constants[9]",
+      "value": "0x38",
+      "resolvedStatus": "readOnlyVersionDispatch",
+      "logicalIds": [],
+      "reason": "0x38为上述6.6策略识别码；不是加分5。"
+    },
+    {
+      "sourceFile": "engine-ai-handler-constants-66.json",
+      "entityId": "mechanism.65.ai-handler-constants-66.3ef7",
+      "jsonPath": ".constants[10]",
+      "value": "0x2B",
+      "resolvedStatus": "readOnlyVersionDispatch",
+      "logicalIds": [],
+      "reason": "0x2B在该差分清单既出现旧策略ID又出现0x44的新值，缺少唯一操作数身份；禁止仅凭数值匹配。"
+    },
+    {
+      "sourceFile": "engine-ai-handler-constants-66.json",
+      "entityId": "mechanism.65.ai-handler-constants-66.3ef7",
+      "jsonPath": ".constants[11]",
+      "value": "0x3B",
+      "resolvedStatus": "readOnlyVersionDispatch",
+      "logicalIds": [],
+      "reason": "0x3B为6.6策略识别码，与旧0x2B对应；实际10分已独立管理。"
+    },
+    {
+      "sourceFile": "engine-ai-handler-constants-66.json",
+      "entityId": "mechanism.65.ai-handler-constants-66.3ef7",
+      "jsonPath": ".constants[12]",
+      "value": "0x44",
+      "resolvedStatus": "readOnlyVersionDispatch",
+      "logicalIds": [],
+      "reason": "0x44为旧版分派/状态常量，差分指出6.6改0x2B但没有独立参数语义。"
+    },
+    {
+      "sourceFile": "engine-ai-handler-constants-66.json",
+      "entityId": "mechanism.65.ai-handler-constants-66.3ef7",
+      "jsonPath": ".constants[13]",
+      "value": "0x14",
+      "resolvedStatus": "readOnlyNoUniqueOperand",
+      "logicalIds": [],
+      "reason": "0x14与0x1E是版本替换清单的一对裸值；此处无站点/路径，不能误映射到同值ai3-score。"
+    },
+    {
+      "sourceFile": "engine-ai-handler-constants-66.json",
+      "entityId": "mechanism.65.ai-handler-constants-66.3ef7",
+      "jsonPath": ".constants[14]",
+      "value": "0x1E",
+      "resolvedStatus": "readOnlyNoUniqueOperand",
+      "logicalIds": [],
+      "reason": "0x1E是上述替换后的裸值；数值30并不能证明它就是ai3-hp-threshold。"
+    },
+    {
+      "sourceFile": "engine-ai-handler-constants-66.json",
+      "entityId": "mechanism.65.ai-handler-constants-66.3ef7",
+      "jsonPath": ".constants[15]",
+      "value": "0x10",
+      "resolvedStatus": "readOnlyNoUniqueOperand",
+      "logicalIds": [],
+      "reason": "0x10与0x13是版本替换清单的裸值；消费者及字段语义未唯一确定。"
+    },
+    {
+      "sourceFile": "engine-ai-handler-constants-66.json",
+      "entityId": "mechanism.65.ai-handler-constants-66.3ef7",
+      "jsonPath": ".constants[16]",
+      "value": "0x13",
+      "resolvedStatus": "readOnlyNoUniqueOperand",
+      "logicalIds": [],
+      "reason": "0x13同时可为状态/兵种枚举值；该差分项未给唯一站点，保持只读。"
+    },
+    {
+      "sourceFile": "engine-ai-handler-constants-66.json",
+      "entityId": "mechanism.65.ai-handler-constants-66.3ef7",
+      "jsonPath": ".constants[17]",
+      "value": "0x0F",
+      "resolvedStatus": "readOnlyNoUniqueOperand",
+      "logicalIds": [],
+      "reason": "0x0F与0x12是版本替换清单的裸值；不等同于已核实仍为15的ai12-score-a/b。"
+    },
+    {
+      "sourceFile": "engine-ai-handler-constants-66.json",
+      "entityId": "mechanism.65.ai-handler-constants-66.3ef7",
+      "jsonPath": ".constants[18]",
+      "value": "0x12",
+      "resolvedStatus": "readOnlyNoUniqueOperand",
+      "logicalIds": [],
+      "reason": "0x12是上述版本替换结果，缺少唯一操作数身份及范围，不能按数值自动生成编辑器。"
+    },
+    {
+      "sourceFile": "engine-hit-height-modifier.json",
+      "entityId": "mechanism.65.hit-height-direction-modifier.3ef7",
+      "jsonPath": ".wrapper.cap",
+      "value": 100,
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "hit-wrapper-cap"
+      ],
+      "reason": "最终封顶100对应0x408F01比较立即数。"
+    },
+    {
+      "sourceFile": "engine-hit-height-modifier.json",
+      "entityId": "mechanism.65.hit-height-direction-modifier.3ef7",
+      "jsonPath": ".constants[0]",
+      "value": 5,
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "hit-direction-step",
+        "hit-extra-bonus"
+      ],
+      "reason": "方向class乘数5位于0x408E1E，附加条件5位于0x408E45；两个独立消费者分别编辑。"
+    },
+    {
+      "sourceFile": "engine-hit-height-modifier.json",
+      "entityId": "mechanism.65.hit-height-direction-modifier.3ef7",
+      "jsonPath": ".constants[1]",
+      "value": 100,
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "hit-wrapper-cap"
+      ],
+      "reason": "100作为wrapper.cap的摘要映射到封顶；百分比除数100为固定单位协议，不随封顶编辑。",
+      "aliasOfJsonPath": ".wrapper.cap"
+    },
+    {
+      "sourceFile": "engine-hit-height-modifier.json",
+      "entityId": "mechanism.65.hit-height-direction-modifier.3ef7",
+      "jsonPath": ".constants[2]",
+      "value": "0xFFFF",
+      "resolvedStatus": "readOnlySentinel",
+      "logicalIds": [],
+      "reason": "0xFFFF是坐标覆盖word的无效值哨兵；改动会将无效坐标解释为有效。"
+    },
+    {
+      "sourceFile": "engine-hit-height-modifier.json",
+      "entityId": "mechanism.65.hit-height-direction-modifier.3ef7",
+      "jsonPath": ".constants[3]",
+      "value": "0x505F88",
+      "resolvedStatus": "readOnlyRuntimeAddress",
+      "logicalIds": [],
+      "reason": "0x505F88是高度/方向修正启用状态的运行期全局地址。"
+    },
+    {
+      "sourceFile": "engine-hit-height-modifier.json",
+      "entityId": "mechanism.65.hit-height-direction-modifier.3ef7",
+      "jsonPath": ".constants[4]",
+      "value": "0x500E9A",
+      "resolvedStatus": "readOnlyRuntimeAddress",
+      "logicalIds": [],
+      "reason": "0x500E9A是附加条件运行期byte状态地址，不是附加增幅5。"
+    },
+    {
+      "sourceFile": "engine-hit-height-modifier.json",
+      "entityId": "mechanism.65.hit-height-direction-modifier.3ef7",
+      "jsonPath": ".constants[5]",
+      "value": "0x48E8C2",
+      "resolvedStatus": "readOnlyRuntimeAddress",
+      "logicalIds": [],
+      "reason": "0x48E8C2是临时坐标覆盖区地址，其写入来源尚未闭合。"
+    },
+    {
+      "sourceFile": "engine-money-global.json",
+      "entityId": "mechanism.65.money-global.3ef7",
+      "jsonPath": ".constants[0]",
+      "value": "0x48E8BD",
+      "resolvedStatus": "readOnlyRuntimeOrTextAddress",
+      "logicalIds": [],
+      "reason": "0x48E8BD是运行期待结算金额dword地址，结算后清零；不能改成EXE固定余额。"
+    },
+    {
+      "sourceFile": "engine-money-global.json",
+      "entityId": "mechanism.65.money-global.3ef7",
+      "jsonPath": ".constants[1]",
+      "value": "0xF423F",
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "money-cap"
+      ],
+      "reason": "0xF423F在0x406C0E比较、0x406C1A回写两处同步，采纳money-cap。"
+    },
+    {
+      "sourceFile": "engine-money-global.json",
+      "entityId": "mechanism.65.money-global.3ef7",
+      "jsonPath": ".constants[2]",
+      "value": "0x3E8",
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "money-fixed-charge"
+      ],
+      "reason": "0x3E8为0x414E92固定扣款1000，采纳money-fixed-charge。"
+    },
+    {
+      "sourceFile": "engine-money-global.json",
+      "entityId": "mechanism.65.money-global.3ef7",
+      "jsonPath": ".constants[3]",
+      "value": "0x500CA7",
+      "resolvedStatus": "readOnlyRuntimeOrTextAddress",
+      "logicalIds": [],
+      "reason": "0x500CA7是资金不足提示文本地址；其指针/容量不属于金额常量。"
+    },
+    {
+      "sourceFile": "engine-money-global.json",
+      "entityId": "mechanism.65.money-global.3ef7",
+      "jsonPath": ".constants[4]",
+      "value": "0x500C48",
+      "resolvedStatus": "readOnlyRuntimeOrTextAddress",
+      "logicalIds": [],
+      "reason": "0x500C48是结算后清零的运行期标志地址。"
+    },
+    {
+      "sourceFile": "engine-payment-chain.json",
+      "entityId": "mechanism.65.payment-chain.3ef7",
+      "jsonPath": ".constants[0]",
+      "value": "0x500C9C",
+      "resolvedStatus": "readOnlyRuntimeOrTextAddress",
+      "logicalIds": [],
+      "reason": "0x500C9C是支付确认格式串“支付%d金？”地址，需要独立文本容量契约，不是支付金额。"
+    },
+    {
+      "sourceFile": "engine-payment-chain.json",
+      "entityId": "mechanism.65.payment-chain.3ef7",
+      "jsonPath": ".constants[1]",
+      "value": "0x500CA7",
+      "resolvedStatus": "readOnlyRuntimeOrTextAddress",
+      "logicalIds": [],
+      "reason": "0x500CA7是资金不足提示文本地址，不能作为费用常量。"
+    },
+    {
+      "sourceFile": "engine-payment-chain.json",
+      "entityId": "mechanism.65.payment-chain.3ef7",
+      "jsonPath": ".constants[2]",
+      "value": "0x500CB1",
+      "resolvedStatus": "readOnlyRuntimeOrTextAddress",
+      "logicalIds": [],
+      "reason": "0x500CB1是支付菜单文本/数据地址，容量与调用协议未建立可写契约。"
+    },
+    {
+      "sourceFile": "engine-payment-chain.json",
+      "entityId": "mechanism.65.payment-chain.3ef7",
+      "jsonPath": ".constants[3]",
+      "value": "0x500C7E",
+      "resolvedStatus": "readOnlyRuntimeOrTextAddress",
+      "logicalIds": [],
+      "reason": "0x500C7E是支付菜单使用的文本/数据地址，不是练武系数。"
+    },
+    {
+      "sourceFile": "engine-payment-chain.json",
+      "entityId": "mechanism.65.payment-chain.3ef7",
+      "jsonPath": ".constants[4]",
+      "value": "0x510CF8",
+      "resolvedStatus": "readOnlyRuntimeOrTextAddress",
+      "logicalIds": [],
+      "reason": "0x510CF8是菜单/窗口运行期对象地址，非EXE数值初始常量。"
+    },
+    {
+      "sourceFile": "engine-payment-chain.json",
+      "entityId": "mechanism.65.payment-chain.3ef7",
+      "jsonPath": ".constants[5]",
+      "value": "0x4AC63C",
+      "resolvedStatus": "readOnlyRuntimeOrTextAddress",
+      "logicalIds": [],
+      "reason": "0x4AC63C是支付确认后写入3的运行期状态地址，改变地址会修改状态去向。"
+    },
+    {
+      "sourceFile": "engine-payment-chain.json",
+      "entityId": "mechanism.65.payment-chain.3ef7",
+      "jsonPath": ".constants[6]",
+      "value": "0x3E8",
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "training-auto-cost",
+        "money-fixed-charge"
+      ],
+      "reason": "1000存在两个已确认消费者：0x423867自动提升乘数与0x414E92固定扣款。按两个逻辑ID独立编辑，不因值相同合并。"
+    },
+    {
+      "sourceFile": "engine-strategy-direction-weather.json",
+      "entityId": "mechanism.65.strategy-damage-direction-weather.3ef7",
+      "jsonPath": ".constants[0].value",
+      "value": "0x28",
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "strategy-series-bonus"
+      ],
+      "reason": "角色说明明确为指定兵种系+40，对应0x43C194。"
+    },
+    {
+      "sourceFile": "engine-strategy-direction-weather.json",
+      "entityId": "mechanism.65.strategy-damage-direction-weather.3ef7",
+      "jsonPath": ".constants[1].value",
+      "value": "0x19",
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "strategy-condition-bonus"
+      ],
+      "reason": "角色说明为方向/天气/地形条件的+25，对应0x43C1DE。"
+    },
+    {
+      "sourceFile": "engine-strategy-direction-weather.json",
+      "entityId": "mechanism.65.strategy-damage-direction-weather.3ef7",
+      "jsonPath": ".constants[3].value",
+      "value": "2",
+      "resolvedStatus": "adopted",
+      "logicalIds": [
+        "strategy-weather-threshold"
+      ],
+      "reason": "天气ID下限2对应0x43C1C4，采纳独立ID范围。"
+    },
+    {
+      "sourceFile": "engine-unit-slot-arrays.json",
+      "entityId": "mechanism.65.unit-slot-arrays.3ef7",
+      "jsonPath": ".constants[0]",
+      "value": "0x84",
+      "resolvedStatus": "readOnlyFieldOffset",
+      "logicalIds": [],
+      "reason": "0x84是slot0数组相对单位结构的起始偏移；与index*4寻址共用单位记录布局。"
+    },
+    {
+      "sourceFile": "engine-unit-slot-arrays.json",
+      "entityId": "mechanism.65.unit-slot-arrays.3ef7",
+      "jsonPath": ".constants[1]",
+      "value": "0x254",
+      "resolvedStatus": "readOnlyFieldOffset",
+      "logicalIds": [],
+      "reason": "0x254是slot1数组的结构偏移，后续消费者不同，不能作为槽位数量或费用。"
+    },
+    {
+      "sourceFile": "engine-unit-slot-arrays.json",
+      "entityId": "mechanism.65.unit-slot-arrays.3ef7",
+      "jsonPath": ".constants[2]",
+      "value": "0x430",
+      "resolvedStatus": "readOnlyFieldOffset",
+      "logicalIds": [],
+      "reason": "0x430是slot2数组的结构偏移；其完整消费链未展开，保持原结构。"
+    },
+    {
+      "sourceFile": "engine-unit-slot-arrays.json",
+      "entityId": "mechanism.65.unit-slot-arrays.3ef7",
+      "jsonPath": ".constants[3]",
+      "value": "0x10",
+      "resolvedStatus": "readOnlyFieldOffset",
+      "logicalIds": [],
+      "reason": "0x10是从slot0扣减的单位资源字段偏移，不是扣款10。"
+    },
+    {
+      "sourceFile": "engine-unit-slot-arrays.json",
+      "entityId": "mechanism.65.unit-slot-arrays.3ef7",
+      "jsonPath": ".constants[4]",
+      "value": "0x48E8BD",
+      "resolvedStatus": "readOnlyRuntimeAddress",
+      "logicalIds": [],
+      "reason": "0x48E8BD是槽位消耗累加到待结算金钱的运行期dword地址。"
+    },
+    {
+      "sourceFile": "engine-unit-slot-arrays.json",
+      "entityId": "mechanism.65.unit-slot-arrays.3ef7",
+      "jsonPath": ".constants[5]",
+      "value": "0x3E8",
+      "resolvedStatus": "readOnlyNoUniqueOperand",
+      "logicalIds": [],
+      "reason": "0x3E8虽列入该源constants，但summary描述费用为(slot0-1)*10，未给1000的对应消费者；不能借同值推断其为slot-consume-cost或固定扣款。已核实的槽位乘数10由slot-consume-cost独立采纳。"
+    }
+  ]
+}

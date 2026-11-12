@@ -4,15 +4,17 @@ using System.Text.Json;
 
 namespace ImageManager.Core;
 
-public sealed class HistoryService : IHistoryService
+public sealed partial class HistoryService : IHistoryService,
+    Ccz.HistoryStorage.IHistoryRepository<ProjectProfile, HistoryRecord, HistoryRecord>
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = false };
     private readonly string _backupContainer;
     private readonly object _gate = new();
 
-    public HistoryService(string backupContainer)
+    public HistoryService(string backupContainer, string? blobRoot = null)
     {
         _backupContainer = Path.GetFullPath(backupContainer);
+        _blobRoot = Path.GetFullPath(blobRoot ?? Path.Combine(_backupContainer, "history-v3", "blobs"));
     }
 
     public string BackupRoot(ProjectProfile project)
@@ -27,30 +29,6 @@ public sealed class HistoryService : IHistoryService
     internal bool IsInsideBackup(string path)
         => Path.GetFullPath(path).Equals(_backupContainer, StringComparison.OrdinalIgnoreCase) ||
             Path.GetFullPath(path).StartsWith(_backupContainer + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
-
-    public IReadOnlyList<HistoryRecord> List(ProjectProfile project)
-    {
-        lock (_gate)
-        {
-            var path = HistoryFile(project);
-            if (!File.Exists(path)) return Array.Empty<HistoryRecord>();
-            var records = new List<HistoryRecord>();
-            foreach (var line in File.ReadLines(path, Encoding.UTF8))
-            {
-                if (string.IsNullOrWhiteSpace(line)) continue;
-                try
-                {
-                    var record = JsonSerializer.Deserialize<HistoryRecord>(line, JsonOptions);
-                    if (record != null) records.Add(record);
-                }
-                catch (JsonException)
-                {
-                    // A truncated final journal line never invalidates earlier recovery records.
-                }
-            }
-            return records;
-        }
-    }
 
     public HistoryRecord Record(ProjectProfile project, MutationPlan plan, IReadOnlyList<HistoryTarget> targets)
         => Record(project, plan, targets, []);
@@ -69,10 +47,7 @@ public sealed class HistoryService : IHistoryService
         };
         lock (_gate)
         {
-            EnsureDirectories(project);
-            var path = HistoryFile(project);
-            var lines = File.Exists(path) ? File.ReadAllLines(path, Encoding.UTF8) : Array.Empty<string>();
-            WriteLinesAtomically(path, lines.Append(JsonSerializer.Serialize(record, JsonOptions)));
+            WriteV3Record(project, record, "Commit");
         }
         return record;
     }
@@ -85,6 +60,7 @@ public sealed class HistoryService : IHistoryService
 
     private MutationResult ChangeState(ProjectProfile project, string historyId, bool useAfter)
     {
+        using var projectLock = Ccz.HistoryStorage.ProjectWriteLock.Acquire(project.RootPath);
         lock (_gate)
         {
             var action = useAfter ? "前进" : "撤回";
@@ -105,6 +81,7 @@ public sealed class HistoryService : IHistoryService
             if (source.Targets.Count == 0)
                 throw new InvalidOperationException("该旧记录没有可恢复的文件快照或改名映射，无法撤回/前进。");
             var restored = new List<HistoryTarget>();
+            string? restoreTransaction = null;
             try
             {
                 foreach (var target in source.Targets)
@@ -118,9 +95,10 @@ public sealed class HistoryService : IHistoryService
                     }
                     // Validate both directions before changing anything: the opposite
                     // snapshot is needed if a later file or history write fails.
-                    if (target.BeforeExists) ResourceFileRecovery.Verify(target.SnapshotPath, true, target.BeforeLength, target.BeforeSha256);
-                    if (target.AfterExists) ResourceFileRecovery.Verify(target.AfterSnapshotPath, true, target.AfterLength, target.AfterSha256);
+                    if (target.BeforeExists) ResourceFileRecovery.VerifySnapshot(target, false);
+                    if (target.AfterExists) ResourceFileRecovery.VerifySnapshot(target, true);
                 }
+                restoreTransaction = PrepareRestore(project, source, useAfter);
                 foreach (var target in source.Targets)
                 {
                     ResourceFileRecovery.Verify(target.TargetPath, useAfter ? target.BeforeExists : target.AfterExists,
@@ -129,16 +107,20 @@ public sealed class HistoryService : IHistoryService
                     ResourceFileRecovery.Restore(target, useAfter);
                 }
                 source.Status = useAfter ? HistoryStatus.Active : HistoryStatus.Undone;
-                records.Add(CreateTransition(source, useAfter ? MutationKind.Redo : MutationKind.Undo, action + "：" + source.Summary));
+                var transition = CreateTransition(source, useAfter ? MutationKind.Redo : MutationKind.Undo, action + "：" + source.Summary);
                 // State and transition are installed together; there is no second
                 // append that can fail after the new status has become visible.
-                Rewrite(project, records);
+                CommitRestore(project, source, transition, restoreTransaction);
                 return new MutationResult(Guid.NewGuid().ToString("N"), true, "已" + action + "：" + source.Summary, source.Id,
                     source.Targets.Select(target => target.TargetPath).ToArray(), Array.Empty<string>());
             }
             catch (Exception ex)
             {
                 var recoveryErrors = ResourceFileRecovery.RestoreAll(restored, !useAfter);
+                if (restoreTransaction != null)
+                    try { AppendV3State(project, source.Id, recoveryErrors.Count == 0 ? (useAfter ? HistoryStatus.Undone : HistoryStatus.Active) : HistoryStatus.Conflict,
+                        source.KeepForever, recoveryErrors.Count == 0 ? "RestoreAbort" : "Conflict", restoreTransaction); }
+                    catch (Exception history) { recoveryErrors = recoveryErrors.Concat(["历史状态：" + history.Message]).ToArray(); }
                 return new MutationResult(Guid.NewGuid().ToString("N"), false, action + "失败：" + source.Summary, source.Id,
                     recoveryErrors.Count == 0 ? Array.Empty<string>() : restored.Select(target => target.TargetPath).ToArray(),
                     [ex.Message, .. recoveryErrors, recoveryErrors.Count == 0
@@ -197,8 +179,11 @@ public sealed class HistoryService : IHistoryService
             Targets = source.Targets.Select(target => new HistoryTarget
             {
                 TargetPath = target.TargetPath,
-                SnapshotPath = target.SnapshotPath,
-                AfterSnapshotPath = target.AfterSnapshotPath,
+                SnapshotPath = kind == MutationKind.Undo ? target.AfterSnapshotPath : target.SnapshotPath,
+                AfterSnapshotPath = kind == MutationKind.Undo ? target.SnapshotPath : target.AfterSnapshotPath,
+                BeforeBlob = kind == MutationKind.Undo ? target.AfterBlob : target.BeforeBlob,
+                AfterBlob = kind == MutationKind.Undo ? target.BeforeBlob : target.AfterBlob,
+                BlobStoreRoot = target.BlobStoreRoot,
                 BeforeSha256 = kind == MutationKind.Undo ? target.AfterSha256 : target.BeforeSha256,
                 AfterSha256 = kind == MutationKind.Undo ? target.BeforeSha256 : target.AfterSha256,
                 BeforeLength = kind == MutationKind.Undo ? target.AfterLength : target.BeforeLength,
@@ -212,15 +197,6 @@ public sealed class HistoryService : IHistoryService
         return transition;
     }
 
-    private void EnsureDirectories(ProjectProfile project)
-    {
-        var history = Path.Combine(BackupRoot(project), "History");
-        Directory.CreateDirectory(history);
-        Directory.CreateDirectory(Path.Combine(history, "snapshots"));
-        Directory.CreateDirectory(Path.Combine(history, "reports"));
-        Directory.CreateDirectory(Path.Combine(history, "rename-maps"));
-    }
-
     private string HistoryFile(ProjectProfile project) => Path.Combine(BackupRoot(project), "History", "history.jsonl");
 
     private static bool MatchesState(string path, bool shouldExist, string sha256)
@@ -228,24 +204,12 @@ public sealed class HistoryService : IHistoryService
 
     private void Rewrite(ProjectProfile project, IReadOnlyList<HistoryRecord> records)
     {
-        EnsureDirectories(project);
-        var path = HistoryFile(project);
-        WriteLinesAtomically(path, records.Select(record => JsonSerializer.Serialize(record, JsonOptions)));
+        using var projectLock = Ccz.HistoryStorage.ProjectWriteLock.Acquire(project.RootPath);
+        var existing = ListV3(project).ToDictionary(record => record.Id, StringComparer.Ordinal);
+        foreach (var record in records)
+            if (!existing.TryGetValue(record.Id, out var previous)) WriteV3Record(project, record, "Record");
+            else if (previous.Status != record.Status || previous.KeepForever != record.KeepForever)
+                AppendV3State(project, record.Id, record.Status, record.KeepForever);
     }
 
-    private static void WriteLinesAtomically(string path, IEnumerable<string> lines)
-    {
-        var temporary = path + ".tmp." + Guid.NewGuid().ToString("N");
-        try
-        {
-            using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-            {
-                using (var writer = new StreamWriter(stream, new UTF8Encoding(false), 4096, leaveOpen: true))
-                    foreach (var line in lines) writer.WriteLine(line);
-                stream.Flush(flushToDisk: true);
-            }
-            File.Move(temporary, path, true);
-        }
-        finally { ResourceFileRecovery.TryDelete(temporary); }
-    }
 }

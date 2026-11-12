@@ -6,9 +6,13 @@
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\HistoryStorage\HistoryStorage.csproj" />
     <PackageReference Include="DocumentFormat.OpenXml" Version="3.3.0" />
     <PackageReference Include="Iced" Version="1.21.0" />
     <Compile Include="..\..\..\形象管理器\src\Shared\SImageNumberingRules.cs" Link="Shared\SImageNumberingRules.cs" />
     <EmbeddedResource Include="..\..\config\profiles\*.json" Link="Profiles\%(Filename)%(Extension)" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\EngineGrowth.Core\EngineGrowth.Core.csproj" />
   </ItemGroup>
 </Project>

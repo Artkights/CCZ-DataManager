@@ -136,14 +136,12 @@ internal static class RsImageAppearanceSyncTests
         var saveBefore = File.ReadAllBytes(fixture.SavePath);
         var canonical = ProjectImageHistory.Canonicalize(fixture.Profile);
         var history = ProjectImageHistory.Create(canonical);
-        var journal = Path.Combine(history.BackupRoot(canonical), "History", "history.jsonl");
-        Directory.CreateDirectory(Path.GetDirectoryName(journal)!);
         MutationResult result;
-        using (var locked = new FileStream(journal, FileMode.Create, FileAccess.ReadWrite, FileShare.None))
+        using (HistoryV3TestSupport.LockAtAppend("Commit"))
             result = ProjectImageHistory.Commit(fixture.Profile, Replace(fixture.RPath, 1, [71, 72]));
         TestSupport.Assert(!result.Success && File.ReadAllBytes(fixture.RPath).AsSpan().SequenceEqual(imageBefore) &&
             File.ReadAllBytes(fixture.SavePath).AsSpan().SequenceEqual(saveBefore), "图片历史最终写入失败没有回滚图片与成功同步的存档");
-        TestSupport.Assert(ProjectImageHistory.List(fixture.Profile).Count == 0, "图片失败后留下成功同步历史");
+        TestSupport.Assert(ProjectImageHistory.List(fixture.Profile).All(item => item.Status != HistoryStatus.Active), "图片失败后留下成功同步历史");
         Console.WriteLine("[RS_APPEARANCE] 历史晚期失败回滚图片和存档通过");
     });
 
@@ -221,10 +219,8 @@ internal static class RsImageAppearanceSyncTests
         var session = SaveAppearanceSyncService.Prepare(fixture.Root, "ccz-6.5",
             File.ReadAllBytes(Path.Combine(fixture.Root, "Ekd5.exe")), [new PersonAppearanceUpdate(0, RId: 0)]);
         var history = ProjectImageHistory.Create(ProjectImageHistory.Canonicalize(fixture.Profile));
-        var plan = Replace(fixture.RPath, 1, [85, 86]) with
-        {
-            Metadata = new LateHistoryFailureMetadata(() => File.WriteAllBytes(fixture.SavePath, external))
-        };
+        var plan = Replace(fixture.RPath, 1, [85, 86]);
+        using var failure = HistoryV3TestSupport.LockAtAppend("Commit", () => File.WriteAllBytes(fixture.SavePath, external));
         var result = new ImageMutationService(history).Commit(fixture.Profile, plan, directory =>
         {
             session.Commit();

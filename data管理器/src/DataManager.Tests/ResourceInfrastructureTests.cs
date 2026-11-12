@@ -138,7 +138,7 @@ internal static class ResourceInfrastructureTests
         TestSupport.Assert(history.Redo(root, result.HistoryId!).Success && HistoryService.HashFile(path) == after,
             "统一资源历史重做没有恢复写后文件");
         var directory = DataManager.Core.History.ProjectHistoryPaths.GetImageRoot(root);
-        TestSupport.Assert(Directory.EnumerateFiles(directory, "history.jsonl", SearchOption.AllDirectories).Count() == 1,
+        TestSupport.Assert(Directory.EnumerateFiles(directory, "events-*.jsonl", SearchOption.AllDirectories).Count() == 1,
             "资源历史在本项目程序侧目录中出现重复 journal");
         File.AppendAllText(path, "外部修改");
         TestSupport.Assert(!history.Undo(root, result.HistoryId!).Success, "资源历史没有检查外部文件 SHA 冲突");
@@ -179,9 +179,13 @@ internal static class ResourceInfrastructureTests
             TestSupport.Assert(first != null, "缓存竞态回归没有完成首次解码");
         // Recreate the precise scheduling window after Populate completes but
         // before its caller's finally removes the completed in-flight task.
-        var inflight = (System.Collections.Concurrent.ConcurrentDictionary<string, Task>)typeof(ImagePreviewService)
+        var inflight = typeof(ImagePreviewService)
             .GetField("_inflight", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(service)!;
-        inflight[cache.LastStoredKey!] = Task.CompletedTask;
+        var requestType = inflight.GetType().GenericTypeArguments[1];
+        using var completedCancellation = new CancellationTokenSource();
+        var completedRequest = Activator.CreateInstance(requestType, Path.GetFullPath(descriptor.SourcePath), completedCancellation, Task.CompletedTask)!;
+        requestType.GetProperty("Completed")!.SetValue(completedRequest, true);
+        inflight.GetType().GetProperty("Item")!.SetValue(inflight, completedRequest, [cache.LastStoredKey!]);
         service.InvalidatePaths([descriptor.SourcePath]);
         using var refreshed = service.GetThumbnailAsync(profile, new SolidCatalog(Color.Blue), asset, descriptor, new Size(16, 16), true).GetAwaiter().GetResult();
         TestSupport.Assert(refreshed?.GetPixel(0, 0).ToArgb() == Color.Blue.ToArgb(),
@@ -226,14 +230,16 @@ internal static class ResourceInfrastructureTests
         using var service = new ImagePreviewService();
         var pending = service.GetThumbnailAsync(profile, new SolidCatalog(Color.Red, entered, release), asset, descriptor,
             new Size(16, 16), true, cancellation.Token);
-        var inflight = (System.Collections.Concurrent.ConcurrentDictionary<string, Task>)typeof(ImagePreviewService)
+        var inflight = typeof(ImagePreviewService)
             .GetField("_inflight", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(service)!;
+        int InflightCount() => (int)inflight.GetType().GetProperty("Count")!.GetValue(inflight)!;
         try
         {
             TestSupport.Assert(entered.Wait(TimeSpan.FromSeconds(5)), "取消请求回归未进入可控后台解码");
-            TestSupport.Assert(SpinWait.SpinUntil(() => inflight.Count == 1, TimeSpan.FromSeconds(5)),
+            TestSupport.Assert(SpinWait.SpinUntil(() => InflightCount() == 1, TimeSpan.FromSeconds(5)),
                 "可控后台解码没有登记共享任务");
-            var population = inflight.Values.Single();
+            var request = ((System.Collections.IEnumerable)inflight.GetType().GetProperty("Values")!.GetValue(inflight)!).Cast<object>().Single();
+            var population = (Task)request.GetType().GetProperty("Task")!.GetValue(request)!;
             cancellation.Cancel();
             try
             {
@@ -241,10 +247,10 @@ internal static class ResourceInfrastructureTests
                 throw new InvalidOperationException("已取消的缩略图等待者仍返回图片");
             }
             catch (OperationCanceledException) { }
-            TestSupport.Assert(!population.IsCompleted && inflight.Count == 1, "等待者取消时后台共享解码意外结束");
+            TestSupport.Assert(InflightCount() == 0, "最后等待者取消后共享请求仍占用有效队列");
             release.Set();
-            population.GetAwaiter().GetResult();
-            TestSupport.Assert(SpinWait.SpinUntil(() => inflight.IsEmpty, TimeSpan.FromSeconds(5)),
+            try { population.GetAwaiter().GetResult(); } catch (OperationCanceledException) { }
+            TestSupport.Assert(SpinWait.SpinUntil(() => InflightCount() == 0, TimeSpan.FromSeconds(5)),
                 "所有等待者取消后已完成的缩略图解码永久残留在inflight中");
         }
         finally { release.Set(); }

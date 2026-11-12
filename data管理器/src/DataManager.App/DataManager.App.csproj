@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
@@ -9,15 +9,21 @@
     <AssemblyName>data管理器</AssemblyName>
     <RootNamespace>DataManager.App</RootNamespace>
     <ApplicationIcon>Assets\About\Doro-white.ico</ApplicationIcon>
-    <Version>1.2026.1101.114</Version>
-    <InformationalVersion>1.2026.1101.114</InformationalVersion>
+    <Version>1.2026.1112.1</Version>
+    <InformationalVersion>1.2026.1112.1</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="..\SharedUi\ManagerUiStyle.cs" Link="SharedUi\ManagerUiStyle.cs" />
     <Content Include="..\..\..\形象管理器\docs\第三方组件许可-ImageSharp.txt" Link="第三方组件许可-ImageSharp.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="..\..\文档\第三方组件许可-Iced.txt" Link="第三方组件许可-Iced.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\..\文档\第三方组件许可-OpenXML.txt" Link="第三方组件许可-OpenXML.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\..\文档\第三方组件许可-System.IO.Packaging.txt" Link="第三方组件许可-System.IO.Packaging.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\..\文档\第三方声明-System.IO.Packaging.txt" Link="第三方声明-System.IO.Packaging.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <EmbeddedResource Include="Assets\About\Doro-white.ico"
                       LogicalName="DataManager.App.Assets.About.Doro-white.ico" />
     <ProjectReference Include="..\DataManager.Core\DataManager.Core.csproj" />
     <ProjectReference Include="..\DataManager.Images\DataManager.Images.csproj" />
+    <ProjectReference Include="..\RangeManager.Components\RangeManager.Components.csproj" />
   </ItemGroup>
 </Project>

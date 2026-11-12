@@ -289,6 +289,9 @@ internal static class AnimationPreviewUiTests
         TestSupport.Assert(!Field<System.Windows.Forms.Timer>(player, "_timer").Enabled, "隐藏页面没有停止播放");
         selector.SelectedIndex = 3;
         WaitUntil(() => page.LoadingTask.IsCompleted && gallery.ItemCount == 1, "单文件大动画筛选失败");
+        TestSupport.Assert(gallery.RealizedCount == 0, "停用但可见的动画图库在单文件筛选后重新创建卡片");
+        page.ActivateGallery();
+        WaitUntil(() => gallery.RealizedCount == 1, "启用后没有恢复单文件大动画卡片");
         TestSupport.Assert(((LogicalImageAsset)gallery.RealizedControls.Single().Tag!).LogicalId == 10,
             "单文件筛选没有保留真实来源编号");
         Console.WriteLine("Mcall 全部汇总、数值排序、坏项隔离、单文件筛选、点击焦点、两项播放缓存和稳定卡片通过。");

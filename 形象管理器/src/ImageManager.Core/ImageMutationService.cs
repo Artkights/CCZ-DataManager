@@ -1,6 +1,6 @@
 namespace ImageManager.Core;
 
-public sealed class ImageMutationService : IImageMutationService
+public sealed partial class ImageMutationService : IImageMutationService
 {
     private readonly HistoryService _history;
     private readonly IItemIconDerivationService _itemIcons = new ItemIconDerivationService();
@@ -509,8 +509,11 @@ public sealed class ImageMutationService : IImageMutationService
     /// companions are restored only while every current file matches its before/after hash.
     /// </summary>
     public MutationResult Commit(ProjectProfile project, MutationPlan plan,
-        Func<string, IReadOnlyList<HistoryTarget>>? afterPrimaryWrite, Action? rollbackCompanions = null)
+        Func<string, IReadOnlyList<HistoryTarget>>? afterPrimaryWrite, Action? rollbackCompanions = null,
+        IReadOnlyList<HistoryTarget>? preparedCompanionTargets = null)
     {
+        using var projectWriteLock = Ccz.HistoryStorage.ProjectWriteLock.Acquire(project.RootPath);
+        _history.Recover(project);
         EnsureWritable(project);
         if (plan.Files.Count == 0) throw new InvalidOperationException("事务没有目标文件。");
         var duplicate = plan.Files.GroupBy(file => Path.GetFullPath(file.TargetPath), StringComparer.OrdinalIgnoreCase)
@@ -522,6 +525,7 @@ public sealed class ImageMutationService : IImageMutationService
         var staged = new List<(MutationFile File, string? TempPath)>();
         var written = new List<HistoryTarget>();
         IReadOnlyList<HistoryTarget> companions = [];
+        var historyPrepared = false;
         try
         {
             if (plan.SourceSnapshots != null)
@@ -548,36 +552,22 @@ public sealed class ImageMutationService : IImageMutationService
                 if (file.DeleteTarget && !beforeExists) throw new FileNotFoundException("待删除资源不存在。", targetPath);
                 if (!beforeExists && !file.AllowCreate) throw new FileNotFoundException("目标资源不存在。", targetPath);
                 if (!file.DeleteTarget) ValidateCandidate(project, targetPath, file.CandidateBytes);
-                var safeName = targets.Count.ToString("D3") + "_" + Path.GetFileName(targetPath);
-                var beforeSnapshot = Path.Combine(snapshotDirectory, safeName + ".before");
-                var afterSnapshot = Path.Combine(snapshotDirectory, safeName + ".after");
-                if (beforeExists) File.Copy(targetPath, beforeSnapshot, false);
-                if (beforeExists) File.SetAttributes(beforeSnapshot, FileAttributes.Normal);
-                if (beforeExists) ResourceFileRecovery.Verify(beforeSnapshot, true, file.ExpectedSource.Length, file.ExpectedSource.Sha256);
-                if (!file.DeleteTarget) File.WriteAllBytes(afterSnapshot, file.CandidateBytes);
+                var historyTarget = _history.CaptureMutationTarget(project, file);
                 string? temporary = null;
                 if (!file.DeleteTarget)
                 {
                     temporary = targetPath + ".imagemanager." + plan.OperationId + ".tmp";
                     staged.Add((file, temporary));
-                    File.WriteAllBytes(temporary, file.CandidateBytes);
+                    using (var output = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                    { output.Write(file.CandidateBytes); output.Flush(flushToDisk: true); }
                 }
                 else staged.Add((file, null));
-                targets.Add(new HistoryTarget
-                {
-                    TargetPath = targetPath,
-                    SnapshotPath = beforeSnapshot,
-                    AfterSnapshotPath = afterSnapshot,
-                    BeforeSha256 = beforeExists ? HistoryService.HashFile(beforeSnapshot) : string.Empty,
-                    AfterSha256 = file.DeleteTarget ? string.Empty : HistoryService.HashFile(afterSnapshot),
-                    BeforeLength = beforeExists ? new FileInfo(beforeSnapshot).Length : 0,
-                    AfterLength = file.DeleteTarget ? 0 : file.CandidateBytes.LongLength,
-                    BeforeExists = beforeExists,
-                    AfterExists = !file.DeleteTarget,
-                    BeforeAttributes = beforeExists ? File.GetAttributes(targetPath) : null,
-                    AfterAttributes = beforeExists ? File.GetAttributes(targetPath) : FileAttributes.Normal
-                });
+                targets.Add(historyTarget);
             }
+
+            _history.PrepareMutation(project, plan, targets.Concat(preparedCompanionTargets ?? [])
+                .DistinctBy(target => target.TargetPath, StringComparer.OrdinalIgnoreCase).ToArray());
+            historyPrepared = true;
 
             // Check every dependency again after staging, before the first real replacement.
             if (plan.SourceSnapshots != null)
@@ -648,6 +638,9 @@ public sealed class ImageMutationService : IImageMutationService
                 catch (Exception restore) { recoveryErrors.Add("伴随文件恢复失败：" + restore.Message); }
             }
             recoveryErrors.AddRange(ResourceFileRecovery.RestoreAll(written.Except(companions), useAfter: false));
+            if (historyPrepared)
+                try { _history.AbortMutation(project, plan.OperationId, recoveryErrors.Count != 0); }
+                catch (Exception history) { recoveryErrors.Add("历史事务状态：" + history.Message); }
             return new MutationResult(plan.OperationId, false, plan.Summary, null,
                 recoveryErrors.Count == 0 ? Array.Empty<string>() : written.Select(target => target.TargetPath).ToArray(),
                 [ex.Message, .. recoveryErrors,

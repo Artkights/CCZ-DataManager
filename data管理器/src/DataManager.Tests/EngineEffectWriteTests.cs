@@ -25,7 +25,7 @@ internal static class EngineEffectWriteTests
             var site = row.CallSiteDetails[0];
             var personal = site.PersonalEffectId!.Value == 1 ? 2 : 1;
             var item = site.ItemEffectId is <= 100 ? site.ItemEffectId!.Value + 1 : 1;
-            var suffix = (byte)((row.SuffixByte!.Value + 1) % (EngineEffectSuffixLabels.MaximumSuffix + 1));
+            var suffix = (byte)((row.SuffixByte!.Value + 1) % (EngineEffectSuffixLabels.MaximumSuffix(report.EngineVersion) + 1));
             var entry = site.EntryTarget == EngineEffectScanService.CoreEntry
                 ? EngineEffectScanService.WrapperEntry
                 : EngineEffectScanService.CoreEntry;
@@ -87,7 +87,7 @@ internal static class EngineEffectWriteTests
             var original = after.Effects.First(itemRow => itemRow.EffectId == row.EffectId);
             TestSupport.Assert(original.Name == "测试特效", "名称复读不一致。");
             TestSupport.Assert(original.SuffixByte == suffix, "后缀复读不一致。");
-            TestSupport.Assert(original.SuffixLabel.Contains(EngineEffectSuffixLabels.Name(suffix), StringComparison.Ordinal), "后缀标签不一致。");
+            TestSupport.Assert(original.SuffixLabel.Contains(EngineEffectSuffixLabels.Name(report.EngineVersion, suffix), StringComparison.Ordinal), "后缀标签不一致。");
             TestSupport.Assert(original.Description == "测试说明", "说明复读不一致。");
             TestSupport.Assert(!original.HasCalls, "原名称行仍绑定已移动的调用点。");
             TestSupport.Assert(!after.ExeSha256.Equals(report.ExeSha256, StringComparison.OrdinalIgnoreCase), "Ekd5.exe 未改变。");
@@ -113,6 +113,7 @@ internal static class EngineEffectWriteTests
             RunCodeCaveWriteTest(sourceRoot);
             RunTableWriteTest(sourceRoot);
             RunNameSlot15Test(sourceRoot);
+            RunCombinedNameSuffixTest(sourceRoot);
             Console.WriteLine("ENGINE_EFFECT_WRITE_TESTS_OK");
         }
         finally
@@ -130,7 +131,7 @@ internal static class EngineEffectWriteTests
         var preview = service.BuildPreview(workspace, report, new EngineEffectWriteRequest
         {
             EffectId = row.EffectId,
-            NewSuffix = (byte)((row.SuffixByte!.Value + 1) % (EngineEffectSuffixLabels.MaximumSuffix + 1))
+            NewSuffix = (byte)((row.SuffixByte!.Value + 1) % (EngineEffectSuffixLabels.MaximumSuffix(report.EngineVersion) + 1))
         });
         TestSupport.Assert(preview.CanWrite, "冲突测试的预览被拒绝。");
         var path = workspace.RootPath + Path.DirectorySeparatorChar + "Ekd5.exe";
@@ -400,6 +401,56 @@ internal static class EngineEffectWriteTests
             TestSupport.Assert(finalRow.SuffixByte == 4 && finalRow.Name == "改名测试",
                 $"后缀写入复读不符：{finalRow.Name}/{finalRow.SuffixByte}");
             TestSupport.Assert(finalRow.NameCapacity == 14, "写入非零后缀后容量应回到 14。");
+        }
+        finally
+        {
+            Directory.Delete(copy, true);
+        }
+    }
+
+    /// <summary>
+    /// A 15-byte name written together with a nonzero suffix must be rejected:
+    /// the name needs a NUL before +0x0F, otherwise the engine reads past the slot.
+    /// A 14-byte name with the same suffix is valid.
+    /// </summary>
+    private static void RunCombinedNameSuffixTest(string sourceRoot)
+    {
+        var copy = TestSupport.CreateCoreCopy(sourceRoot, restoreKnown65Snapshot: false);
+        try
+        {
+            var workspace = new ProjectWorkspace();
+            workspace.Open(copy);
+            var slots = new EngineEffectSlotService();
+            var report = new EngineEffectScanService().Scan(workspace);
+            var row = report.Effects.FirstOrDefault(item =>
+            {
+                if (!item.HasNameSlot || item.SuffixByte != 0 || item.NameCapacity != 15) return false;
+                var raw = slots.ReadNameSlot(workspace, item.EffectId).RawBytes;
+                var terminator = Array.IndexOf(raw, (byte)0);
+                return terminator is >= 0 and < 15;
+            });
+            if (row == null) return;
+
+            var service = new EngineEffectWriteService();
+            var blocked = service.BuildPreview(workspace, report, new EngineEffectWriteRequest
+            {
+                EffectId = row.EffectId,
+                NewName = "测试名称十五字A",
+                NewSuffix = 4
+            });
+            TestSupport.Assert(!blocked.CanWrite &&
+                               blocked.Errors.Any(error => error.Contains("15 字节", StringComparison.Ordinal) ||
+                                                           error.Contains("缩短", StringComparison.Ordinal)),
+                "15 字节名称 + 非零后缀未被拒绝：" + string.Join("；", blocked.Errors));
+
+            var allowed = service.BuildPreview(workspace, report, new EngineEffectWriteRequest
+            {
+                EffectId = row.EffectId,
+                NewName = "测试名称十四字",
+                NewSuffix = 4
+            });
+            TestSupport.Assert(allowed.CanWrite,
+                "14 字节名称 + 非零后缀被拒绝：" + string.Join("；", allowed.Errors));
         }
         finally
         {

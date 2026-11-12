@@ -124,6 +124,16 @@ internal sealed class WorkbookImportPreviewDialog : Form
             args.Value = args.ColumnIndex switch { 0 => change.Sheet, 1 => change.Cell, 2 => change.Id, 3 => change.Field, 4 => change.OldValue, _ => change.NewValue };
         };
         grid.RowCount = preview.ChangedCells;
+        if (preview.Warnings.Count > 0)
+        {
+            var warnings = new TextBox
+            {
+                Dock = DockStyle.Top, Height = 94, Multiline = true, ReadOnly = true,
+                ScrollBars = ScrollBars.Vertical, BackColor = SystemColors.Info,
+                Text = string.Join(Environment.NewLine, preview.Warnings) + "\r\n效果切换只修改效果索引，其余字段按本次导入内容处理。"
+            };
+            Controls.Add(warnings);
+        }
         var footer = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 54, Padding = new Padding(8), FlowDirection = FlowDirection.RightToLeft };
         var confirm = new Button { Text = "确认加入草稿", DialogResult = DialogResult.OK, AutoSize = true, Height = 30 };
         var cancel = new Button { Text = "取消", DialogResult = DialogResult.Cancel, AutoSize = true, Height = 30 };

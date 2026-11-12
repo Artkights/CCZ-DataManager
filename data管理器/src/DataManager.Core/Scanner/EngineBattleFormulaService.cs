@@ -548,6 +548,16 @@ public sealed class EngineBattleFormulaService
             "0x0043C015 C6 05 3C C6 4A 00 03；6.6 0x0043C010 同码", "跨基底差异，只读")
     ];
 
+    private static readonly BattleFormulaConstant[] ShapeRangeConstants =
+    [
+        Fixed("兵种形状表", "80 字节，按兵种 ID 取攻击形状 id", "0x407881", "0x407881", "0x407881",
+            "0x00407877 8A 80 81 78 40 00（6.4/6.5）；6.6 0x0040786D 同码；编辑器 detailed-job-penetration offset=27777", "公式输入，只读"),
+        Fixed("形状 id 上限", "6.4 为 9（10 项跳表）；6.5 为 0xB（12 项）", "9/0xB", "9/0xB", "0xB",
+            "6.4 0x00435D01 cmp al,9；6.5 0x00435D01 cmp al,0xB；6.6 0x00435CFC cmp al,0xB", "跨基底差异，只读"),
+        Fixed("形状分派表", "6.4 跳表 0x435F29；6.5 跳表 0x435EF8；6.6 字节表 0x406235", "0x435F29/0x406235", "0x435EF8/0x406235", "0x406235",
+            "6.4 0x00435D09 jmp [eax*4+435F29h]；6.5 同址 +435EF8h；6.6 0x00435D08 mov al,[eax+406236h]", "跨基底差异，只读")
+    ];
+
     public static readonly IReadOnlyList<BattleFormulaDefinition> Definitions =
     [
         new("hit-curve", "命中", "命中率曲线（物理/策略共用）",
@@ -876,7 +886,16 @@ public sealed class EngineBattleFormulaService
             "全局模式字节 0x4AC63C 决定特效查询走哪条分支；多处合并使用同一套 mode 规则。",
             "0x40B913 直接返回 byte[0x4AC63C]（0x41EDEF 仅是 byte[ecx]），0x40B922 将其与 3 比较；0x4AC63C 的静态写点：0x416A78 置 2、0x416A91 自增到 3、0x43C015 置 3（紧邻策略伤害入口 0x43C022），初值 0。合并函数 0x40BF2F(mode,a,b)：0 求和、1 取大、3 按位或、其它在 a==7 时保留否则取大；0x413009 在 mode==2 且 edx==0 时把 edx 设为 eax 再合并。",
             "0x0040B916 mov ecx,4AC63Ch；0x0040B91B call 0x0041EDEF；0x0041EDF2 movzx eax,byte [ecx]；0x0040B92C cmp al,3 + 0x0040B92E sete cl；0x00416A78 C6 05 3C C6 4A 00 02；0x00416A91 FE 05 3C C6 4A 00；0x0043C015 C6 05 3C C6 4A 00 03；0x0040BF32 test ecx,ecx + 0x0040BF36 add eax,edx + 0x0040BF4C or eax,edx + 0x0040BF50 cmp al,7；0x0041300C cmp ecx,2 + 0x00413015 mov edx,eax + 0x00413017 call 0x0040BF2F",
-            MergeModeConstants)
+            MergeModeConstants),
+        new("attack-shape", "经验", "攻击形状展开（穿透/范围格）",
+            "表 0x407881；id≤9",
+            "表 0x407881；id≤0xB",
+            "表 0x407881；id≤0xB",
+            "一次攻击打哪些格子，由“兵种形状 id”查表后展开；编辑器里的兵种攻击范围字段引擎不读。",
+            "兵种 ID 经 0x406610 取得后查 80 字节表 0x407881 得到形状 id（编辑器称“兵种穿透”）；0x40782D（6.6 为 0x407835）再做覆盖：0x505FDC 非 0 返回 0、0x500E9A==2 时用当前策略范围、否则查特效 0x77..0x7F（6.4/6.5 0x40CC13，6.6 0x45D448）。结果写入 ctx+0x424，随后 0x4364C7(攻方, 守方槽, 形状, ctx+0x11, 0) 调 0x435CE9 按形状展开成目标格列表（0xFF 结尾）。分派方式：6.4 跳表 0x435F29（10 项）、6.5 跳表 0x435EF8（12 项，多 0x40CE50/0x40D000）、6.6 字节表 0x406235[id−1]（00 01 02 61 61 04 61 03 60 01 80）。",
+            "0x00406282 call 0x0040782D + 0x0040628A mov byte [edx+424h],al；0x00406323 call 0x004364C7；0x004364F7 call 0x00435CE9；0x0040786F cmp al,50h + 0x00407877 mov al,[eax+407881h]；0x00435D01 cmp al,9（6.4）/0xB（6.5）+ 0x00435D09 jmp [eax*4+435F29h]/[eax*4+435EF8h]；6.6 0x00435D08 mov al,[eax+406236h]；0x0040CC13 查 0x77..0x7F",
+            ShapeRangeConstants)
+
 
 
 
@@ -1183,6 +1202,15 @@ public sealed class EngineBattleFormulaService
                 new(3, "分派", "byte[0x4AC63C]==3 → 0x4101D9，否则 0x41301E", "0x0040B92C cmp al,3；0x0040B92E sete cl。"),
                 new(4, "合并规则", "0x40BF2F：0=和、1=取大、3=或、其它 a==7 保留否则取大", "0x0040BF36/0x0040BF3F/0x0040BF4C/0x0040BF50。"),
                 new(5, "包装", "0x413009：mode==2 且 edx==0 时 edx=eax，再 0x40BF2F", "0x0041300C/0x00413015/0x00413017。")
+            ],
+            ["attack-shape"] =
+            [
+                new(1, "取形状 id", "兵种 ID = byte[rec+0x2B] → byte[0x407881 + 兵种]", "0x00406610；0x00407877；6.6 0x0040786D。"),
+                new(2, "覆盖判定", "0x505FDC≠0 → 0；0x500E9A==2 → 当前策略范围；否则查特效 0x77..0x7F", "0x00407831-0x00407865；0x0040CC13。"),
+                new(3, "写入上下文", "byte[ctx+0x424] = 形状 id", "0x00406282 call 0x0040782D；0x0040628A mov byte [edx+424h],al。"),
+                new(4, "生成格子", "0x4364C7(攻方, 守方槽, 形状, ctx+0x11, 0) → 0x435CE9", "0x00406323；0x004364F7。"),
+                new(5, "分派", "6.4 跳表 0x435F29[0..9]；6.5 0x435EF8[0..0xB]；6.6 字节表 0x406235", "0x00435D09；6.6 0x00435D08。"),
+                new(6, "未消费字段", "Data.e5 兵种行 +1 与必杀表 +0x0C/+0x0D 引擎不读（无 96×16 装载点）", "14 处 0x41B782 后无 +1 访问；0x4814E0 装载表无该段")
             ]
         };
 

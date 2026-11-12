@@ -2,6 +2,7 @@ using System.Data;
 using System.Globalization;
 using DataManager.Core.Domain;
 using DataManager.Core.Models;
+using System.Runtime.CompilerServices;
 
 namespace DataManager.App;
 
@@ -21,6 +22,17 @@ public sealed partial class MainForm
     private bool _queryInputEdited;
     private string? _queryBoundPage;
     private bool _restoringHideEmpty, _appliedHideEmpty;
+    private sealed class PhysicalQueryFilterState
+    {
+        public string? Applied { get; set; }
+        public string External { get; set; } = string.Empty;
+    }
+    private readonly ConditionalWeakTable<DataTable, PhysicalQueryFilterState> _physicalQueryFilters = new();
+    private sealed record QueryRecordSnapshot(string Version, IReadOnlyList<RecordPresentation> Records)
+    {
+        public Dictionary<string, int> MeasuredWidths { get; } = new(StringComparer.Ordinal);
+    }
+    private readonly Dictionary<string, QueryRecordSnapshot> _queryRecords = new(StringComparer.Ordinal);
 
     private string? QueryPageKey => _businessKind == BusinessPageKind.ExtendData && _businessEditor.ExtendEditor is { } extend
         ? "business:ExtendData:" + extend.Category
@@ -108,18 +120,42 @@ public sealed partial class MainForm
         _queryText.SetBoundValue(string.Empty, filterOptions: true);
         _emptyQueryLabel.Visible = false;
         _querySummary.Text = string.Empty;
+        _queryRecords.Clear();
     }
 
     private IReadOnlyList<RecordPresentation> CurrentQueryRecords()
     {
+        var page = QueryPageKey;
+        if (page == null) return [];
+        var version = string.Join('|', _workspace.Documents.Values.Select(document =>
+            $"{document.Definition.Key}:{RuntimeHelpers.GetHashCode(document)}:{document.Revision}"));
+        if (_businessKind == BusinessPageKind.ExtendData)
+        {
+            var exe = new FileInfo(DataManager.Core.Binary.ProjectFileLocator.Resolve(_workspace.RootPath, "Ekd5.exe"));
+            version += $"|{exe.FullName}:{(exe.Exists ? exe.Length : -1)}:{(exe.Exists ? exe.LastWriteTimeUtc.Ticks : 0)}";
+        }
+        if (_queryRecords.TryGetValue(page, out var cached) && cached.Version == version) return cached.Records;
         var service = new RecordPresentationService(_workspace);
+        IReadOnlyList<RecordPresentation> records;
         if (_businessKind == BusinessPageKind.ExtendData && _businessEditor.ExtendEditor is { } extend)
         {
-            return extend.GetEntityOptions().Select(option => new RecordPresentation(option.Id, option.Name,
+            records = extend.GetEntityOptions().Select(option => new RecordPresentation(option.Id, option.Name,
                 string.Empty)).ToArray();
         }
-        return _businessKind is { } kind ? service.GetBusinessRecords(kind)
+        else records = _businessKind is { } kind ? service.GetBusinessRecords(kind)
             : _currentDocument is { } document ? service.GetTableRecords(document) : [];
+        _queryRecords[page] = new(version, records);
+        return records;
+    }
+
+    private int QueryTextWidth(string page, IReadOnlyList<RecordPresentation> records)
+    {
+        var key = $"{_queryText.Font}:{_queryText.DeviceDpi}";
+        var snapshot = _queryRecords.GetValueOrDefault(page);
+        if (snapshot != null && snapshot.MeasuredWidths.TryGetValue(key, out var cached)) return cached;
+        var measured = records.Select(record => TextRenderer.MeasureText(record.Display, _queryText.Font).Width + 40).DefaultIfEmpty(265).Max();
+        if (snapshot != null) snapshot.MeasuredWidths[key] = measured;
+        return measured;
     }
 
     private void RefreshQueryNavigation(bool bindSelection = true)
@@ -141,8 +177,8 @@ public sealed partial class MainForm
             _queryText.SetOptions(records.Select(record => new IdNameOption(record.Id,
                 string.IsNullOrWhiteSpace(record.Name) ? "未命名" : record.Name)));
             _queryText.SetBoundValue(inputText ?? query, preserveEditSelection: inputText != null, filterOptions: true);
-            _queryText.DropDownWidth = Math.Max(_queryText.Width, Math.Min(760, records
-                .Select(record => TextRenderer.MeasureText(record.Display, _queryText.Font).Width + 40).DefaultIfEmpty(265).Max()));
+            var dropDownWidth = Math.Max(_queryText.Width, Math.Min(760, QueryTextWidth(pageKey, records)));
+            if (_queryText.DropDownWidth != dropDownWidth) _queryText.DropDownWidth = dropDownWidth;
             var currentId = _queryBoundPage == pageKey ? (_entityList.SelectedItem as EntityChoice)?.Id : null;
             _queryBoundPage = pageKey;
             if (_businessKind is not null) currentId ??= _businessEditor.CurrentId;
@@ -151,6 +187,13 @@ public sealed partial class MainForm
             if (_currentDocument is { } document)
             {
                 var clauses = new List<string>();
+                var filterState = _physicalQueryFilters.GetOrCreateValue(document.Data);
+                var currentFilter = document.Data.DefaultView.RowFilter ?? string.Empty;
+                // A caller can supply a DataView filter independently of the
+                // shell query. Deferred name refreshes and undo must preserve
+                // that view instead of silently expanding the editable rows.
+                if (filterState.Applied != currentFilter) filterState.External = currentFilter;
+                if (filterState.External.Length > 0) clauses.Add("(" + filterState.External + ")");
                 if (_hideEmpty.Checked) clauses.Add("(" + NonEmptyRowFilter(document.Data) + ")");
                 if (query.Length > 0)
                 {
@@ -159,6 +202,7 @@ public sealed partial class MainForm
                 }
                 var expression = string.Join(" AND ", clauses);
                 if (document.Data.DefaultView.RowFilter != expression) document.Data.DefaultView.RowFilter = expression;
+                filterState.Applied = expression;
                 var visibleIds = document.Data.DefaultView.Cast<DataRowView>().Select(row => Convert.ToInt32(row["ID"], CultureInfo.InvariantCulture)).ToHashSet();
                 matches = matches.Where(record => visibleIds.Contains(record.Id));
             }
@@ -181,8 +225,14 @@ public sealed partial class MainForm
             _entityList.BeginUpdate();
             try
             {
-                _entityList.Items.Clear();
-                foreach (var record in filtered) _entityList.Items.Add(new EntityChoice(record.Id, record.Name));
+                var sameItems = _entityList.Items.Count == filtered.Length &&
+                    _entityList.Items.Cast<object>().OfType<EntityChoice>().Select(entity => (entity.Id, entity.Name))
+                        .SequenceEqual(filtered.Select(record => (record.Id, record.Name)));
+                if (!sameItems)
+                {
+                    _entityList.Items.Clear();
+                    foreach (var record in filtered) _entityList.Items.Add(new EntityChoice(record.Id, record.Name));
+                }
                 _quickLookup.SetOptions(records.Select(record => new IdNameOption(record.Id, record.Name)));
                 var selected = Array.FindIndex(filtered, record => record.Id == currentId);
                 _entityList.SelectedIndex = selected >= 0 ? selected : filtered.Length > 0 ? 0 : -1;

@@ -93,7 +93,7 @@ internal static class UiCleanupNavigationTests
         TestSupport.Assert(!Descendants(panel).OfType<GroupBox>().Any(group => group.Text is "人物与初始装备" or "人物形象指定" or "人物列传" or "暴击与撤退台词"),
             "人物冗余分组标题仍可见");
         var cards = Descendants(panel).OfType<ResourcePreviewCard>().OrderBy(card => card.PointToScreen(Point.Empty).X).ToArray();
-        var expected = is66 ? new[] { "头像", "半身像", "R ", "S " } : new[] { "头像", "R ", "S " };
+        var expected = new[] { "头像", "R ", "S " };
         TestSupport.Assert(cards.Length == expected.Length && cards.Select((card, index) => card.Text.StartsWith(expected[index], StringComparison.Ordinal) || expected[index] == "S " && card.Text == "默认S").All(matches => matches),
             "人物预览顺序或数量错误");
     }

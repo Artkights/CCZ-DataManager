@@ -31,7 +31,8 @@ public sealed class EffectNamePoolProbe
         if (first.Count != 1 || second.Count != 1 || first[0].Address != second[0].Address)
             return Failed($"未找到唯一一致的两个特技名称消费者（A={first.Count}，B={second.Count}）；特技名称使用数字 ID。", hash);
         var va = (ulong)first[0].Address;
-        if (rowCount is not (180 or 255)) throw new ArgumentOutOfRangeException(nameof(rowCount));
+        if (rowCount is <= 0 or > 255)
+            return Failed("特技名称池行数超出 1..255，使用数字 ID。", hash);
         var poolLength = rowCount * 16;
         if (va < imageBase || va - imageBase > uint.MaxValue)
             return Failed("特技名称地址不在项目 PE 映射内，使用数字 ID。", hash);
@@ -47,17 +48,26 @@ public sealed class EffectNamePoolProbe
         for (var id = 0; id < rowCount; id++)
         {
             var raw = bytes.AsSpan(checked((int)offset + id * 16), 16);
-            var end = raw.IndexOf((byte)0);
-            if (end < 0) return Failed($"特技名称槽 {id} 缺少 NUL 结束符，使用数字 ID。", hash);
+            // +0x0F is the suffix type code, not part of the name. A valid
+            // 15-byte name therefore has no NUL inside the slot.
+            var payload = raw[..15];
+            var end = payload.IndexOf((byte)0);
+            if (end >= 0) payload = payload[..end];
+            if (payload.Length == 0)
+            {
+                names[id] = string.Empty;
+                continue;
+            }
             string name;
-            try { name = EncodingService.GameEncoding.GetString(raw[..end]); }
+            try { name = EncodingService.GameEncoding.GetString(payload); }
             catch (System.Text.DecoderFallbackException)
             { return Failed($"特技名称槽 {id} 含无效 GBK，使用数字 ID。", hash); }
             if (name.Any(char.IsControl)) return Failed($"特技名称槽 {id} 含控制字符，使用数字 ID。", hash);
             names[id] = name;
         }
         return new(true, names,
-            $"特技名称：两个独立消费者 +0x{first[0].Offset:X}/+0x{second[0].Offset:X} → VA 0x{va:X} → 文件 +0x{offset:X}；{rowCount}×16 字节，严格 GBK；EXE SHA-256 {hash}。",
+            $"特技名称：两个独立消费者 +0x{first[0].Offset:X}/+0x{second[0].Offset:X} → VA 0x{va:X} → 文件 +0x{offset:X}；" +
+            $"{rowCount}×16 字节（15 字节名称 + 1 字节尾码），严格 GBK；EXE SHA-256 {hash}。",
             hash, offset, va);
     }
 

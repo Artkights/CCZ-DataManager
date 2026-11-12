@@ -10,6 +10,7 @@ public sealed partial class BusinessEditorPanel
     private Action? _accessoryDraftRefresh;
     private string? _runtimeEvidenceHash;
     private bool _runtimeEvidenceVerified;
+    public string? LastValidationError { get; private set; }
 
     private bool RuntimeConsumersVerified()
     {
@@ -52,6 +53,7 @@ public sealed partial class BusinessEditorPanel
 
     private void ShowEditorError(Control editor, string message, bool focus = true)
     {
+        LastValidationError = message;
         _errors.SetError(editor, message);
         _status.Text = message; _status.ForeColor = Color.Firebrick; _status.Visible = true;
         if (!focus) return;

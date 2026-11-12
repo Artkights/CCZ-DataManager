@@ -1,4 +1,6 @@
+﻿using ImageManager.Core;
 using System.Globalization;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 
 namespace DataManager.App;
@@ -11,9 +13,11 @@ public sealed class SearchableIdComboBox : ComboBox
 {
     private readonly List<IdNameOption> _options = new();
     private readonly Dictionary<int, Bitmap?> _thumbnails = new();
+    private readonly Dictionary<int, long> _thumbnailVersions = new();
     private readonly LinkedList<int> _thumbnailLru = new();
     private readonly Dictionary<int, LinkedListNode<int>> _thumbnailNodes = new();
     private long _thumbnailBytes;
+    private readonly Dictionary<int, ImageResourceCoordinator.PixelLease> _thumbnailLeases = new();
     private const int MaximumThumbnailCount = 96;
     private const long MaximumThumbnailBytes = 4L * 1024 * 1024;
     private readonly HashSet<int> _loading = new();
@@ -21,12 +25,22 @@ public sealed class SearchableIdComboBox : ComboBox
     private CancellationTokenSource _previewCancellation = new();
     private bool _updating;
     private bool _releaseCompleted;
+    private bool _previewActive = true;
     private bool _bindingSelectionPending;
     private bool _bindingSelectionQueued;
     private bool _boundValueUntouched;
     private int _interactionRevision;
+    private long _editBindingRevision;
+    private SuspendedEdit? _suspendedEdit;
+    private bool _suspendedEditRestoreQueued;
     private bool _idOnly;
+    private bool _rangePreviewMode;
     private string _displayFilterText = string.Empty;
+    private long _optionsVersion;
+    private (long Version, string Query, bool Range, bool Display)? _itemsBinding;
+    private int _boundItemCount;
+
+    private const int RangePreviewImageLogicalSize = 64;
 
     public SearchableIdComboBox()
     {
@@ -39,6 +53,19 @@ public sealed class SearchableIdComboBox : ComboBox
 
     public IReadOnlyList<IdNameOption> Options => _options;
 
+    [AllowNull]
+    public override string Text
+    {
+        get => base.Text;
+        set
+        {
+            // Explicit managed assignments do not raise OnTextUpdate. They
+            // supersede any edit snapshot awaiting restoration after showing.
+            if (!_updating) { _editBindingRevision++; _suspendedEdit = null; }
+            base.Text = value;
+        }
+    }
+
     /// <summary>Match the literal ID：name label, including its separator and unnamed label.</summary>
     public bool MatchDisplayText { get; set; }
 
@@ -46,18 +73,87 @@ public sealed class SearchableIdComboBox : ComboBox
     public bool IdOnly
     {
         get => _idOnly;
-        set { _idOnly = value; FormattingEnabled = value; }
+        set { _idOnly = value; FormattingEnabled = value || _rangePreviewMode; UpdateRangeDropDownMetrics(); Invalidate(); }
+    }
+
+    /// <summary>
+    /// Presents a range field as a numeric editor while retaining the decoded
+    /// range image in each popup row. Names and diagnostic labels remain in the
+    /// option model but are intentionally not painted in this mode.
+    /// </summary>
+    public bool RangePreviewMode
+    {
+        get => _rangePreviewMode;
+        set
+        {
+            if (_rangePreviewMode == value) return;
+            _rangePreviewMode = value;
+            FormattingEnabled = _idOnly || value;
+            UpdateRangeDropDownMetrics();
+            Invalidate();
+        }
     }
 
     public string GetDisplayText(IdNameOption option)
-        => IdOnly ? option.Id.ToString(CultureInfo.InvariantCulture) : option.Display;
+        => IdOnly || RangePreviewMode ? option.Id.ToString(CultureInfo.InvariantCulture) : option.Display;
 
     public event EventHandler<int>? UnknownValueSubmitted;
+
+    internal void SetPreviewActive(bool active)
+    {
+        if (_releaseCompleted || _previewActive == active) return;
+        _previewActive = active;
+        if (!active) { CaptureSuspendedEdit(); SuspendPreviews(); }
+        else { QueueSuspendedEditRestore(); RefreshPreviewWindow(); }
+    }
+
+    private sealed record SuspendedEdit(string Text, int Start, int Length, int Interaction, long Binding, long Options);
+
+    private void CaptureSuspendedEdit()
+    {
+        _suspendedEdit ??= new(Text, SelectionStart, SelectionLength, _interactionRevision, _editBindingRevision, _optionsVersion);
+    }
+
+    private void QueueSuspendedEditRestore()
+    {
+        if (_suspendedEdit == null || _suspendedEditRestoreQueued || !_previewActive || !Visible ||
+            !IsHandleCreated || _releaseCompleted || IsDisposed || Disposing) return;
+        var edit = _suspendedEdit;
+        _suspendedEditRestoreQueued = true;
+        // Native layout can replace a typed ID prefix with the selected item's
+        // label while this view is inactive. Restore only this unchanged edit,
+        // after showing/layout, without binding or submitting a new value.
+        BeginInvoke((Action)(() =>
+        {
+            _suspendedEditRestoreQueued = false;
+            if (_releaseCompleted || IsDisposed || Disposing || !_previewActive || !Visible) return;
+            if (!ReferenceEquals(edit, _suspendedEdit)) { QueueSuspendedEditRestore(); return; }
+            if (edit.Interaction != _interactionRevision || edit.Binding != _editBindingRevision || edit.Options != _optionsVersion)
+            { _suspendedEdit = null; return; }
+            var wasUpdating = _updating;
+            _updating = true;
+            try
+            {
+                if (Text != edit.Text) Text = edit.Text;
+                SelectionStart = Math.Min(edit.Start, Text.Length);
+                SelectionLength = Math.Min(edit.Length, Text.Length - SelectionStart);
+                _bindingSelectionPending = false;
+                _suspendedEdit = null;
+            }
+            finally { _updating = wasUpdating; }
+        }));
+    }
+
+    private void SuspendPreviews()
+    {
+        _previewCancellation.Cancel(); _previewCancellation.Dispose(); _previewCancellation = new CancellationTokenSource();
+        _loading.Clear(); ClearThumbnails();
+    }
 
     protected override void OnFormat(ListControlConvertEventArgs e)
     {
         base.OnFormat(e);
-        if (IdOnly && e.ListItem is IdNameOption option) e.Value = GetDisplayText(option);
+        if ((IdOnly || RangePreviewMode) && e.ListItem is IdNameOption option) e.Value = GetDisplayText(option);
     }
 
     /// <summary>The loader returns a caller-owned thumbnail; painting never performs file I/O.</summary>
@@ -72,7 +168,29 @@ public sealed class SearchableIdComboBox : ComboBox
         DrawMode = loader == null ? DrawMode.Normal : DrawMode.OwnerDrawVariable;
         MaxDropDownItems = loader == null ? 18 : 8;
         DropDownHeight = loader == null ? 360 : 440;
+        UpdateRangeDropDownMetrics();
         Invalidate();
+    }
+
+    private void UpdateRangeDropDownMetrics()
+    {
+        if (!_rangePreviewMode || _previewLoader == null) return;
+        var image = RangePreviewImagePixels;
+        DropDownWidth = Math.Max(Width, image + 84 * DeviceDpi / 96);
+    }
+
+    private int RangePreviewImagePixels
+        => Math.Max(1, (int)Math.Round(RangePreviewImageLogicalSize * DeviceDpi / 96d));
+
+    public void InvalidatePreviewIds(IEnumerable<int> ids)
+    {
+        foreach (var id in ids.Distinct())
+        {
+            _thumbnailVersions[id] = _thumbnailVersions.GetValueOrDefault(id) + 1;
+            RemoveThumbnail(id);
+            _loading.Remove(id);
+        }
+        RefreshPreviewWindow();
     }
 
     public void SetOptions(IEnumerable<IdNameOption> options, bool preserveEditSelection = false)
@@ -85,6 +203,7 @@ public sealed class SearchableIdComboBox : ComboBox
         var text = Text;
         _options.Clear();
         _options.AddRange(updated);
+        _optionsVersion++;
         RebuildItems(text);
         if (preserveEditSelection && Focused)
         {
@@ -96,6 +215,8 @@ public sealed class SearchableIdComboBox : ComboBox
     /// <summary>Programmatic binding must not leave the native edit box looking like selected user text.</summary>
     public void SetBoundValue(string value, bool preserveEditSelection = false, bool filterOptions = false)
     {
+        _editBindingRevision++;
+        _suspendedEdit = null;
         var start = SelectionStart;
         var length = SelectionLength;
         var wasUpdating = _updating;
@@ -119,13 +240,20 @@ public sealed class SearchableIdComboBox : ComboBox
         SelectionStart = Text.Length;
         SelectionLength = 0;
         QueueBindingSelectionCleanup();
+        QueueSuspendedEditRestore();
     }
 
     protected override void OnVisibleChanged(EventArgs e)
     {
+        if (!Visible && !_releaseCompleted) CaptureSuspendedEdit();
         base.OnVisibleChanged(e);
+        if (!Visible && !_releaseCompleted)
+        {
+            SuspendPreviews();
+        }
         if (_boundValueUntouched && Visible && !Focused) _bindingSelectionPending = true;
         QueueBindingSelectionCleanup();
+        QueueSuspendedEditRestore();
     }
 
     protected override void OnSizeChanged(EventArgs e)
@@ -133,6 +261,7 @@ public sealed class SearchableIdComboBox : ComboBox
         base.OnSizeChanged(e);
         if (_boundValueUntouched && !Focused) _bindingSelectionPending = true;
         QueueBindingSelectionCleanup();
+        QueueSuspendedEditRestore();
     }
 
     private void QueueBindingSelectionCleanup()
@@ -160,6 +289,7 @@ public sealed class SearchableIdComboBox : ComboBox
     private void MarkUserInteraction()
     {
         _interactionRevision++;
+        _suspendedEdit = null;
         _bindingSelectionPending = false;
         _boundValueUntouched = false;
     }
@@ -274,7 +404,13 @@ public sealed class SearchableIdComboBox : ComboBox
 
     protected override void OnMeasureItem(MeasureItemEventArgs e)
     {
-        e.ItemHeight = _previewLoader == null || e.Index < 0 ? Font.Height + 8 : Math.Max(54, Font.Height + 8);
+        if (_previewLoader == null || e.Index < 0)
+        {
+            e.ItemHeight = Font.Height + 8;
+            return;
+        }
+        var image = _rangePreviewMode ? RangePreviewImagePixels : Math.Max(48, 48 * DeviceDpi / 96);
+        e.ItemHeight = Math.Max(image + 6, Font.Height + 8);
         base.OnMeasureItem(e);
     }
 
@@ -288,7 +424,8 @@ public sealed class SearchableIdComboBox : ComboBox
         var textBounds = Rectangle.Inflate(e.Bounds, -4, 0);
         if (!editing)
         {
-            var bounds = new Rectangle(e.Bounds.Left + 3, e.Bounds.Top + 3, 48, 48);
+            var imageSize = _rangePreviewMode ? RangePreviewImagePixels : Math.Max(48, 48 * DeviceDpi / 96);
+            var bounds = new Rectangle(e.Bounds.Left + 3, e.Bounds.Top + 3, imageSize, imageSize);
             var cached = TryGetThumbnail(option.Id, out var thumbnail);
             if (cached && thumbnail != null)
             {
@@ -297,18 +434,29 @@ public sealed class SearchableIdComboBox : ComboBox
                     Math.Max(1, (int)Math.Round(thumbnail.Height * scale)));
                 var imageBounds = new Rectangle(bounds.Left + (bounds.Width - size.Width) / 2,
                     bounds.Top + (bounds.Height - size.Height) / 2, size.Width, size.Height);
+                var interpolation = e.Graphics.InterpolationMode;
+                var pixelOffset = e.Graphics.PixelOffsetMode;
+                if (_rangePreviewMode)
+                {
+                    e.Graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor;
+                    e.Graphics.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.Half;
+                }
                 e.Graphics.DrawImage(thumbnail, imageBounds);
+                e.Graphics.InterpolationMode = interpolation;
+                e.Graphics.PixelOffsetMode = pixelOffset;
             }
             else
             {
                 using var brush = new SolidBrush(Color.FromArgb(235, 238, 242));
                 e.Graphics.FillRectangle(brush, bounds);
-                TextRenderer.DrawText(e.Graphics, cached ? "无图" : "加载中", Font, bounds, Color.DimGray,
-                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+                if (!_rangePreviewMode)
+                    TextRenderer.DrawText(e.Graphics, cached ? "无图" : "加载中", Font, bounds, Color.DimGray,
+                        TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
                 RequestThumbnail(option.Id);
             }
-            textBounds.X += 54;
-            textBounds.Width = Math.Max(0, textBounds.Width - 54);
+            var imageGap = Math.Max(6, 8 * DeviceDpi / 96);
+            textBounds.X += imageSize + imageGap;
+            textBounds.Width = Math.Max(0, textBounds.Width - imageSize - imageGap);
         }
         TextRenderer.DrawText(e.Graphics, GetDisplayText(option), Font, textBounds, e.ForeColor,
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
@@ -317,14 +465,16 @@ public sealed class SearchableIdComboBox : ComboBox
 
     private async void RequestThumbnail(int id)
     {
-        if (_previewLoader == null || TryGetThumbnail(id, out _) || !_loading.Add(id)) return;
+        if (_releaseCompleted || !_previewActive || !Visible || _previewLoader == null || TryGetThumbnail(id, out _) || !_loading.Add(id)) return;
         var cancellation = _previewCancellation;
+        var version = _thumbnailVersions.GetValueOrDefault(id);
         var loader = _previewLoader;
         Bitmap? bitmap = null;
         try
         {
             bitmap = await loader(id, cancellation.Token);
-            if (cancellation.IsCancellationRequested || IsDisposed || Disposing) return;
+            if (cancellation.IsCancellationRequested || IsDisposed || Disposing || !_previewActive || !Visible ||
+                !ReferenceEquals(cancellation, _previewCancellation) || version != _thumbnailVersions.GetValueOrDefault(id)) return;
             StoreThumbnail(id, bitmap);
             bitmap = null;
             RefreshPreviewWindow();
@@ -332,7 +482,8 @@ public sealed class SearchableIdComboBox : ComboBox
         catch (OperationCanceledException) { }
         catch
         {
-            if (!cancellation.IsCancellationRequested && !IsDisposed)
+            if (!cancellation.IsCancellationRequested && !IsDisposed && !Disposing && _previewActive && Visible &&
+                ReferenceEquals(cancellation, _previewCancellation) && version == _thumbnailVersions.GetValueOrDefault(id))
             {
                 StoreThumbnail(id, null);
                 RefreshPreviewWindow();
@@ -341,7 +492,7 @@ public sealed class SearchableIdComboBox : ComboBox
         finally
         {
             bitmap?.Dispose();
-            if (ReferenceEquals(cancellation, _previewCancellation)) _loading.Remove(id);
+            if (ReferenceEquals(cancellation, _previewCancellation) && version == _thumbnailVersions.GetValueOrDefault(id)) _loading.Remove(id);
         }
     }
 
@@ -350,6 +501,7 @@ public sealed class SearchableIdComboBox : ComboBox
         if (!_thumbnails.TryGetValue(id, out bitmap)) return false;
         var node = _thumbnailNodes[id];
         _thumbnailLru.Remove(node); _thumbnailLru.AddFirst(node);
+        if (_thumbnailLeases.TryGetValue(id, out var lease)) lease.Touch();
         return true;
     }
 
@@ -358,18 +510,29 @@ public sealed class SearchableIdComboBox : ComboBox
         RemoveThumbnail(id);
         _thumbnails[id] = bitmap;
         _thumbnailNodes[id] = _thumbnailLru.AddFirst(id);
-        if (bitmap != null) _thumbnailBytes += (long)bitmap.Width * bitmap.Height * 4;
+        if (bitmap != null)
+        {
+            var bytes = (long)bitmap.Width * bitmap.Height * 4; _thumbnailBytes += bytes;
+            _thumbnailLeases[id] = ImageResourceCoordinator.Shared.RegisterPixels(bytes, "picker-thumbnail", () =>
+            {
+                void Reclaim() { if (_thumbnails.TryGetValue(id, out var live) && ReferenceEquals(live, bitmap)) { RemoveThumbnail(id); RefreshPreviewWindow(); } }
+                if (IsDisposed) return;
+                if (InvokeRequired) { try { BeginInvoke((Action)Reclaim); } catch (InvalidOperationException) { } } else Reclaim();
+            });
+        }
         // A custom loader may return one oversized image. Keep that one usable,
         // while normal 48x48 picker images remain bounded by both budgets.
         while (_thumbnails.Count > MaximumThumbnailCount ||
                _thumbnailBytes > MaximumThumbnailBytes && _thumbnails.Count > 1)
             RemoveThumbnail(_thumbnailLru.Last!.Value);
+        ImageResourceCoordinator.Shared.TrimPixels();
     }
 
     private void RemoveThumbnail(int id)
     {
         if (!_thumbnails.Remove(id, out var bitmap)) return;
         _thumbnailLru.Remove(_thumbnailNodes[id]); _thumbnailNodes.Remove(id);
+        if (_thumbnailLeases.Remove(id, out var lease)) lease.Dispose();
         if (bitmap == null) return;
         _thumbnailBytes -= (long)bitmap.Width * bitmap.Height * 4;
         bitmap.Dispose();
@@ -377,6 +540,7 @@ public sealed class SearchableIdComboBox : ComboBox
 
     private void ClearThumbnails()
     {
+        foreach (var lease in _thumbnailLeases.Values) lease.Dispose(); _thumbnailLeases.Clear();
         foreach (var bitmap in _thumbnails.Values) bitmap?.Dispose();
         _thumbnails.Clear(); _thumbnailLru.Clear(); _thumbnailNodes.Clear(); _thumbnailBytes = 0;
     }
@@ -425,9 +589,17 @@ public sealed class SearchableIdComboBox : ComboBox
     {
         if (MatchDisplayText) _displayFilterText = query;
         var trimmed = query.Trim();
+        var binding = (_optionsVersion, trimmed, RangePreviewMode, MatchDisplayText);
+        if (_itemsBinding == binding && Items.Count == _boundItemCount)
+        {
+            var value = displayText ?? query;
+            if (Text != value) Text = value;
+            return;
+        }
         var filtered = string.IsNullOrWhiteSpace(trimmed)
             ? _options
-            : _options.Where(option => MatchDisplayText ? option.Display.Contains(trimmed, StringComparison.OrdinalIgnoreCase) :
+            : _options.Where(option => RangePreviewMode ? option.Id.ToString(CultureInfo.InvariantCulture).Contains(trimmed, StringComparison.OrdinalIgnoreCase) :
+                                       MatchDisplayText ? option.Display.Contains(trimmed, StringComparison.OrdinalIgnoreCase) :
                                        option.Id.ToString(CultureInfo.InvariantCulture).Contains(trimmed, StringComparison.OrdinalIgnoreCase) ||
                                        option.Name.Contains(trimmed, StringComparison.OrdinalIgnoreCase)).ToList();
         var wasUpdating = _updating;
@@ -438,6 +610,8 @@ public sealed class SearchableIdComboBox : ComboBox
             SelectedIndex = -1;
             Items.Clear();
             foreach (var option in filtered) Items.Add(option);
+            _itemsBinding = binding;
+            _boundItemCount = Items.Count;
             SelectedIndex = -1;
             Text = displayText ?? query;
             SelectionStart = Text.Length;
@@ -451,11 +625,21 @@ public sealed class SearchableIdComboBox : ComboBox
         if (disposing && !_releaseCompleted)
         {
             _releaseCompleted = true;
+            _suspendedEdit = null;
+            _previewLoader = null;
+            _loading.Clear();
             _previewCancellation.Cancel();
             _previewCancellation.Dispose();
             ClearThumbnails();
         }
         base.Dispose(disposing);
+        if (disposing)
+        {
+            // Native UIA may retain the disposed ComboBox. Disposed handlers
+            // must run first, then release delegates that capture its page.
+            UnknownValueSubmitted = null;
+            Events.Dispose();
+        }
     }
 }
 

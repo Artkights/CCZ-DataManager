@@ -182,7 +182,7 @@ internal static class UiOptimizationReportTests
             $"人物初始HP/MP没有依次排在兵种下方：兵种={job}，HP={hp}，MP={mp}");
 
         var previews = Descendants(editor).OfType<TableLayoutPanel>().Single(table => table.Name == "PersonPreviewColumns");
-        var expected = is66 ? 4 : 3;
+        const int expected = 3;
         TestSupport.Assert(previews.ColumnCount == expected, $"人物预览应为一行{expected}列，实际{previews.ColumnCount}列。");
         var widths = previews.GetColumnWidths();
         // Percentage columns may assign their final rounding pixels to the last column.
@@ -193,7 +193,7 @@ internal static class UiOptimizationReportTests
             $"人物预览没有完整排为一行{expected}张图片。");
         TestSupport.Assert(cards.Max(card => card.Width) - cards.Min(card => card.Width) < expected,
             "人物预览图片区域宽度不相等。");
-        foreach (var (caption, column, span) in new[] { ("头像", 0, is66 ? 2 : 1), ("R形象编号", expected - 2, 1), ("S形象编号", expected - 1, 1) })
+        foreach (var (caption, column, span) in new[] { ("头像", 0, 1), ("R形象编号", 1, 1), ("S形象编号", 2, 1) })
         {
             var label = Descendants(previews).OfType<Label>().Single(control => control.Text == caption);
             Control header = label;
@@ -208,9 +208,13 @@ internal static class UiOptimizationReportTests
             var last = ScreenBounds(cards[column + span - 1]);
             TestSupport.Assert(labelBounds.Bottom <= inputBounds.Top + 1 && inputBounds.Bottom <= first.Top,
                 $"{caption}的文字、编号和预览没有从上到下完整排列。");
-            TestSupport.Assert(Math.Abs(inputBounds.Left + inputBounds.Width / 2 - (first.Left + last.Right) / 2) <= 2,
-                $"{caption}编号没有在对应{span}列预览区域上方居中：输入={inputBounds}，图片={first}/{last}。");
+            var locate = Descendants(header).OfType<Button>().Single();
+            var locateBounds = ScreenBounds(locate);
+            TestSupport.Assert(Math.Abs((inputBounds.Left + locateBounds.Right) / 2 - (first.Left + last.Right) / 2) <= 2 &&
+                inputBounds.Right <= locateBounds.Left,
+                $"{caption}编号和定位按钮没有在图片上方居中或相互重叠。");
             AssertInsideAncestors(input, previews, "人物预览编号");
+            AssertInsideAncestors(locate, previews, "人物图片定位按钮");
         }
     }
 

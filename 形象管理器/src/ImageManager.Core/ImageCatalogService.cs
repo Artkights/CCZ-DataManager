@@ -1,6 +1,6 @@
-namespace ImageManager.Core;
+﻿namespace ImageManager.Core;
 
-public sealed class ImageCatalogService : IImageCatalogService
+public sealed class ImageCatalogService : IImageCatalogService, IBoundedAnimationPreviewCatalog
 {
     private static readonly HashSet<string> ExcludedE5 = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -18,6 +18,14 @@ public sealed class ImageCatalogService : IImageCatalogService
             new StrategyAnimationResourceCodec(), new MapPairResourceCodec(), new PairedE5IconCodec(),
             new PmapResourceCodec(), new WeatherResourceCodec(), new DtAnimationResourceCodec(), new MarkDiagnosticCodec(),
             new RangeResourceCodec(), new GenericE5ResourceCodec()];
+    }
+
+    public void RetainRoot(string rootPath)
+    {
+        var root = Path.GetFullPath(rootPath);
+        lock (_catalogSync)
+            foreach (var old in _catalogSnapshots.Keys.Where(key => !key.Equals(root, StringComparison.OrdinalIgnoreCase)).ToArray())
+                _catalogSnapshots.Remove(old);
     }
 
     public IReadOnlyList<ImageResourceDescriptor> BuildCatalog(ProjectProfile project)

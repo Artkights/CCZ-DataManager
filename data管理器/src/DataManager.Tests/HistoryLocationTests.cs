@@ -82,13 +82,16 @@ internal static class HistoryLocationTests
         var current = Path.Combine(workspace.History.GetRoot(root), "manifest.jsonl");
         var legacy = ProjectHistoryPaths.GetLegacyDataManifest(root);
         Directory.CreateDirectory(Path.GetDirectoryName(legacy)!);
-        File.Move(current, legacy);
+        File.WriteAllText(legacy, JsonSerializer.Serialize(workspace.GetHistory().Single()) + Environment.NewLine);
+        // Build an actual 2.x fixture: discard only the v3 output just created inside this sandbox.
+        Directory.Delete(workspace.History.GetV3Root(root), true);
         File.AppendAllText(legacy, "{malformed legacy evidence\n");
         var legacyHash = HashService.Sha256(legacy);
         workspace.Open(root);
         TestSupport.Assert(workspace.GetHistory().Count == 1 && !File.Exists(current), "旧数据历史读取丢失或只读查询产生了新 manifest");
         SaveAbility(workspace, 1);
-        TestSupport.Assert(workspace.GetHistory().Count == 2 && File.ReadAllText(current).Contains("{malformed legacy evidence", StringComparison.Ordinal) &&
+        TestSupport.Assert(workspace.GetHistory().Count == 2 && !File.Exists(current) &&
+            File.ReadAllText(legacy).Contains("{malformed legacy evidence", StringComparison.Ordinal) &&
             HashService.Sha256(legacy) == legacyHash, "首次新位置保存没有保留旧历史原行，或改写了旧证据");
         TestSupport.Assert(workspace.UndoSaved().Success && workspace.UndoSaved().Success &&
             File.ReadAllBytes(Path.Combine(root, "Data.e5")).SequenceEqual(original), "新旧数据历史不能连续逐字节撤回");
@@ -113,6 +116,27 @@ internal static class HistoryLocationTests
         var renamed = renames.Apply(profile, renames.Preview(external, new RenameRule("旧", "新", "", "", null, false, false)));
         TestSupport.Assert(renamed.Success, "旧批量改名历史前置操作失败");
         var oldJournal = Path.Combine(old.BackupRoot(profile), "History", "history.jsonl");
+        var oldRecords = old.List(profile);
+        foreach (var record in oldRecords)
+        foreach (var target in record.Targets)
+        {
+            var snapshots = old.SnapshotDirectory(profile, record.Id);
+            target.SnapshotPath = Path.Combine(snapshots, "legacy.before");
+            target.AfterSnapshotPath = Path.Combine(snapshots, "legacy.after");
+            if (target.BeforeExists)
+            {
+                using var output = File.Create(target.SnapshotPath);
+                new Ccz.HistoryStorage.BlobStore(target.BlobStoreRoot!).CopyVerified(target.BeforeBlob!, output);
+            }
+            if (target.AfterExists)
+            {
+                using var output = File.Create(target.AfterSnapshotPath);
+                new Ccz.HistoryStorage.BlobStore(target.BlobStoreRoot!).CopyVerified(target.AfterBlob!, output);
+            }
+            target.BeforeBlob = null; target.AfterBlob = null;
+        }
+        File.WriteAllLines(oldJournal, oldRecords.Select(record => JsonSerializer.Serialize(record)));
+        Directory.Delete(old.V3Root(profile), true);
         var escaping = JsonNode.Parse(File.ReadAllLines(oldJournal)[0])!;
         escaping["Id"] = Guid.NewGuid().ToString("N");
         escaping["Targets"]![0]!["SnapshotPath"] = Path.Combine(sandbox, "旧历史越界快照.bin");
@@ -148,19 +172,21 @@ internal static class HistoryLocationTests
             HashService.Sha256(Path.Combine(b, "Logo.e5")) == savedB && history.Redo(a, aa.HistoryId!).Success,
             "形象路径变体无法恢复，或修改了同名项目");
         var pa = ProjectImageHistory.Canonicalize(new ProjectProfileService().Detect(a));
-        var journal = Path.Combine(ProjectImageHistory.Create(pa).BackupRoot(pa), "History", "history.jsonl");
+        var imageService = ProjectImageHistory.Create(pa);
+        var journal = HistoryV3TestSupport.LastSegment(Path.Combine(imageService.V3Root(pa), "ledger"));
         var journalBytes = File.ReadAllBytes(journal);
         var before = HashService.Sha256(Path.Combine(a, "Logo.e5"));
         try
         {
-            var lines = File.ReadAllLines(journal);
-            var node = JsonNode.Parse(lines[0])!;
-            node["Targets"]![0]!["SnapshotPath"] = Path.Combine(sandbox, "越界快照.bin");
-            lines[0] = node.ToJsonString(); File.WriteAllLines(journal, lines);
-            TestSupport.Assert(!history.List(a).Single(entry => !entry.IsTransition).CanUndo && !history.Undo(a, aa.HistoryId!).Success &&
+            var record = imageService.List(pa).Single(item => item.Id == aa.HistoryId);
+            record.Targets[0].SnapshotPath = Path.Combine(sandbox, "越界快照.bin");
+            var ledger = new Ccz.HistoryStorage.HistoryLedger(Path.GetDirectoryName(journal)!);
+            ledger.Append("Record", record.Id, new { StorageVersion = 3, Record = record });
+            TestSupport.Assert(!history.Undo(a, aa.HistoryId!).Success &&
                 HashService.Sha256(Path.Combine(a, "Logo.e5")) == before, "形象恢复允许读取新历史目录以外的快照");
-            node["Targets"]![0]!["TargetPath"] = Path.Combine(b, "Logo.e5");
-            lines[0] = node.ToJsonString(); File.WriteAllLines(journal, lines);
+            record.Targets[0].SnapshotPath = "";
+            record.Targets[0].TargetPath = Path.Combine(b, "Logo.e5");
+            ledger.Append("Record", record.Id, new { StorageVersion = 3, Record = record });
             TestSupport.Assert(!history.Undo(a, aa.HistoryId!).Success && HashService.Sha256(Path.Combine(b, "Logo.e5")) == savedB,
                 "形象历史绝对 TargetPath 可以写入另一个项目");
         }
@@ -171,17 +197,18 @@ internal static class HistoryLocationTests
     {
         var sourceWorkspace = new ProjectWorkspace(); sourceWorkspace.Open(source); SaveAbility(sourceWorkspace, 3);
         var targetWorkspace = new ProjectWorkspace(); targetWorkspace.Open(target); SaveAbility(targetWorkspace, 1);
-        var manifest = Path.Combine(targetWorkspace.History.GetRoot(target), "manifest.jsonl");
+        var manifest = HistoryV3TestSupport.LastSegment(HistoryV3TestSupport.DataLedger(target));
         var beforeManifest = File.ReadAllBytes(manifest);
         var before = File.ReadAllBytes(Path.Combine(target, "Data.e5"));
         var service = new MigrationService();
         var result = service.Apply(service.Preview(source, target), includeAllWritable: true, progress: new FailAtCompletion());
-        TestSupport.Assert(!result.Success && File.ReadAllBytes(manifest).SequenceEqual(beforeManifest) &&
-            File.ReadAllBytes(Path.Combine(target, "Data.e5")).SequenceEqual(before), "迁移提交末尾失败没有恢复新位置 manifest 和文件");
+        TestSupport.Assert(!result.Success && File.ReadAllBytes(manifest).AsSpan(0, beforeManifest.Length).SequenceEqual(beforeManifest) &&
+            targetWorkspace.History.ListMetadata(target).Count(entry => entry.Status == DataManager.Core.Models.HistoryStatus.Active) == 1 &&
+            File.ReadAllBytes(Path.Combine(target, "Data.e5")).SequenceEqual(before), "迁移提交末尾失败没有保留旧日志、恢复已提交状态和文件");
         TestSupport.Assert(result.BackupPath != null && ProjectHistoryPaths.IsInside(result.BackupPath, ProjectHistoryPaths.GetMigrationRoot(target)) &&
             !Directory.Exists(Path.Combine(target, ".data管理器迁移临时")), "迁移备份没有写入新历史目录，或留下临时项目/历史");
         result = service.Apply(service.Preview(source, target), includeAllWritable: true);
-        TestSupport.Assert(result.Success && targetWorkspace.History.Load(target).Count == 2 &&
+        TestSupport.Assert(result.Success && targetWorkspace.History.ListMetadata(target).Count(entry => entry.Status == DataManager.Core.Models.HistoryStatus.Active) == 2 &&
             !Directory.Exists(Path.Combine(target, ".data管理器迁移备份")), "迁移成功未延续目标历史或仍使用旧备份目录");
     }
 

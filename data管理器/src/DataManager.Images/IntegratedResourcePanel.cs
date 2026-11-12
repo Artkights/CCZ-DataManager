@@ -1,4 +1,4 @@
-using ImageManager.App;
+﻿using ImageManager.App;
 using ImageManager.Core;
 
 namespace DataManager.Images;
@@ -9,7 +9,7 @@ public sealed class IntegratedResourcePanel : UserControl
     private readonly ResourceCatalogAdapter _adapter;
     private readonly IImageCatalogService _catalog;
     private readonly bool _ownsAdapter;
-    private readonly ImagePreviewService _previews = new();
+    private readonly ImagePreviewService _previews = ImagePreviewService.Shared;
     private ProjectProfile? _project;
     private ImageGridPage? _page;
     private string _category = "R";
@@ -34,6 +34,8 @@ public sealed class IntegratedResourcePanel : UserControl
          ("AttackRange", "攻击范围"), ("PierceRange", "穿透范围")];
     public IReadOnlyList<(string Key, string Name)> ProjectCategories { get; private set; } = Categories;
     public event Action? CategoriesChanged;
+    /// <summary>Raised after an image archive is added, replaced or deleted.</summary>
+    public event Action? ResourcesChanged;
 
     public IntegratedResourcePanel() : this(null) { }
 
@@ -109,6 +111,22 @@ public sealed class IntegratedResourcePanel : UserControl
         var page = _page;
         if (page == null) return false;
         var located = await page.LocateSPhysicalImageAsync(physicalImageNumber);
+        return !IsDisposed && revision == _projectRevision && ReferenceEquals(page, _page) && located;
+    }
+
+    /// <summary>Locates the data-field logical ID in the portrait or R gallery.</summary>
+    public async Task<bool> LocateLogicalImageAsync(string category, int logicalId)
+    {
+        if (category is not ("Face" or "R") || logicalId < 0) return false;
+        var revision = _projectRevision;
+        await _loadingTask;
+        if (IsDisposed || revision != _projectRevision || _project == null) return false;
+        ShowCategory(category);
+        RestoreSearch(string.Empty);
+        if (_pages.TryGetValue(category, out var cached)) cached.Search = string.Empty;
+        var page = _page;
+        if (page == null) return false;
+        var located = await page.LocateLogicalImageAsync(category == "Face" ? "Face" : "Pmapobj.e5", logicalId);
         return !IsDisposed && revision == _projectRevision && ReferenceEquals(page, _page) && located;
     }
 
@@ -244,6 +262,10 @@ public sealed class IntegratedResourcePanel : UserControl
         {
             if (_project == null) return;
             _adapter.Invalidate(_project.RootPath);
+            // A whole-file import or resource-group mutation can replace the
+            // archive without raising ImageGridPage.ResourcesChanged.
+            // Notify business editors before rebuilding the gallery.
+            ResourcesChanged?.Invoke();
             LoadProject(_project.RootPath, _category, _usedIdsProvider,
                 sAssignmentReferencesProvider: _sAssignmentReferencesProvider);
         };
@@ -253,6 +275,10 @@ public sealed class IntegratedResourcePanel : UserControl
             _catalogRevision = _adapter.Revision;
             foreach (var entry in _pages.Values)
                 if (entry.Page != createdPage) entry.Page.InvalidateResources(paths);
+            // Business range editors share this adapter and cache their
+            // candidate lists by resource revision. Forward the mutation so
+            // open detail pages rebuild Hitarea/Effarea options immediately.
+            ResourcesChanged?.Invoke();
         };
         _page.PlaybackCacheChanged += EnforcePlaybackBudget;
         _content.Controls.Add(_page);
@@ -271,7 +297,7 @@ public sealed class IntegratedResourcePanel : UserControl
         try
         {
             var remainingCount = Math.Max(0, 2 - _page.RetainedAnimationCount);
-            var remainingBytes = Math.Max(0, 128L * 1024 * 1024 - _page.RetainedAnimationBytes);
+            var remainingBytes = Math.Max(0, ImageResourceCoordinator.DefaultPixelBudget - _page.RetainedAnimationBytes);
             foreach (var entry in _pages.Values.Where(entry => entry.Page != _page).OrderByDescending(entry => entry.LastActivated))
             {
                 entry.Page.TrimPlaybackCache(Math.Min(1, remainingCount), remainingBytes);
@@ -333,7 +359,7 @@ public sealed class IntegratedResourcePanel : UserControl
         if (disposing)
         {
             ClearProject();
-            _previews.Dispose();
+
             if (_ownsAdapter) _adapter.Dispose();
         }
         base.Dispose(disposing);

@@ -63,6 +63,10 @@ internal sealed class ImageAppearanceSyncTransaction
         }
 
         var metadata = plan.Metadata?.ToDictionary(pair => pair.Key, pair => pair.Value) ?? new Dictionary<string, string>();
+        // Persist every possible companion's recovery payload before the first primary replacement.
+        var preparedCompanions = session?.PreparedFiles.Select(file => history.CaptureTarget(profile,
+            Path.GetFullPath(Path.Combine(profile.RootPath, file.RelativePath)), file.BeforeBytes, file.AfterBytes,
+            file.BeforeAttributes, file.BeforeAttributes)).ToArray() ?? [];
         var result = mutations.Commit(profile, plan with { Metadata = metadata }, snapshotDirectory =>
         {
             if (session == null) return [];
@@ -87,22 +91,9 @@ internal sealed class ImageAppearanceSyncTransaction
                 {
                     var path = Path.GetFullPath(Path.Combine(profile.RootPath, file.RelativePath));
                     ProjectHistoryPaths.ValidateInside(path, profile.RootPath);
-                    var stem = "appearance_" + targets.Count.ToString("D4") + "_" + Path.GetFileName(path);
-                    var beforePath = Path.Combine(snapshotDirectory, stem + ".before");
-                    var afterPath = Path.Combine(snapshotDirectory, stem + ".after");
-                    File.WriteAllBytes(beforePath, file.BeforeBytes);
-                    File.WriteAllBytes(afterPath, file.AfterBytes);
-                    if (!HashService.Sha256(beforePath).Equals(file.Change.BeforeHash, StringComparison.OrdinalIgnoreCase) ||
-                        !HashService.Sha256(afterPath).Equals(file.Change.AfterHash, StringComparison.OrdinalIgnoreCase))
-                        throw new IOException("存档形象历史快照复读不一致：" + file.RelativePath);
-                    targets.Add(new HistoryTarget
-                    {
-                        TargetPath = path, SnapshotPath = beforePath, AfterSnapshotPath = afterPath,
-                        BeforeSha256 = file.Change.BeforeHash, AfterSha256 = file.Change.AfterHash,
-                        BeforeLength = file.BeforeBytes.LongLength, AfterLength = file.AfterBytes.LongLength,
-                        BeforeExists = true, AfterExists = true,
-                        BeforeAttributes = file.BeforeAttributes, AfterAttributes = File.GetAttributes(path)
-                    });
+                    var target = preparedCompanions.Single(target => target.TargetPath.Equals(path, StringComparison.OrdinalIgnoreCase));
+                    target.AfterAttributes = File.GetAttributes(path);
+                    targets.Add(target);
                 }
                 metadata["AppearanceSync"] = session.Report.Summary;
                 metadata["AppearanceSyncDiagnostics"] = string.Join(Environment.NewLine, session.Report.Diagnostics);
@@ -117,7 +108,7 @@ internal sealed class ImageAppearanceSyncTransaction
                 diagnostics.Add(SkippedPrefix + "本次存档贡献已恢复，" + ex.Message);
                 return [];
             }
-        }, () => session?.Rollback());
+        }, () => session?.Rollback(), preparedCompanions);
 
         if (!result.Success) return result;
         var report = session?.Report;

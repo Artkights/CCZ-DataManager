@@ -1,4 +1,4 @@
-namespace ImageManager.Core;
+﻿namespace ImageManager.Core;
 
 public interface IProjectProfileService
 {
@@ -14,6 +14,9 @@ public interface IImageCatalogService
         CancellationToken cancellationToken = default)
         => PreviewFrameDecoding.CopyMatching(() => DecodeFrames(project, asset), descriptor, cancellationToken);
 }
+
+/// <summary>Catalogs backed by the native strategy-package codec can use bounded read-only playback.</summary>
+public interface IBoundedAnimationPreviewCatalog { }
 
 public interface IResourceCodec
 {

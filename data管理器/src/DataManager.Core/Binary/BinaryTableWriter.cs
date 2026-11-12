@@ -86,7 +86,8 @@ public sealed class BinaryTableWriter
             if (targetExists)
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-                File.WriteAllBytes(temporary, current);
+                using (var output = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                { output.Write(current); output.Flush(flushToDisk: true); }
                 if (!HashService.Sha256(temporary).Equals(expectedFinal, StringComparison.OrdinalIgnoreCase))
                     throw new IOException($"候选文件校验失败：{change.RelativePath}。");
             }

@@ -23,7 +23,7 @@ public sealed class BusinessDataService
             [BusinessPageKind.DetailedJobs] = ["detailed-jobs", "detailed-job-description", "detailed-job-growth", "detailed-job-penetration", "strategies"],
             [BusinessPageKind.Items] = ["items-low", "items-high", "items-extended", "item-description-low", "item-description-high", "item-description-extended", "item-effect-names-low", "item-effect-names-high", "item-effect-names-66", "detailed-job-growth", "equipment-type-names", "equipment-type-display"],
             [BusinessPageKind.Shop] = ["scenario-names", "shops"],
-            [BusinessPageKind.Strategies] = ["strategies", "strategy-description", "strategy-extension", "strategy-damage-type", "strategy-damage-ratio", "strategy-hit-rate", "strategy-learning", "strategy-battle-ai", "strategy-training-ai", "strategy-terrain-availability", "strategy-big-animation", "strategy-small-animation"],
+            [BusinessPageKind.Strategies] = ["strategies", "strategy-description", "strategy-extension", "strategy-damage-type", "strategy-damage-ratio", "strategy-hit-rate", "strategy-learning", StrategyEffectClassService.TableKey, "strategy-battle-ai", "strategy-training-ai", "strategy-terrain-availability", "strategy-big-animation", "strategy-small-animation"],
             [BusinessPageKind.ExtendData] = ["effect-archive", "effect-messages", "strategy-study-extended", "forge"],
             [BusinessPageKind.PhysicalTables] = []
         };
@@ -46,9 +46,15 @@ public sealed class BusinessDataService
     public IReadOnlyList<string> GetAvailableTableKeys(BusinessPageKind kind)
     {
         if (kind == BusinessPageKind.PhysicalTables) return _workspace.Documents.Keys.OrderBy(key => key).ToArray();
-        return PageTables.TryGetValue(kind, out var keys)
-            ? keys.Where(key => _workspace.Documents.ContainsKey(key) || key == "job-series-accessory-groups" && CanReadAccessoryGroups()).ToArray()
-            : [];
+        if (!PageTables.TryGetValue(kind, out var keys)) return [];
+        var available = keys.Where(key => _workspace.Documents.ContainsKey(key) ||
+            key == "job-series-accessory-groups" && CanReadAccessoryGroups());
+        // 只有 6.6 的 0xA2CE0 是逐策略扩展位；6.4/6.5 是填充区。文档仍保留给物理表/CSV，
+        // 但不放进策略业务页，避免被误当作策略属性。
+        if (kind == BusinessPageKind.Strategies &&
+            !StrategyExtensionSemantics.SupportsPerStrategyFlags(_workspace.ActiveProfile.ProfileId))
+            available = available.Where(key => key != StrategyExtensionSemantics.TableKey);
+        return available.ToArray();
     }
 
     private bool CanReadAccessoryGroups()

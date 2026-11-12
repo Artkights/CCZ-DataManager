@@ -1,3 +1,4 @@
+﻿using ImageManager.Core;
 using DataManager.Images;
 
 namespace DataManager.App;
@@ -17,9 +18,20 @@ internal sealed class ResourcePreviewCard : Panel
     private string? _key;
     private long _generation;
     private bool _started, _animate, _released, _loaded;
-    private int _frameIndex;
+    private bool _previewActive = true;
+    private int _frameIndex, _resumeFrame;
+    private bool _windowLoading;
+    private ImageResourceCoordinator.PixelLease? _pixelLease;
 
     internal bool HasLoadedResource => _loaded;
+
+    internal void SetPreviewActive(bool active)
+    {
+        if (_released || _previewActive == active) return;
+        _previewActive = active;
+        if (!active) SuspendPreview();
+        else { UpdatePlayback(); Start(); }
+    }
 
     public ResourcePreviewCard(ToolTip tips)
     {
@@ -39,14 +51,13 @@ internal sealed class ResourcePreviewCard : Panel
             _timer.Stop();
             if (!_loaded) { CancelPending(); _started = false; }
         };
-        VisibleChanged += (_, _) => { UpdatePlayback(); if (Visible) Start(); };
-        _timer.Tick += (_, _) =>
+        VisibleChanged += (_, _) =>
         {
-            if (_animation == null || _animation.Frames.Count < 2) return;
-            _frameIndex = (_frameIndex + 1) % _animation.Frames.Count;
-            _picture.Image = _animation.Frames[_frameIndex];
-            ArrangePicture();
+            if (!Visible && (!_loaded || (_animation?.PixelBytes ?? 0) > 1024 * 1024 || _animation?.LoadWindowAsync != null)) SuspendPreview();
+            else { UpdatePlayback(); if (Visible) Start(); }
         };
+        _picture.Click += (_, _) => Start(); _state.Click += (_, _) => Start();
+        _timer.Tick += (_, _) => Advance();
     }
 
     public void Bind(string key, string title, Func<CancellationToken, Task<ResourcePreviewAnimation>> loader, bool animate)
@@ -54,9 +65,9 @@ internal sealed class ResourcePreviewCard : Panel
         Text = title;
         AccessibleName = title;
         _tips.SetToolTip(_picture, title);
-        if (string.Equals(_key, key, StringComparison.Ordinal)) { UpdatePlayback(); return; }
+        if (string.Equals(_key, key, StringComparison.Ordinal)) { UpdatePlayback(); Start(); return; }
         CancelPending();
-        _key = key; _loader = loader; _animate = animate; _started = false; _loaded = false;
+        _key = key; _loader = loader; _animate = animate; _started = false; _loaded = false; _resumeFrame = 0;
         _state.Text = "加载中…";
         _state.Visible = _picture.Image == null;
         _timer.Stop();
@@ -67,7 +78,7 @@ internal sealed class ResourcePreviewCard : Panel
 
     private void Start()
     {
-        if (_released || _started || _loader == null || !IsHandleCreated || !Visible) return;
+        if (_released || !_previewActive || _started || _loader == null || !IsHandleCreated || !Visible) return;
         _started = true;
         _cancellation = new CancellationTokenSource();
         var token = _cancellation.Token;
@@ -80,12 +91,23 @@ internal sealed class ResourcePreviewCard : Panel
     {
         ResourcePreviewAnimation? decoded = null;
         string? error = null;
-        try { decoded = await loader(token).ConfigureAwait(false); }
-        catch (OperationCanceledException) { return; }
-        catch (Exception ex) { error = ex.Message; }
+        try
+        {
+            decoded = await loader(token).ConfigureAwait(false);
+            if (token.IsCancellationRequested) { decoded.Dispose(); return; }
+            if (_resumeFrame > 0 && decoded.LoadWindowAsync != null &&
+                (_resumeFrame < decoded.WindowStart || _resumeFrame >= decoded.WindowStart + decoded.Frames.Count))
+            {
+                var initial = decoded; decoded = null;
+                try { decoded = ResourcePreviewAnimation.FromWindow(await initial.LoadWindowAsync(_resumeFrame, token).ConfigureAwait(false), initial.Mapping); }
+                finally { initial.Dispose(); }
+            }
+        }
+        catch (OperationCanceledException) { decoded?.Dispose(); return; }
+        catch (Exception ex) { decoded?.Dispose(); decoded = null; error = ex.Message; }
         lock (_pendingGate)
         {
-            if (_released || token.IsCancellationRequested || generation != _generation)
+            if (_released || !_previewActive || token.IsCancellationRequested || generation != _generation)
             { decoded?.Dispose(); return; }
             _pending = decoded;
         }
@@ -97,16 +119,17 @@ internal sealed class ResourcePreviewCard : Panel
                 if (_released || token.IsCancellationRequested || generation != _generation) return;
                 ready = _pending; _pending = null;
             }
+            if (!_previewActive || !Visible)
+            { ready?.Dispose(); SuspendPreview(); return; }
             if (ready == null)
             {
-                _picture.Image = null; _animation?.Dispose(); _animation = null;
+                ReleaseOwnedPixels();
                 _state.Text = "预览不可用"; _state.Visible = true; _tips.SetToolTip(_state, error);
                 return;
             }
-            _picture.Image = null;
-            _animation?.Dispose(); _animation = ready; _frameIndex = 0;
+            Publish(ready, _resumeFrame);
+            if (_animation == null) return;
             _loaded = true;
-            _picture.Image = ready.Frames.FirstOrDefault(); ArrangePicture();
             _state.Text = ready.Frames.Count == 0 ? "无对应图片" : string.Empty;
             _state.Visible = ready.Frames.Count == 0;
             _tips.SetToolTip(this, ready.Mapping); _tips.SetToolTip(_state, ready.Mapping);
@@ -124,7 +147,63 @@ internal sealed class ResourcePreviewCard : Panel
         }
     }
 
-    private void UpdatePlayback() => _timer.Enabled = !_released && IsHandleCreated && _loaded && Visible && _animate && _animation?.Frames.Count > 1;
+    private void Publish(ResourcePreviewAnimation ready, int absoluteFrame)
+    {
+        ReleaseOwnedPixels(); _animation = ready;
+        _frameIndex = Math.Clamp(absoluteFrame - ready.WindowStart, 0, Math.Max(0, ready.Frames.Count - 1));
+        _picture.Image = ready.Frames.Count == 0 ? null : ready.Frames[_frameIndex]; ArrangePicture();
+        _pixelLease = ImageResourceCoordinator.Shared.RegisterPixels(ready.PixelBytes, "business-preview", () =>
+        {
+            void Reclaim() { if (!_released && ReferenceEquals(_animation, ready)) SuspendPreview(); }
+            if (IsDisposed) return;
+            if (InvokeRequired) { try { BeginInvoke((Action)Reclaim); } catch (InvalidOperationException) { } }
+            else Reclaim();
+        });
+        ImageResourceCoordinator.Shared.TrimPixels();
+    }
+
+    private void ReleaseOwnedPixels()
+    {
+        _picture.Image = null; _pixelLease?.Dispose(); _pixelLease = null;
+        _animation?.Dispose(); _animation = null;
+    }
+
+    private void SuspendPreview()
+    {
+        _timer.Stop();
+        if (_animation != null) _resumeFrame = _animation.WindowStart + _frameIndex;
+        CancelPending(); _started = false; _loaded = false; _windowLoading = false;
+        ReleaseOwnedPixels();
+        _state.Text = "点击加载预览"; _state.Visible = true;
+    }
+
+    private async void Advance()
+    {
+        var animation = _animation;
+        if (_released || !_previewActive || !Visible) { _timer.Stop(); return; }
+        if (animation == null || animation.TotalFrameCount < 2 || _windowLoading) return;
+        _pixelLease?.Touch();
+        var next = (animation.WindowStart + _frameIndex + 1) % animation.TotalFrameCount;
+        if (next >= animation.WindowStart && next < animation.WindowStart + animation.Frames.Count)
+        { _frameIndex = next - animation.WindowStart; _picture.Image = animation.Frames[_frameIndex]; ArrangePicture(); return; }
+        if (animation.LoadWindowAsync == null) return;
+        _windowLoading = true; var generation = _generation;
+        var token = _cancellation?.Token ?? CancellationToken.None;
+        AnimationFrameWindow? window = null;
+        try
+        {
+            window = await animation.LoadWindowAsync(next, token);
+            if (_released || !_previewActive || token.IsCancellationRequested || generation != _generation || !Visible) return;
+            var ready = ResourcePreviewAnimation.FromWindow(window, animation.Mapping); window = null;
+            Publish(ready, next); _loaded = _animation != null; UpdatePlayback();
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception error)
+        { if (!_released && _previewActive && Visible && generation == _generation) { _tips.SetToolTip(_state, error.Message); _timer.Stop(); } }
+        finally { window?.Dispose(); if (generation == _generation) _windowLoading = false; }
+    }
+
+    private void UpdatePlayback() => _timer.Enabled = !_released && _previewActive && IsHandleCreated && _loaded && Visible && _animate && _animation?.TotalFrameCount > 1;
 
     private void ArrangePicture()
     {
@@ -151,9 +230,9 @@ internal sealed class ResourcePreviewCard : Panel
         if (disposing && !_released)
         {
             lock (_pendingGate) _released = true;
+            _loader = null;
             CancelPending();
-            _timer.Dispose(); _picture.Image = null;
-            _animation?.Dispose(); _animation = null;
+            _timer.Dispose(); ReleaseOwnedPixels();
         }
         base.Dispose(disposing);
     }

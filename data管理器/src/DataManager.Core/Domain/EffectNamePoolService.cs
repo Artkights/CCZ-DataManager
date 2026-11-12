@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using DataManager.Core.Binary;
 using DataManager.Core.Editing;
+using DataManager.Core.Scanner;
 
 namespace DataManager.Core.Domain;
 
@@ -27,6 +28,8 @@ public enum EffectNameStorageKind
 public sealed class EffectNamePoolService
 {
     public const long PersonalJobOffset = 0x9E800;
+    public const long PersonalJobOffset64 = 0xD0D60;
+    public const int PersonalJobCount64 = 180;
     public const long ItemFixedOffset66 = 0x9D9A0;
     public const int FixedSlotSize = 16;
     public const int FixedMaxNameBytes = 15;
@@ -38,12 +41,24 @@ public sealed class EffectNamePoolService
         if (channel == EffectNameChannel.PersonalJob)
         {
             var definition = workspace.Definitions.FirstOrDefault(table => table.Key == "effect-names");
-            if (workspace.ActiveProfile.ProfileId == "ccz-6.4" && definition?.Capability == Models.TableCapability.Unavailable)
+            var is64 = Is64(workspace);
+            if (is64 && definition?.Capability == Models.TableCapability.Unavailable)
                 return Array.Empty<EffectNameSlot>();
-            var slots = ReadFixed(workspace, 0, definition?.RowCount ?? 255, definition?.DataOffset ?? PersonalJobOffset, "人物/兵种特效名称",
-                definition?.CapabilityEvidence ?? "6.5/6.6 Ekd5.exe 固定 16 字节名称池");
-            if (workspace.Documents.TryGetValue("effect-names", out var document))
-                return slots.Select(slot => slot with { IsWritable = definition?.IsWriteSupported == true,
+            var fallbackOffset = is64 ? PersonalJobOffset64 : PersonalJobOffset;
+            var fallbackCount = is64 ? PersonalJobCount64 : 255;
+            var slots = ReadFixed(workspace, 0,
+                definition is { RowCount: > 0 } ? definition.RowCount : fallbackCount,
+                definition is { DataOffset: > 0 } ? definition.DataOffset : fallbackOffset,
+                "人物/兵种特效名称",
+                definition?.CapabilityEvidence ?? "6.5/6.6 Ekd5.exe 固定 16 字节名称池",
+                suffixSlot: true);
+            // The physical effect-names column is 16 bytes wide and decodes up to
+            // the first NUL; it must not replace the 15-byte slot name when
+            // +0x0F carries a suffix code. The table is read-only in all profiles,
+            // so this override only matters if a future layout makes it writable.
+            if (definition?.IsWriteSupported == true &&
+                workspace.Documents.TryGetValue("effect-names", out var document))
+                return slots.Select(slot => slot with { IsWritable = true,
                     Name = slot.SlotIndex < document.Data.Rows.Count ? Convert.ToString(document.Data.Rows[slot.SlotIndex]["名称"], CultureInfo.InvariantCulture) ?? slot.Name : slot.Name }).ToArray();
             return slots;
         }
@@ -67,7 +82,7 @@ public sealed class EffectNamePoolService
     }
 
     private static IReadOnlyList<EffectNameSlot> ReadFixed(ProjectWorkspace workspace, int beginId, int count,
-        long offset, string displayName, string evidence)
+        long offset, string displayName, string evidence, bool suffixSlot = false)
     {
         var path = ProjectFileLocator.Resolve(workspace.RootPath, "Ekd5.exe");
         if (!File.Exists(path)) return Array.Empty<EffectNameSlot>();
@@ -86,7 +101,9 @@ public sealed class EffectNamePoolService
                 path,
                 fileOffset,
                 raw,
-                EncodingService.DecodeFixedStringPreservingInvalidBytes(raw),
+                suffixSlot
+                    ? EngineEffectSlotRules.DecodeName(raw)
+                    : EncodingService.DecodeFixedStringPreservingInvalidBytes(raw),
                 false,
                 evidence));
         }
@@ -222,9 +239,13 @@ public sealed class EffectNamePoolService
         // Names are user editable. Reconstruct a prior checked snapshot from our
         // own saved deltas so renaming the sentinel slots never locks the pool.
         var prior = current.ToArray();
-        foreach (var entry in workspace.GetHistory().Where(entry => entry.Status == DataManager.Core.Models.HistoryStatus.Active)
+        foreach (var metadata in workspace.GetHistoryMetadata().Where(entry => entry.Status == DataManager.Core.Models.HistoryStatus.Active)
                      .OrderByDescending(entry => entry.CreatedAt))
         {
+            var hash = HashService.Sha256(prior);
+            if (!metadata.Files.Any(file => Path.GetFileName(file.RelativePath).Equals("Ekd5.exe", StringComparison.OrdinalIgnoreCase) &&
+                file.AfterHash.Equals(hash, StringComparison.OrdinalIgnoreCase))) continue;
+            var entry = workspace.History.LoadOperation(workspace.RootPath, metadata.OperationId);
             foreach (var file in entry.Files.Where(file => Path.GetFileName(file.RelativePath).Equals("Ekd5.exe", StringComparison.OrdinalIgnoreCase)))
             {
                 if (!HashService.Sha256(prior).Equals(file.AfterHash, StringComparison.OrdinalIgnoreCase)) continue;
@@ -259,8 +280,13 @@ public sealed class EffectNamePoolService
     private static int CountChangedBytes(byte[] before, byte[] after)
         => before.Zip(after).Count(pair => pair.First != pair.Second);
 
+    private static bool Is64(ProjectWorkspace workspace)
+        => workspace.ActiveProfile.ProfileId.Equals("ccz-6.4", StringComparison.OrdinalIgnoreCase) ||
+           workspace.ActiveProfile.Profile.Version.StartsWith("6.4", StringComparison.Ordinal);
+
     private static bool Is66(ProjectWorkspace workspace)
-        => workspace.ActiveProfile.ProfileId.Equals("ccz-6.6", StringComparison.OrdinalIgnoreCase);
+        => workspace.ActiveProfile.ProfileId.Equals("ccz-6.6", StringComparison.OrdinalIgnoreCase) ||
+           workspace.ActiveProfile.Profile.Version.StartsWith("6.6", StringComparison.Ordinal);
 }
 
 public sealed record EffectNameSlot(

@@ -11,28 +11,37 @@ public sealed partial class MainForm
     private string? _gridLayoutKey;
     private readonly Dictionary<string, Dictionary<string, int>> _gridContentWidths = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Dictionary<string, int>> _gridManualWidths = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Dictionary<string, HashSet<(DataTable Table, string Field)>>> _gridWidthDependencies = new(StringComparer.Ordinal);
     private bool _arrangingGridWidths;
     private bool _gridLayoutEventsInstalled;
     private readonly HashSet<DataTable> _gridWidthSources = [];
     private void InvalidateGridWidthCache(object? sender, DataColumnChangeEventArgs args)
     {
-        _gridContentWidths.Clear();
-        _columnWidths.Clear();
+        if (sender is not DataTable table || args.Column == null) return;
+        foreach (var view in _gridWidthDependencies)
+            foreach (var column in view.Value)
+                if (column.Value.Contains((table, args.Column.ColumnName)))
+                {
+                    if (_gridContentWidths.TryGetValue(view.Key, out var content)) content.Remove(column.Key);
+                    if (_columnWidths.TryGetValue(view.Key, out var saved)) saved.Remove(column.Key);
+                }
     }
     private void ReleaseGridWidthSources()
     {
         foreach (var table in _gridWidthSources) table.ColumnChanged -= InvalidateGridWidthCache;
         _gridWidthSources.Clear();
+        _gridWidthDependencies.Clear();
     }
     private sealed record GridViewState(object? CurrentId, string? Column, object? FirstId, int HorizontalOffset);
 
     private BusinessEditorPanel CreateBusinessEditor()
     {
-        var panel = new BusinessEditorPanel(_workspace, _resourceAdapter ??= new()) { Visible = false };
+        var panel = new BusinessEditorPanel(_workspace, _resourceAdapter ??= new(), _rangeCatalog) { Visible = false };
         panel.Edited += (_, _) => { RefreshDirtyState(); QueueQueryRefresh(); };
         panel.PendingChangesChanged += (_, _) => RefreshDirtyState();
         panel.SaveRequested += (_, _) => SaveProject();
         panel.SImageLocationRequested += LocatePersonSImage;
+        panel.PersonImageLocationRequested += LocatePersonImage;
         panel.ExtendCategoryChanged += (_, _) => { if (ReferenceEquals(panel, _businessEditor)) RefreshExtendEntityList(); };
         return panel;
     }
@@ -41,15 +50,18 @@ public sealed partial class MainForm
     {
         if (!_businessEditors.TryGetValue(kind, out var next))
             _businessEditors[kind] = next = CreateBusinessEditor();
-        if (ReferenceEquals(next, _businessEditor)) return;
+        if (ReferenceEquals(next, _businessEditor)) { next.ActivateView(); return; }
         var parent = _businessEditor.Parent;
         var index = parent?.Controls.GetChildIndex(_businessEditor) ?? -1;
+        _businessEditor.DeactivateView();
         _businessEditor.Visible = false;
-        parent?.Controls.Remove(_businessEditor);
         _businessEditor = next;
         if (parent == null) return;
-        parent.Controls.Add(next);
+        // Cached editors keep their inherited font, DPI and dock parent for
+        // their complete lifetime. Hidden editors never validate on navigation.
+        if (next.Parent == null) parent.Controls.Add(next);
         if (index >= 0) parent.Controls.SetChildIndex(next, index);
+        next.ActivateView();
     }
 
     private void ResetBusinessEditors()
@@ -57,8 +69,7 @@ public sealed partial class MainForm
         ResetReferenceChoices();
         var parent = _businessEditor.Parent;
         var index = parent?.Controls.GetChildIndex(_businessEditor) ?? -1;
-        // Detaching cached editors keeps inactive controls out of navigation,
-        // validation and accessibility, while preserving their view state.
+        // Each cached page remains parented until the project is replaced.
         foreach (var panel in _businessEditors.Values.Distinct()) panel.Dispose();
         _businessEditors.Clear();
         _businessEditor = CreateBusinessEditor();
@@ -110,18 +121,14 @@ public sealed partial class MainForm
         _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
         foreach (var table in _workspace.Documents.Values.Select(document => document.Data))
             if (_gridWidthSources.Add(table)) table.ColumnChanged += InvalidateGridWidthCache;
-        var contentChanged = !_gridContentWidths.ContainsKey(key);
-        if (contentChanged) _gridContentWidths[key] = MeasureGridContentWidths();
-        if (!contentChanged && _columnWidths.TryGetValue(key, out var saved))
-        {
-            foreach (DataGridViewColumn column in _grid.Columns)
-                if (saved.TryGetValue(column.Name, out var width)) column.Width = width;
-        }
-        else
-        {
-            foreach (DataGridViewColumn column in _grid.Columns)
-                if (_gridContentWidths[key].TryGetValue(column.Name, out var width)) column.Width = width;
-        }
+        var invalid = _grid.Columns.Cast<DataGridViewColumn>().Where(column =>
+            !_gridContentWidths.TryGetValue(key, out var widths) || !widths.ContainsKey(column.Name))
+            .Select(column => column.Name).ToHashSet(StringComparer.Ordinal);
+        EnsureMeasuredGridWidths(key);
+        _columnWidths.TryGetValue(key, out var saved);
+        foreach (DataGridViewColumn column in _grid.Columns)
+            if (!invalid.Contains(column.Name) && saved != null && saved.TryGetValue(column.Name, out var width)) column.Width = width;
+            else if (_gridContentWidths[key].TryGetValue(column.Name, out var contentWidth)) column.Width = contentWidth;
         _gridLayoutKey = key;
         if (_gridManualWidths.TryGetValue(key, out var manual))
             foreach (DataGridViewColumn column in _grid.Columns)
@@ -147,14 +154,37 @@ public sealed partial class MainForm
         _grid.DpiChangedAfterParent += (_, _) => ReflowGridWidths(true);
     }
 
-    private Dictionary<string, int> MeasureGridContentWidths()
+    private void EnsureMeasuredGridWidths(string key, bool remeasure = false)
+    {
+        if (!_gridContentWidths.TryGetValue(key, out var widths))
+            _gridContentWidths[key] = widths = new(StringComparer.Ordinal);
+        var missing = _grid.Columns.Cast<DataGridViewColumn>().Where(column => column.Visible &&
+            (remeasure || !widths.ContainsKey(column.Name))).Select(column => column.Name).ToHashSet(StringComparer.Ordinal);
+        if (missing.Count == 0) return;
+        foreach (var measured in MeasureGridContentWidths(key, missing)) widths[measured.Key] = measured.Value;
+    }
+
+    private Dictionary<string, int> MeasureGridContentWidths(string key, HashSet<string> names)
     {
         var result = new Dictionary<string, int>(StringComparer.Ordinal);
         var table = _grid.DataSource as DataTable;
         var scale = _grid.DeviceDpi / 96f;
         foreach (DataGridViewColumn column in _grid.Columns)
         {
-            if (!column.Visible) continue;
+            if (!column.Visible || !names.Contains(column.Name)) continue;
+            if (!_gridWidthDependencies.TryGetValue(key, out var dependencies))
+                _gridWidthDependencies[key] = dependencies = new(StringComparer.Ordinal);
+            var sources = new HashSet<(DataTable Table, string Field)>();
+            dependencies[column.Name] = sources;
+            if (table != null && table.Columns.Contains(column.DataPropertyName)) sources.Add((table, column.DataPropertyName));
+            if (column.Tag is ProjectedField projection && _workspace.Documents.TryGetValue(projection.TableKey, out var projectedDocument))
+                sources.Add((projectedDocument.Data, projection.FieldName));
+            var definition = _currentDocument?.Definition.Fields.FirstOrDefault(field => field.Name == column.DataPropertyName);
+            if (!string.IsNullOrWhiteSpace(definition?.ReferenceTable))
+                foreach (var reference in ResolveReferenceDocuments(definition.ReferenceTable))
+                    foreach (DataColumn field in reference.Data.Columns)
+                        // Names, identifiers and equipment categories can all change a choice's rendered text.
+                        sources.Add((reference.Data, field.ColumnName));
             var padding = (int)Math.Ceiling(28 * scale) + (column is DataGridViewComboBoxColumn ? SystemInformation.VerticalScrollBarWidth : 0);
             var width = TextRenderer.MeasureText(column.HeaderText, _grid.Font, Size.Empty, TextFormatFlags.SingleLine).Width + padding;
             var texts = new HashSet<string>(StringComparer.Ordinal);
@@ -186,7 +216,7 @@ public sealed partial class MainForm
         try
         {
             var key = _gridLayoutKey;
-            if (remeasure || !_gridContentWidths.ContainsKey(key)) _gridContentWidths[key] = MeasureGridContentWidths();
+            EnsureMeasuredGridWidths(key, remeasure);
             _gridManualWidths.TryGetValue(key, out var manual);
             foreach (DataGridViewColumn column in _grid.Columns)
             {

@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <AssemblyName>质变管理器</AssemblyName>
+    <RootNamespace>TransformManager.App</RootNamespace>
+    <Version>1.2026.1111.6</Version>
+    <InformationalVersion>1.2026.1111.6</InformationalVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Iced" Version="1.21.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\EngineGrowth.Core\EngineGrowth.Core.csproj" />
+  </ItemGroup>
+</Project>

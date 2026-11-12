@@ -23,6 +23,7 @@ public sealed partial class MainForm
     private Task<EngineEffectScanReport>? _engineScanTask;
     private string? _engineScanTaskKey;
     private int _engineScanGeneration;
+    private int _engineViewRequestVersion;
     private readonly Button _engineCancelScan = new() { Text = "取消扫描", AutoSize = true, Visible = false };
     internal bool EngineScanPendingForSmokeTest => _engineScanTask is { IsCompleted: false };
     private readonly List<EngineEffectScanRow> _engineRows = [];
@@ -44,9 +45,12 @@ public sealed partial class MainForm
         _engineSubTabs.SendToBack();
         // 常量是整页子页，切换子页时只保留当前页；公式页是独立顶级页。
         _battleFormulaPanel.Visible = false;
+        _transformPanel.Visible = false;
+        if (EngineSubpage == EnginePage.Transform) { ++_engineViewRequestVersion; ShowTransformView(); return; }
         _constantPanel.Visible = EngineSubpage == ConstantEngineSubpage;
         if (EngineSubpage == ConstantEngineSubpage)
         {
+            ++_engineViewRequestVersion;
             ShowConstantView();
             return;
         }
@@ -56,8 +60,8 @@ public sealed partial class MainForm
         _engineDetail.BringToFront();
         _grid.Visible = false;
         _engineFilterHost.Visible = true;
-        _engineOnlyWithCalls.Visible = EngineSubpage == 0;
-        _engineFilterHost.Height = EngineSubpage == 0 ? 60 : 32;
+        _engineOnlyWithCalls.Visible = EngineSubpage == EnginePage.Effects;
+        _engineFilterHost.Height = EngineSubpage == EnginePage.Effects ? 60 : 32;
         if (string.IsNullOrWhiteSpace(_workspace.RootPath))
         {
             _engineReport = null;
@@ -68,13 +72,24 @@ public sealed partial class MainForm
             SetStatus("引擎扫描：尚未打开项目。", true);
             return;
         }
-        var exePath = ProjectFileLocator.Resolve(_workspace.RootPath, "Ekd5.exe");
-        var imsgPath = ProjectFileLocator.Resolve(_workspace.RootPath, "Imsg.e5");
-        string fingerprint;
-        try { fingerprint = EngineReportFingerprint(exePath, imsgPath); }
-        catch (Exception ex) { _engineDetail.ShowEmpty("引擎读取失败：" + ex.Message); return; }
         var requestedRoot = _workspace.RootPath;
+        var exePath = ProjectFileLocator.Resolve(requestedRoot, "Ekd5.exe");
+        var imsgPath = ProjectFileLocator.Resolve(requestedRoot, "Imsg.e5");
+        var requestVersion = ++_engineViewRequestVersion;
         var requestGeneration = _engineScanGeneration;
+        // Freeze only strings on the UI thread. Full hashes must still detect
+        // same-length/same-timestamp external changes, without blocking input.
+        var identity = EngineProfileFingerprintPrefix();
+        string fingerprint;
+        try { fingerprint = await Task.Run(() => EngineFileFingerprint(identity, exePath, imsgPath)); }
+        catch (Exception ex)
+        {
+            if (!IsDisposed && !Disposing && requestVersion == _engineViewRequestVersion && _workspace.RootPath == requestedRoot)
+                _engineDetail.ShowEmpty("引擎读取失败：" + ex.Message);
+            return;
+        }
+        if (IsDisposed || Disposing || !IsEngineTab || requestVersion != _engineViewRequestVersion ||
+            requestGeneration != _engineScanGeneration || _workspace.RootPath != requestedRoot) return;
         var reuse = !forceRescan && _engineReport != null && _engineReportFingerprint == fingerprint;
         if (reuse)
         {
@@ -84,7 +99,7 @@ public sealed partial class MainForm
         {
             if (!forceRescan && HasAnyEngineChanges && _engineReport != null)
             {
-                if (EngineSubpage == 0) PopulateEngineEntityList(); else ShowEngineSubpageView();
+                if (EngineSubpage == EnginePage.Effects) PopulateEngineEntityList(); else ShowEngineSubpageView();
                 return;
             }
             try
@@ -126,9 +141,12 @@ public sealed partial class MainForm
                     }
                     requestGeneration = _engineScanGeneration;
                     report = await _engineScanTask;
-                    if (IsDisposed || Disposing || requestGeneration != _engineScanGeneration || _workspace.RootPath != root) return;
+                    if (IsDisposed || Disposing || requestVersion != _engineViewRequestVersion || requestGeneration != _engineScanGeneration || _workspace.RootPath != root) return;
                     _engineCancelScan.Visible = false;
-                    if (EngineReportFingerprint(exePath, imsgPath) != fingerprint)
+                    var currentFingerprint = await Task.Run(() => EngineFileFingerprint(identity, exePath, imsgPath));
+                    if (IsDisposed || Disposing || !IsEngineTab || requestVersion != _engineViewRequestVersion ||
+                        requestGeneration != _engineScanGeneration || _workspace.RootPath != root) return;
+                    if (currentFingerprint != fingerprint)
                     {
                         ShowEngineScanView(forceRescan: true);
                         return;
@@ -145,7 +163,7 @@ public sealed partial class MainForm
             }
             catch (OperationCanceledException)
             {
-                if (!IsDisposed && !Disposing && requestGeneration == _engineScanGeneration && _engineScanTaskKey == fingerprint)
+                if (!IsDisposed && !Disposing && requestVersion == _engineViewRequestVersion && requestGeneration == _engineScanGeneration && _engineScanTaskKey == fingerprint)
                 {
                     _engineCancelScan.Visible = false;
                     SetStatus("引擎扫描已取消；再次进入子页可重新扫描。");
@@ -154,7 +172,7 @@ public sealed partial class MainForm
             }
             catch (Exception ex)
             {
-                if (IsDisposed || Disposing || requestGeneration != _engineScanGeneration || _workspace.RootPath != requestedRoot || _engineScanTaskKey != fingerprint) return;
+                if (IsDisposed || Disposing || requestVersion != _engineViewRequestVersion || requestGeneration != _engineScanGeneration || _workspace.RootPath != requestedRoot || _engineScanTaskKey != fingerprint) return;
                 _engineCancelScan.Visible = false;
                 _engineReport = null;
                 _engineRows.Clear();
@@ -165,7 +183,7 @@ public sealed partial class MainForm
                 return;
             }
         }
-        if (EngineSubpage != 0)
+        if (EngineSubpage != EnginePage.Effects)
         {
             ShowEngineSubpageView();
             return;
@@ -205,6 +223,7 @@ public sealed partial class MainForm
     private void ShowEngineSubpageView()
     {
         if (EngineSubpage == ConstantEngineSubpage) ShowConstantView();
+        else if (EngineSubpage == EnginePage.Transform) ShowTransformView();
         else ShowEngineAssignmentView();
     }
 
@@ -332,6 +351,7 @@ public sealed partial class MainForm
 
     private void EngineWriteCompleted(EngineEffectScanReport? verifiedReport = null)
     {
+        RefreshRangeAfterInternalWrite();
         if (verifiedReport != null && File.Exists(verifiedReport.ExePath) && File.Exists(verifiedReport.ImsgPath) &&
             HashService.Sha256(verifiedReport.ExePath) == verifiedReport.ExeSha256 &&
             HashService.Sha256(verifiedReport.ImsgPath) == verifiedReport.ImsgSha256)
@@ -345,15 +365,18 @@ public sealed partial class MainForm
         var follow = _engineDetail.LastFollowEffectId;
         var callAddress = _engineDetail.LastWrittenCallAddress;
         ShowEngineScanView(forceRescan: verifiedReport == null);
-        if (EngineSubpage != 0) { RefreshDirtyState(); return; }
+        if (EngineSubpage != EnginePage.Effects) { RefreshDirtyState(); return; }
         if (follow is { } id) SelectEngineEffectById(id);
         else if (callAddress is { } address) _engineDetail.SelectCallByAddress(address);
         RefreshDirtyState();
     }
 
+    private string EngineProfileFingerprintPrefix()
+        => $"scan-v2|{_workspace.ActiveProfile.Profile.Id}|{_workspace.ActiveProfile.Variant.Id}|{_workspace.ActiveProfile.LayoutRevision}|{_workspace.ActiveProfile.LayoutId}|";
     private string EngineReportFingerprint(string exePath, string imsgPath)
-        => $"scan-v2|{_workspace.ActiveProfile.Profile.Id}|{_workspace.ActiveProfile.Variant.Id}|{_workspace.ActiveProfile.LayoutRevision}|{_workspace.ActiveProfile.LayoutId}|" +
-           $"{Path.GetFullPath(exePath).ToUpperInvariant()}|{HashService.Sha256(exePath)}|{EngineImsgHash(imsgPath)}";
+        => EngineFileFingerprint(EngineProfileFingerprintPrefix(), exePath, imsgPath);
+    private static string EngineFileFingerprint(string identity, string exePath, string imsgPath)
+        => $"{identity}{Path.GetFullPath(exePath).ToUpperInvariant()}|{HashService.Sha256(exePath)}|{EngineImsgHash(imsgPath)}";
 
     private static string EngineStructureKey(string fingerprint) => fingerprint[..fingerprint.LastIndexOf('|')];
     private static string EngineImsgHash(string path) => File.Exists(path) ? HashService.Sha256(path) : string.Empty;
@@ -364,6 +387,8 @@ public sealed partial class MainForm
         _engineScanCancellation?.Cancel();
         _engineScanCancellation?.Dispose();
         _engineScanCancellation = null;
+        _engineScanTask = null;
+        _engineScanTaskKey = null;
     }
 
     private sealed record EngineEffectChoice(int Id, string Name, bool HasCalls, bool Pending)

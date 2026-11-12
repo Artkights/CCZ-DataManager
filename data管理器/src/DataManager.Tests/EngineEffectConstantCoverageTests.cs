@@ -178,7 +178,10 @@ internal static class EngineEffectConstantCoverageTests
         var pendingReview = new List<string>();
         var linksById = Links.ToDictionary(link => link.Id, StringComparer.Ordinal);
         var formulaIds = FormulaConstantIds();
-        var otherIds = new HashSet<string>(["shop-sell-price-numerator"], StringComparer.Ordinal);
+        var otherIds = EngineConstantService.Definitions
+            .Where(definition => definition.Id == "shop-sell-price-numerator" ||
+                definition.Evidence.Contains("engine-constants-catalog.json", StringComparison.Ordinal))
+            .Select(definition => definition.Id).ToHashSet(StringComparer.Ordinal);
         var unlinked = EngineConstantService.Definitions
             .Where(definition => !linksById.ContainsKey(definition.Id) && !formulaIds.Contains(definition.Id) &&
                                  !otherIds.Contains(definition.Id))

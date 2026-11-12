@@ -16,6 +16,7 @@ internal static class EngineAssignmentUiTests
             Directory.CreateDirectory(outputDirectory);
             RunSelectionContractChecks();
             RunValueModeChecks();
+            SynchronizationContext.SetSynchronizationContext(new WindowsFormsSynchronizationContext());
             using var form = new MainForm(openDefaultProject: false) { StartPosition = FormStartPosition.Manual, Location = new Point(-30000, -30000), ShowInTaskbar = false };
             form.Show();
             form.LoadProjectForSmokeTest(copy);
@@ -25,7 +26,7 @@ internal static class EngineAssignmentUiTests
             Pump();
             TestSupport.Assert(!form.EngineScanPendingForSmokeTest, "后台引擎扫描没有及时完成。");
             var subpages = form.EngineSubTabsForSmokeTest;
-            TestSupport.Assert(subpages.TabPages.Count == 4, "引擎扫描必须保留四个子页（公式设定已改为顶级页）。");
+            TestSupport.Assert(subpages.TabPages.Count == 5, "引擎扫描必须包含质变设定在内的五个子页。");
             TestSupport.Assert(subpages.TabPages.Cast<TabPage>()
                     .All(page => page.Text != "战斗公式"), "引擎扫描仍包含战斗公式子页。");
             TestSupport.Assert(subpages.Visible, "引擎扫描子页导航不可见。");
@@ -276,7 +277,7 @@ internal static class EngineAssignmentUiTests
         foreach (var grid in new[] { panel.AssignedGridForSmokeTest, panel.PoolGridForSmokeTest })
             TestSupport.Assert(grid.Columns.Cast<DataGridViewColumn>().Select(column => column.HeaderText).SequenceEqual(new[] { "特效号", "特效名", "特效值", "特效说明" }), "分配页没有保持四列约定。");
     }
-    private static void Pump(int rounds = 6) { for (var i = 0; i < rounds; i++) { Application.DoEvents(); Thread.Sleep(8); } }
+    private static void Pump(int rounds = 6) { for (var i = 0; i < rounds; i++) { TestSupport.PumpUi(); Thread.Sleep(8); } }
     [DllImport("user32.dll")]
     private static extern bool SetWindowPos(IntPtr window, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
 }

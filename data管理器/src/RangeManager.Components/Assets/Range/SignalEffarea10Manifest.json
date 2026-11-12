@@ -1,0 +1,74 @@
+{
+  "sourceId": "Signal-Effarea10",
+  "sourcePath": "基底/信奈的野望（15+1关版，密码nobuna）/E5/Effarea.e5",
+  "sourceEntry": 10,
+  "sourceArchiveSha256": "BE79C7364350E3E3B2B84576D2F0686A4518BF23650D3598C19C704FE6328D83",
+  "sourceEntrySha256": "043739505A4B2577FBED71D6C1504F9B3481E7E3F5A36F69663CF6E71DD909A5",
+  "grid": {
+    "columns": 7,
+    "rows": 7,
+    "tileSize": 8,
+    "pitch": 9,
+    "origin": 1
+  },
+  "tiles": {
+    "background": [
+      0,
+      0
+    ],
+    "attack": [
+      1,
+      1
+    ],
+    "own": [
+      2,
+      2
+    ],
+    "pierce": [
+      2,
+      0
+    ]
+  },
+  "files": {
+    "frame": {
+      "file": "SignalEffarea10Frame.png",
+      "sha256": "043739505a4b2577fbed71d6c1504f9b3481e7e3f5a36f69663cf6e71dd909a5",
+      "size": [
+        64,
+        64
+      ]
+    },
+    "background": {
+      "file": "SignalEffarea10Background.png",
+      "sha256": "5e915681958c4be63a8939242fbb09408cb500dd66b6dcf228e1ae4c955e98a0",
+      "size": [
+        8,
+        8
+      ]
+    },
+    "attack": {
+      "file": "SignalEffarea10Attack.png",
+      "sha256": "5f5f08755e2bff7b4ec309c0a1a383b2522216da9c26744d2ebdf0484de3c66e",
+      "size": [
+        8,
+        8
+      ]
+    },
+    "own": {
+      "file": "SignalEffarea10Own.png",
+      "sha256": "24bc1ecbd0c33ef92e8e1be60e7299aa61df734deef1ccde327de7dc9468d10a",
+      "size": [
+        8,
+        8
+      ]
+    },
+    "pierce": {
+      "file": "SignalEffarea10Pierce.png",
+      "sha256": "e202b4a598a91cc2d15c8bfb8e372fe0725f79409001b64676395a4fad439f4a",
+      "size": [
+        8,
+        8
+      ]
+    }
+  }
+}

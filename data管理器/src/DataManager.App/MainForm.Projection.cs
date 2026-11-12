@@ -18,7 +18,8 @@ public sealed partial class MainForm
 
     private void ConfigureProjectedColumns(TableDocument document)
     {
-        foreach (var column in _grid.Columns.Cast<DataGridViewColumn>().Where(column => column.Tag is ProjectedField).ToArray())
+        foreach (var column in _grid.Columns.Cast<DataGridViewColumn>().Where(column => column.Tag is ProjectedField projected &&
+                     (document.Definition.Key != "persons" || !PersonProjectedFields.Contains(projected))).ToArray())
             _grid.Columns.Remove(column);
         if (document.Definition.Key != "persons") return;
         if (_grid.Columns["Army"] is { } army) army.Visible = false;
@@ -28,11 +29,23 @@ public sealed partial class MainForm
             var available = _workspace.Documents.TryGetValue(projected.TableKey, out var source) &&
                 source.Definition.Capability == TableCapability.Editable &&
                 source.Definition.Fields.Any(field => field.Name == projected.FieldName && field.Policy == FieldPolicy.Editable);
+            var toolTip = available ? $"按人物 ID 编辑 {source!.Definition.DisplayName}，保存时统一写入。" : "当前布局未验证此形象指定，暂不可编辑。";
+            if (_grid.Columns.Cast<DataGridViewColumn>().FirstOrDefault(column => Equals(column.Tag, projected)) is { } existing)
+            {
+                // Returning from a cached business/range page keeps the same
+                // physical table. Reuse its cells and native UIA providers;
+                // removing an unchanged column disconnects every row provider.
+                existing.ReadOnly = !available;
+                existing.ToolTipText = toolTip;
+                if (existing.DisplayIndex != position) existing.DisplayIndex = position;
+                position++;
+                continue;
+            }
             var column = new DataGridViewColumn(new PersonAppearanceCell(this, projected))
             {
                 Name = projected.Caption, HeaderText = projected.Caption, Tag = projected,
                 ValueType = typeof(int), ReadOnly = !available, SortMode = DataGridViewColumnSortMode.NotSortable,
-                ToolTipText = available ? $"按人物 ID 编辑 {source!.Definition.DisplayName}，保存时统一写入。" : "当前布局未验证此形象指定，暂不可编辑。",
+                ToolTipText = toolTip,
                 DefaultCellStyle = new DataGridViewCellStyle { NullValue = "不可用" }
             };
             _grid.Columns.Add(column);

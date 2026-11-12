@@ -1,3 +1,4 @@
+using System.Data;
 using System.Globalization;
 using System.Diagnostics;
 using System.Drawing.Imaging;
@@ -77,6 +78,7 @@ internal static class ResourcePreviewTests
             .Append(Path.Combine(source, "Imsg.e5")).Distinct(StringComparer.OrdinalIgnoreCase).ToDictionary(path => path, HashService.Sha256);
         var workspace = new ProjectWorkspace();
         workspace.Open(source);
+        CheckDynamicRangeOptionDomains(workspace, adapter, source);
         foreach (var path in workspace.Documents.Values.Select(document => document.FilePath).Distinct(StringComparer.OrdinalIgnoreCase))
             checkedPaths.TryAdd(path, HashService.Sha256(path));
         using (var defaultS = adapter.DecodeCharacterS(source, 0, 0))
@@ -157,6 +159,64 @@ internal static class ResourcePreviewTests
         foreach (var (path, hash) in checkedPaths)
             TestSupport.Assert(HashService.Sha256(path) == hash, $"关联预览不应修改资源或项目文件：{path}");
         CheckDraftSReferences(source);
+    }
+
+    private static void CheckDynamicRangeOptionDomains(ProjectWorkspace workspace, ResourceCatalogAdapter adapter, string source)
+    {
+        var getOptions = typeof(BusinessEditorPanel).GetMethod("GetOptions",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        TestSupport.Assert(getOptions != null, "业务编辑器没有暴露范围候选解析入口。");
+
+        IReadOnlyList<IdNameOption> Options(string tableKey, string fieldName, int row = 0)
+        {
+            var document = workspace.GetDocument(tableKey);
+            var field = document.Definition.Fields.Single(candidate => candidate.Name == fieldName);
+            using var panel = new BusinessEditorPanel(workspace, adapter);
+            return (IReadOnlyList<IdNameOption>)(getOptions!.Invoke(panel, [document, row, field]) ??
+                throw new InvalidOperationException($"{tableKey}/{fieldName} 未生成候选目录。"));
+        }
+
+        var catalog = adapter.Scan(source);
+        var hitareaCount = catalog.Resources.FirstOrDefault(item => item.Key.Equals("Hitarea.e5", StringComparison.OrdinalIgnoreCase))?.EntryCount ?? 0;
+        var effareaCount = catalog.Resources.FirstOrDefault(item => item.Key.Equals("Effarea.e5", StringComparison.OrdinalIgnoreCase))?.EntryCount ?? 0;
+        if (hitareaCount > 0 && workspace.Documents.ContainsKey("detailed-job-growth") && workspace.Documents.ContainsKey("strategies"))
+        {
+            var growth = Options("detailed-job-growth", "攻击范围");
+            TestSupport.Assert(growth.Any(option => option.Id == hitareaCount - 1),
+                $"兵种旧攻击范围没有跟随 Hitarea.e5 条目数 {hitareaCount} 生成最后一个候选。");
+            var strategy = Options("strategies", "施法范围");
+            TestSupport.Assert(strategy.Any(option => option.Id == hitareaCount - 1),
+                $"策略施法范围没有跟随 Hitarea.e5 条目数 {hitareaCount} 生成最后一个候选。");
+        }
+        if (effareaCount > 0 && workspace.Documents.ContainsKey("strategies"))
+        {
+            var strategyPierce = Options("strategies", "穿透范围");
+            TestSupport.Assert(strategyPierce.Any(option => option.Id == effareaCount - 1),
+                $"策略穿透范围没有跟随 Effarea.e5 条目数 {effareaCount} 生成最后一个候选。");
+            if (workspace.Documents.ContainsKey("finishing-moves"))
+            {
+                var finishingPierce = Options("finishing-moves", "穿透范围");
+                TestSupport.Assert(finishingPierce.Any(option => option.Id == effareaCount - 1),
+                    $"必杀穿透范围没有跟随 Effarea.e5 条目数 {effareaCount} 生成最后一个候选。");
+            }
+        }
+
+        if (workspace.Documents.ContainsKey("detailed-job-penetration"))
+        {
+            var native = Options("detailed-job-penetration", "穿透");
+            var nativeMaximum = NativeRangeDomain.PierceMaximum(workspace.ActiveProfile.ProfileId);
+            TestSupport.Assert(native.Any(option => option.Id == nativeMaximum),
+                $"Ekd5 原生穿透候选没有覆盖当前版本契约上限 {nativeMaximum}。");
+        }
+
+        if (workspace.Documents.ContainsKey("strategies"))
+        {
+            var typeOptions = Options("strategies", "策略类型");
+            var referencedTypes = workspace.GetDocument("strategies").Data.Rows.Cast<DataRow>()
+                .Select(row => Convert.ToInt32(row["策略类型"], CultureInfo.InvariantCulture)).Distinct().ToHashSet();
+            TestSupport.Assert(referencedTypes.All(value => typeOptions.Any(option => option.Id == value)),
+                "策略类型下拉丢失了当前策略表中的实际值。");
+        }
     }
 
     private static void CheckResourceOptionUiLifecycle(ProjectWorkspace workspace, ResourceCatalogAdapter adapter)
@@ -367,7 +427,7 @@ internal static class ResourcePreviewTests
         var editor = LabeledEditor(panel, label);
         TestSupport.Assert(editor is SearchableIdComboBox, $"{label}没有使用可输入资源下拉框，而是{editor.GetType().Name}");
         var combo = (SearchableIdComboBox)editor;
-        TestSupport.Assert(combo.IdOnly == idOnly && combo.DrawMode == (idOnly ? DrawMode.Normal : DrawMode.OwnerDrawVariable) &&
+        TestSupport.Assert(combo.IdOnly == idOnly && combo.DrawMode == DrawMode.OwnerDrawVariable &&
             combo.DropDownStyle == ComboBoxStyle.DropDown,
             $"{label}没有使用要求的数字/缩略图展示模式");
         TestSupport.Assert(expected.Count > 0 && expected[0].Id == 0, $"{label}真实资源编号没有从0开始");
@@ -453,8 +513,6 @@ internal static class ResourcePreviewTests
     private static void CheckPersonFrames(Control panel, ProjectWorkspace workspace, ResourceCatalogAdapter adapter, int id)
     {
         CheckStill("Face", ReadById(workspace, "persons", id, "头像"), "头像 ");
-        if (workspace.ActiveProfile.ProfileId == "ccz-6.6")
-            CheckStill("Fb.e5", ResourceCatalogAdapter.HalfBodyImageNumber(ReadById(workspace, "persons", id, "头像")), "半身像 ");
         if (workspace.Documents.TryGetValue("person-r-assign", out var r) && r.Definition.Capability == TableCapability.Editable)
             CheckStill("Pmapobj.e5", ReadById(workspace, "person-r-assign", id, "R形象ID"), "R ");
         var sVerified = workspace.Documents.TryGetValue("person-s-assign", out var s) && s.Definition.Capability == TableCapability.Editable;
@@ -518,8 +576,6 @@ internal static class ResourcePreviewTests
                 {
                     expected.Add((kind == ResourceBindingKind.Portrait ? "头像 " : "R ",
                         FirstFrame(kind == ResourceBindingKind.Portrait ? "Face" : "Pmapobj.e5", next)));
-                    if (kind == ResourceBindingKind.Portrait && workspace.ActiveProfile.ProfileId == "ccz-6.6")
-                        expected.Add(("半身像 ", FirstFrame("Fb.e5", ResourceCatalogAdapter.HalfBodyImageNumber(next))));
                 }
                 var cards = Descendants(panel).OfType<ResourcePreviewCard>().ToArray();
                 var pictures = expected.Select(item => PreviewPicture(panel, item.Prefix)).ToArray();
@@ -580,7 +636,7 @@ internal static class ResourcePreviewTests
         }
         TestSupport.Assert(tested.Contains("头像"), "真实人物样本没有验证可编辑头像的即时刷新");
         CheckPersonFrames(panel, workspace, adapter, personId);
-        Console.WriteLine($"PERSON_EDIT_PREVIEW_REFRESH_OK {workspace.ActiveProfile.VariantId}: {string.Join('/', tested)}; 6.6头像同步半身像；未切换人物、未保存");
+        Console.WriteLine($"PERSON_EDIT_PREVIEW_REFRESH_OK {workspace.ActiveProfile.VariantId}: {string.Join('/', tested)}; 三列头像/R/S；未切换人物、未保存");
 
         Bitmap FirstFrame(string resource, int imageId)
         {

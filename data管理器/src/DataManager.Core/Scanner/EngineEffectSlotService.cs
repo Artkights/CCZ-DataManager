@@ -93,9 +93,12 @@ public sealed class EngineEffectSlotService
         // validated range (6.5 特效 254 stores 0x64); only new values are bounded.
         if (newSuffix == slot.SuffixByte)
             return new(slot.FilePath, slot.FileOffset, slot.RawBytes, slot.RawBytes, "后缀");
-        if (newSuffix > EngineEffectSuffixLabels.MaximumSuffix)
+        var version = EngineEffectLayout.Resolve(workspace).Version;
+        var maximum = EngineEffectSuffixLabels.MaximumSuffix(version);
+        if (newSuffix > maximum)
             return Failed(slot.FilePath, slot.FileOffset, slot.RawBytes, "后缀",
-                $"后缀 {newSuffix} 超出已验证范围 0x00..0x{EngineEffectSuffixLabels.MaximumSuffix:X2}。");
+                $"后缀 0x{newSuffix:X2} 超出 {version} 已验证范围 0x00..0x{maximum:X2}；" +
+                "更高代码在该基底的名称后缀选择器中不产生后缀。");
         // A 15-byte name uses +0x0F as its terminator; a nonzero suffix there
         // would make the engine read past the slot, so the name must shrink first.
         if (newSuffix != 0 &&

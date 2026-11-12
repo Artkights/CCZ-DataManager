@@ -7,8 +7,44 @@ internal static class TestSupport
         if (!condition) throw new InvalidOperationException(message);
     }
 
+    // DoEvents is a temporary loop; unlike Application.Run it can uninstall
+    // the WinForms context before the next async UI action starts.
+    public static void PumpUi()
+    {
+        if (SynchronizationContext.Current is not WindowsFormsSynchronizationContext)
+            SynchronizationContext.SetSynchronizationContext(new WindowsFormsSynchronizationContext());
+        Application.DoEvents();
+        if (SynchronizationContext.Current is not WindowsFormsSynchronizationContext)
+            SynchronizationContext.SetSynchronizationContext(new WindowsFormsSynchronizationContext());
+    }
+
     public static string RepositoryRootFromBase(string basePath)
         => Directory.GetParent(Directory.GetParent(basePath)!.FullName)!.FullName;
+
+    /// <summary>Waits for the actual asynchronous host history operation and its UI refresh.</summary>
+    public static void RestoreSavedHistory(DataManager.App.MainForm form, bool redo)
+    {
+        var previousContext = SynchronizationContext.Current;
+        var busy = typeof(DataManager.App.MainForm).GetField("_historyIoBusy",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        try
+        {
+            // A short DoEvents loop does not retain the Windows Forms context
+            // installed by Application.Run, so provide it before the first await.
+            SynchronizationContext.SetSynchronizationContext(new WindowsFormsSynchronizationContext());
+            if (redo) form.RedoSavedForSmokeTest();
+            else form.UndoSavedForSmokeTest();
+            var timer = System.Diagnostics.Stopwatch.StartNew();
+            while ((bool)busy.GetValue(form)!)
+            {
+                Application.DoEvents(); Thread.Sleep(1);
+                if (timer.Elapsed > TimeSpan.FromSeconds(30))
+                    throw new TimeoutException("主窗异步历史恢复未完成。");
+            }
+            Application.DoEvents();
+        }
+        finally { SynchronizationContext.SetSynchronizationContext(previousContext); }
+    }
 
     /// <summary>
     /// Returns an isolated, history-free fixture. When a complete source history

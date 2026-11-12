@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using DataManager.Core.Binary;
@@ -6,7 +5,7 @@ using DataManager.Core.Models;
 
 namespace DataManager.Core.History;
 
-public sealed class HistoryStore
+public sealed partial class HistoryStore : Ccz.HistoryStorage.IHistoryRepository<string, HistoryEntry, HistoryEntry>
 {
     private readonly JsonSerializerOptions _json = new()
     {
@@ -16,127 +15,52 @@ public sealed class HistoryStore
 
     public string GetRoot(string projectRoot) => ProjectHistoryPaths.GetDataRoot(projectRoot);
 
-    public IReadOnlyList<HistoryEntry> Load(string projectRoot)
-    {
-        var path = ProjectHistoryPaths.GetDataManifestForRead(projectRoot);
-        if (!File.Exists(path)) return [];
-        var entries = new List<HistoryEntry>();
-        foreach (var line in File.ReadLines(path, Encoding.UTF8))
-        {
-            if (string.IsNullOrWhiteSpace(line)) continue;
-            try
-            {
-                var entry = JsonSerializer.Deserialize<HistoryEntry>(line, _json);
-                if (entry != null) entries.Add(entry);
-            }
-            catch
-            {
-                // A malformed line is reported through the history UI rather than blocking data editing.
-            }
-        }
-        return entries;
-    }
-
     public void Append(string projectRoot, HistoryEntry entry)
-        => WriteRecord(projectRoot, entry, updateExisting: false);
+        => WriteV3(projectRoot, entry);
 
     public void Replace(string projectRoot, IReadOnlyList<HistoryEntry> entries)
     {
-        var root = GetRoot(projectRoot);
-        Directory.CreateDirectory(root);
-        var path = Path.Combine(root, "manifest.jsonl");
-        var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
-        try
-        {
-            File.WriteAllLines(temporary, entries.Select(entry => JsonSerializer.Serialize(entry, _json)), new UTF8Encoding(true));
-            File.Move(temporary, path, true);
-        }
-        finally { if (File.Exists(temporary)) File.Delete(temporary); }
+        using var projectLock = Ccz.HistoryStorage.ProjectWriteLock.Acquire(projectRoot);
+        foreach (var entry in entries) WriteV3(projectRoot, entry);
     }
 
     public void Update(string projectRoot, HistoryEntry entry)
-        => WriteRecord(projectRoot, entry, updateExisting: true);
-
-    private void WriteRecord(string projectRoot, HistoryEntry entry, bool updateExisting)
-    {
-        var root = GetRoot(projectRoot);
-        Directory.CreateDirectory(root);
-        var path = Path.Combine(root, "manifest.jsonl");
-        var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
-        try
-        {
-            var replacement = JsonSerializer.Serialize(entry, _json);
-            var replaced = false;
-            using (var output = new StreamWriter(temporary, false, new UTF8Encoding(true)))
-            {
-                // Older records can contain large base64 snapshots. Preserve
-                // their lines instead of decoding every snapshot and then
-                // serializing the entire history for one new/status record.
-                var source = ProjectHistoryPaths.GetDataManifestForRead(projectRoot);
-                if (File.Exists(source))
-                    foreach (var line in File.ReadLines(source, Encoding.UTF8))
-                    {
-                        if (updateExisting && !replaced && HasOperationId(line, entry.OperationId))
-                        { output.WriteLine(replacement); replaced = true; }
-                        else output.WriteLine(line);
-                    }
-                if (!replaced) output.WriteLine(replacement);
-            }
-            File.Move(temporary, path, true);
-        }
-        finally { if (File.Exists(temporary)) File.Delete(temporary); }
-    }
-
-    private bool HasOperationId(string line, string operationId)
-    {
-        if (string.IsNullOrWhiteSpace(line)) return false;
-        try
-        {
-            using var record = JsonDocument.Parse(line);
-            if (record.RootElement.ValueKind != JsonValueKind.Object ||
-                !record.RootElement.TryGetProperty(nameof(HistoryEntry.OperationId), out var id) ||
-                id.ValueKind != JsonValueKind.String || id.GetString() != operationId) return false;
-            // Only the matching candidate needs typed validation. A valid
-            // JSON object can still contain an invalid Files/base64 field;
-            // Load ignores it, so Update must append rather than replace it.
-            return JsonSerializer.Deserialize<HistoryEntry>(line, _json)?.OperationId == operationId;
-        }
-        catch
-        {
-            // Load still ignores malformed records. Preserve their original
-            // lines during appending/updating rather than deleting evidence.
-            return false;
-        }
-    }
+        => WriteV3(projectRoot, entry);
 
     public HistoryOperationResult Undo(string projectRoot, string profileId, string variantId, string layoutRevision, string? operationId = null)
     {
-        var entries = Load(projectRoot).ToList();
+        using var projectLock = Ccz.HistoryStorage.ProjectWriteLock.Acquire(projectRoot);
+        Recover(projectRoot);
+        var entries = ListMetadata(projectRoot).ToList();
         var entry = entries.LastOrDefault(candidate => candidate.Status == HistoryStatus.Active && candidate.Files.Count > 0 &&
             (operationId == null || candidate.OperationId == operationId));
         if (entry == null) return new HistoryOperationResult(false, "没有可撤回的已保存历史记录。");
-        return Restore(projectRoot, entries, entry, profileId, variantId, layoutRevision, redo: false);
+        return Restore(projectRoot, entries, LoadOperation(projectRoot, entry.OperationId), profileId, variantId, layoutRevision, redo: false);
     }
 
     public HistoryOperationResult Redo(string projectRoot, string profileId, string variantId, string layoutRevision, string? operationId = null)
     {
-        var entries = Load(projectRoot).ToList();
+        using var projectLock = Ccz.HistoryStorage.ProjectWriteLock.Acquire(projectRoot);
+        Recover(projectRoot);
+        var entries = ListMetadata(projectRoot).ToList();
         var entry = entries.FirstOrDefault(candidate => candidate.Status == HistoryStatus.Reverted && candidate.Files.Count > 0 &&
             (operationId == null || candidate.OperationId == operationId));
         if (entry == null) return new HistoryOperationResult(false, "没有可前进的历史记录。");
-        return Restore(projectRoot, entries, entry, profileId, variantId, layoutRevision, redo: true);
+        return Restore(projectRoot, entries, LoadOperation(projectRoot, entry.OperationId), profileId, variantId, layoutRevision, redo: true);
     }
 
     private HistoryOperationResult Restore(string projectRoot, List<HistoryEntry> entries, HistoryEntry entry,
-        string profileId, string variantId, string layoutRevision, bool redo)
+        string profileId, string variantId, string layoutRevision, bool redo, StoredEntry? preparedStorage = null)
     {
         var writer = new BinaryTableWriter();
         var attempted = new List<FileByteChange>();
         var originalStatus = entry.Status;
+        string? transactionId = null;
         try
         {
             ValidateLayout(entry, projectRoot, profileId, variantId, layoutRevision);
             ValidateAllFiles(entry.Files, projectRoot, useNewBytes: redo);
+            transactionId = PrepareRestore(projectRoot, entry, redo, preparedStorage);
             var ordered = redo ? entry.Files : entry.Files.AsEnumerable().Reverse();
             foreach (var file in ordered)
             {
@@ -144,7 +68,7 @@ public sealed class HistoryStore
                 writer.Write(file, projectRoot, useNewBytes: redo);
             }
             entry.Status = redo ? HistoryStatus.Active : HistoryStatus.Reverted;
-            Replace(projectRoot, entries);
+            AppendState(projectRoot, entry.OperationId, entry.Status, "RestoreCommit", transactionId);
             return new HistoryOperationResult(true, $"已{(redo ? "前进" : "撤回")}：{entry.Summary}", entry);
         }
         catch (Exception ex)
@@ -165,9 +89,9 @@ public sealed class HistoryStore
             entry.Status = failures.Count == 0 ? originalStatus : HistoryStatus.Conflict;
             // The manifest is atomically replaced, so a failed replacement leaves its old state intact.
             // Persist a conflict only if restoring files failed; never mask the original error.
-            if (failures.Count > 0)
+            if (transactionId != null)
             {
-                try { Replace(projectRoot, entries); }
+                try { AppendState(projectRoot, entry.OperationId, entry.Status, failures.Count > 0 ? "Conflict" : "RestoreAbort", transactionId); }
                 catch (Exception history) { failures.Add($"历史状态：{history.Message}"); }
             }
             return new HistoryOperationResult(false, ex.Message + (failures.Count == 0 ? "；文件与历史已保持操作前状态。" : $"；恢复失败：{string.Join("；", failures)}"), entry);

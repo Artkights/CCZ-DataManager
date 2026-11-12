@@ -17,6 +17,7 @@ public sealed class AppearanceSyncSession
     public AppearanceSyncReport Report { get; }
     public IReadOnlyList<PreparedAppearanceSaveGroup> PreparedGroups { get; }
     public IReadOnlyList<AppliedAppearanceFile> AppliedFiles => _applied;
+    public IReadOnlyList<AppliedAppearanceFile> PreparedFiles => _candidates.Values.ToArray();
     public string? RecoverySnapshotDirectory { get; private set; }
 
     internal AppearanceSyncSession(string root, AppearanceSyncReport report, IReadOnlyList<PreparedAppearanceSaveGroup> groups,

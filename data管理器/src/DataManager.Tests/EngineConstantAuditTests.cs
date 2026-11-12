@@ -107,10 +107,14 @@ internal static class EngineConstantAuditTests
                             value.Definition.Kind) == probe,
                         $"{value.Definition.DisplayName} 成对文件字节未写到位。");
                 if (value.ExtraFileOffsets is { Count: > 0 } extraOffsets)
-                    foreach (var extraOffset in extraOffsets)
-                        TestSupport.Assert(ReadNumber(bytes, extraOffset, value.Layout.Length,
-                                value.Definition.Kind) == probe,
-                            $"{value.Definition.DisplayName} 附加同步字节未写到位（0x{extraOffset:X}）。");
+                    for (var index = 0; index < extraOffsets.Count; index++)
+                    {
+                        var extra = value.Layout.ExtraFields![index];
+                        TestSupport.Assert(ReadNumber(bytes, extraOffsets[index],
+                                extra.Length > 0 ? extra.Length : value.Layout.Length,
+                                value.Definition.Kind) == probe + extra.ValueOffset,
+                            $"{value.Definition.DisplayName} 附加同步字节未写到位（0x{extraOffsets[index]:X}）。");
+                    }
                 var restore = service.Commit(workspace,
                     [new EngineConstantEdit(value.Definition.Id, original, null)]);
                 TestSupport.Assert(restore.Success,
@@ -138,7 +142,10 @@ internal static class EngineConstantAuditTests
     }
 
     private static int ReadNumber(byte[] bytes, long offset, int length, EngineConstantKind kind) =>
-        kind == EngineConstantKind.Byte
-            ? bytes[checked((int)offset)]
-            : BitConverter.ToInt32(bytes, checked((int)offset));
+        length switch
+        {
+            1 => kind == EngineConstantKind.SignedByte ? unchecked((sbyte)bytes[checked((int)offset)]) : bytes[checked((int)offset)],
+            2 => BitConverter.ToUInt16(bytes, checked((int)offset)),
+            _ => BitConverter.ToInt32(bytes, checked((int)offset))
+        };
 }

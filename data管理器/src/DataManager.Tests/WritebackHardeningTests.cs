@@ -92,7 +92,7 @@ internal static class WritebackHardeningTests
             var edit = prepared with { CandidateVerifier = bytes =>
             {
                 prepared.CandidateVerifier!(bytes);
-                if (++calls == 2) locked = new FileStream(Path.Combine(workspace.History.GetRoot(root), "manifest.jsonl"), FileMode.Open, FileAccess.Read, FileShare.Read);
+                if (++calls == 2) locked = new FileStream(HistoryV3TestSupport.LastSegment(HistoryV3TestSupport.DataLedger(root)), FileMode.Open, FileAccess.Read, FileShare.Read);
             } };
             var result = workspace.Save([edit]);
             TestSupport.Assert(!result.Saved && workspace.IsDirty && files.All(file => File.ReadAllBytes(Path.Combine(root, file.Key!)).SequenceEqual(file.Value)), "历史最终落盘失败没有恢复全部文件及草稿");
@@ -105,14 +105,15 @@ internal static class WritebackHardeningTests
         EditOrdinary(workspace);
         TestSupport.Assert(workspace.Save().Saved, "历史失败测试前置保存失败");
         var files = Directory.GetFiles(root).ToDictionary(path => Path.GetFileName(path)!, File.ReadAllBytes);
-        var manifest = Path.Combine(workspace.History.GetRoot(root), "manifest.jsonl");
+        var manifest = HistoryV3TestSupport.LastSegment(HistoryV3TestSupport.DataLedger(root));
         var history = File.ReadAllBytes(manifest);
-        using (var locked = new FileStream(manifest, FileMode.Open, FileAccess.Read, FileShare.Read))
+        using (HistoryV3TestSupport.LockAtAppend("RestoreCommit"))
         {
             var result = workspace.UndoSaved();
             TestSupport.Assert(!result.Success && files.All(file => File.ReadAllBytes(Path.Combine(root, file.Key!)).SequenceEqual(file.Value)), "撤回历史落盘失败后文件未恢复操作前状态");
         }
-        TestSupport.Assert(File.ReadAllBytes(manifest).SequenceEqual(history), "撤回失败改变了历史状态");
+        TestSupport.Assert(File.ReadAllBytes(manifest).AsSpan(0, history.Length).SequenceEqual(history) &&
+            workspace.History.ListMetadata(root).Single().Status == HistoryStatus.Active, "撤回失败改写了旧日志或已提交状态");
         TestSupport.Assert(workspace.UndoSaved().Success, "解除历史锁后不能再次撤回");
     });
 

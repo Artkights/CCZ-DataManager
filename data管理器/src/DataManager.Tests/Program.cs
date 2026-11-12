@@ -18,6 +18,126 @@ internal static class Program
         using var historyScope = DataManager.Core.History.ProjectHistoryPaths.UseBaseDirectory(testHistoryRoot);
         try
         {
+            if (args.FirstOrDefault() == "--growth-integration-ui" && args.Length >= 3)
+            {
+                GrowthIntegrationUiTests.Run(Path.GetFullPath(args[1]), Path.GetFullPath(args[2]));
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--engine-general-constants" && args.Length >= 2)
+            {
+                EngineGeneralConstantTests.Run(Path.GetFullPath(args[1]));
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--person-image-integration" && args.Length >= 3)
+            {
+                PersonImageIntegrationTests.Run(Path.GetFullPath(args[1]), Path.GetFullPath(args[2]));
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--strategy-effect-ui" && args.Length >= 2)
+            {
+                StrategyEffectUiTests.Run(Path.GetFullPath(args[1]));
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--strategy-workbooks" && args.Length >= 2)
+            {
+                StrategyWorkbookTests.Run(Path.GetFullPath(args[1]));
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--strategy-layout" && args.Length >= 3)
+            {
+                StrategyLayoutTests.Run(Path.GetFullPath(args[1]), Path.GetFullPath(args[2]),
+                    args.Length > 3 ? float.Parse(args[3], CultureInfo.InvariantCulture) : null);
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--strategy-effect-classes" && args.Length >= 2)
+            {
+                StrategyEffectClassTests.Run(Path.GetFullPath(args[1]));
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--strategy-extension" && args.Length >= 2)
+            {
+                StrategyExtensionUiTests.Run(Path.GetFullPath(args[1]));
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--extend-pager-lifecycle")
+            {
+                ExtendPagerLifecycleTests.Run();
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--extend-hidden-return")
+            {
+                ExtendHiddenReturnTests.Run();
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--business-preview-owner-lifecycle")
+            {
+                BusinessPreviewOwnerLifecycleTests.Run();
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--projected-column-reuse" && args.Length >= 2)
+            {
+                ProjectedColumnReuseTests.Run(Path.GetFullPath(args[1]));
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--history-growth-optimization" && args.Length >= 3)
+            {
+                HistoryGrowthOptimizationTests.Run(Path.GetFullPath(args[1]), Path.GetFullPath(args[2]));
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--layout-optimization" && args.Length >= 3)
+            {
+                LayoutOptimizationTests.Run(Path.GetFullPath(args[1]), Path.GetFullPath(args[2]),
+                    args.Length > 3 ? int.Parse(args[3]) : 30);
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--project-lifecycle-optimization" && args.Length >= 3)
+            {
+                ProjectLifecycleOptimizationTests.Run(Path.GetFullPath(args[1]), Path.GetFullPath(args[2]));
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--history-async-save" && args.Length >= 2)
+            {
+                HistoryAsyncSaveTests.Run(Path.GetFullPath(args[1]));
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--page-binding-hotspots" && args.Length >= 3)
+            {
+                PageBindingHotspotTests.Run(Path.GetFullPath(args[1]), Path.GetFullPath(args[2]));
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--image-resource-optimization")
+            {
+                ImageResourceOptimizationTests.Run();
+                return 0;
+            }
+            if (args.FirstOrDefault() is "--history-v3" or "--history-storage-v3")
+            {
+                HistoryStorageV3Tests.Run();
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--owned-temporary-workspace")
+            {
+                OwnedTemporaryWorkspaceTests.Run(args.Length > 1 ? args[1] : Path.Combine(Path.GetTempPath(), "CCZOwnedWorkspaceChecks"));
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--optimization-audit" && args.Length >= 3)
+            {
+                OptimizationAuditTests.Run(Path.GetFullPath(args[1]), Path.GetFullPath(args[2]),
+                    args.Length > 3 ? int.Parse(args[3]) : 30);
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--range-catalog-integration" && args.Length >= 2)
+            {
+                WorkspaceRangeCatalogTests.Run(Path.GetFullPath(args[1]),
+                    args.Length > 2 ? Path.GetFullPath(args[2]) : null);
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--range-integration" && args.Length >= 2)
+            {
+                RangeIntegrationTests.Run(Path.GetFullPath(args[1]),
+                    args.Length > 2 ? Path.GetFullPath(args[2]) : null);
+                return 0;
+            }
             if (args.FirstOrDefault() == "--image-writeback-integration")
             {
                 ImageWritebackIntegrationTests.Run(args.Length > 1 ? Path.GetFullPath(args[1]) : Directory.GetCurrentDirectory());
@@ -257,6 +377,11 @@ internal static class Program
                 Console.WriteLine("SAVE_HISTORY_21_REGRESSION_TESTS_OK");
                 return 0;
             }
+            if (args.FirstOrDefault() == "--workspace-file-transforms" && args.Length >= 2)
+            {
+                WorkspaceFileTransformTests.Run(Path.GetFullPath(args[1]));
+                return 0;
+            }
             if (args.FirstOrDefault() == "--record-presentation")
             {
                 RecordPresentationTests.Run();
@@ -373,7 +498,7 @@ internal static class Program
             }
             var basePath = Environment.GetEnvironmentVariable("DATAMANAGER_TEST_BASE")
                 ?? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "..", "基底", "加强版6.5未加密版"));
-            if (args.Length > 1 && args[0] is "--ui-integration" or "--ui-regression" or "--core-regression" or "--migration-regression" or "--writeback-hardening")
+            if (args.Length > 1 && args[0] is "--ui-integration" or "--ui-regression" or "--core-regression" or "--core-functional-regression" or "--migration-regression" or "--writeback-hardening")
                 basePath = Path.GetFullPath(args[1]);
             if (args.FirstOrDefault() == "--extend-core")
             {
@@ -444,7 +569,13 @@ internal static class Program
             if (args.FirstOrDefault() == "--resource-infrastructure")
             {
                 ResourceInfrastructureTests.Run();
+                OptionCatalogTests.Run();
                 Console.WriteLine("RESOURCE_INFRASTRUCTURE_TESTS_OK");
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--option-catalog")
+            {
+                OptionCatalogTests.Run();
                 return 0;
             }
             if (args.FirstOrDefault() == "--ui-presentation")
@@ -554,6 +685,12 @@ internal static class Program
                 Console.WriteLine("UI_INTEGRATION_TESTS_OK");
                 return 0;
             }
+            if (args.FirstOrDefault() == "--resource-preview")
+            {
+                ResourcePreviewTests.Run(args.Length > 1 ? Path.GetFullPath(args[1]) : basePath);
+                Console.WriteLine("RESOURCE_PREVIEW_TESTS_OK");
+                return 0;
+            }
             if (args.FirstOrDefault() == "--migration-regression")
             {
                 MigrationFieldIsolationPerformanceTests.Run();
@@ -562,24 +699,44 @@ internal static class Program
                 Console.WriteLine("MIGRATION_REGRESSION_TESTS_OK");
                 return 0;
             }
-            if (args.FirstOrDefault() == "--core-regression")
+            if (args.FirstOrDefault() is "--core-regression" or "--core-functional-regression")
             {
-                FixtureSnapshotTests.Run(basePath);
-                ProfileTests.Run();
-                RecordCodecTests.Run();
-                PersonQuoteTests.Run(basePath);
-                AssignmentEvidenceTests.Run(basePath);
-                DomainCodecTests.Run(basePath);
-                BusinessTableWriteTests.Run(basePath);
-                AccessoryGroupCsvTests.Run(basePath);
-                ScannerTests.Run(basePath);
-                WorkspaceTests.Run(basePath);
-                CsvTests.Run(basePath);
-                HistoryTests.Run(basePath);
-                UnifiedHistoryTests.Run(basePath);
-                ScanMatrixTests.Run(basePath);
-                ProfileWriteTests.Run(basePath);
-                Console.WriteLine("CORE_REGRESSION_TESTS_OK");
+                var functionalOnly = args[0] == "--core-functional-regression";
+                var failures = new List<Exception>();
+                void RunCoreGroup(string name, Action run)
+                {
+                    if (!functionalOnly) { run(); return; }
+                    try { run(); Console.WriteLine($"CORE_GROUP_OK {name}"); }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"CORE_GROUP_FAILED {name}: {ex.Message}");
+                        failures.Add(new InvalidOperationException(name, ex));
+                    }
+                }
+                RunCoreGroup(nameof(WorkspaceFileTransformTests), () => WorkspaceFileTransformTests.Run(basePath));
+                if (!functionalOnly) FixtureSnapshotTests.Run(basePath);
+                RunCoreGroup(nameof(ProfileTests), ProfileTests.Run);
+                RunCoreGroup(nameof(RecordCodecTests), RecordCodecTests.Run);
+                RunCoreGroup(nameof(PersonQuoteTests), () => PersonQuoteTests.Run(basePath));
+                RunCoreGroup(nameof(AssignmentEvidenceTests), () => AssignmentEvidenceTests.Run(basePath));
+                RunCoreGroup(nameof(DomainCodecTests), () => DomainCodecTests.Run(basePath));
+                RunCoreGroup(nameof(BusinessTableWriteTests), () => BusinessTableWriteTests.Run(basePath));
+                RunCoreGroup(nameof(AccessoryGroupCsvTests), () => AccessoryGroupCsvTests.Run(basePath));
+                RunCoreGroup(nameof(ScannerTests), () => ScannerTests.Run(basePath));
+                RunCoreGroup(nameof(WorkspaceTests), () => WorkspaceTests.Run(basePath));
+                RunCoreGroup(nameof(CsvTests), () => CsvTests.Run(basePath));
+                RunCoreGroup(nameof(HistoryTests), () => HistoryTests.Run(basePath));
+                RunCoreGroup(nameof(UnifiedHistoryTests), () => UnifiedHistoryTests.Run(basePath));
+                RunCoreGroup(nameof(ScanMatrixTests), () => ScanMatrixTests.Run(basePath));
+                RunCoreGroup(nameof(ProfileWriteTests), () => ProfileWriteTests.Run(basePath));
+                if (failures.Count > 0) throw new AggregateException("核心功能回归存在失败组。", failures);
+                Console.WriteLine(args[0] == "--core-regression" ? "CORE_REGRESSION_TESTS_OK" : "CORE_FUNCTIONAL_REGRESSION_TESTS_OK");
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--business-table-write")
+            {
+                BusinessTableWriteTests.Run(args.Length > 1 ? Path.GetFullPath(args[1]) : basePath);
+                Console.WriteLine("BUSINESS_TABLE_WRITE_TESTS_OK");
                 return 0;
             }
             if (args.Length >= 2 && args[0] == "--person-equipment")
@@ -608,6 +765,7 @@ internal static class Program
             }
             ProfileTests.Run();
             RecordCodecTests.Run();
+            OptionCatalogTests.Run();
             ResourceInfrastructureTests.Run();
             ResourceBindingMappingTests.Run(basePath);
             var snapshotPath = args.Length == 2 && args[0] == "--ui-snapshot" ? Path.GetFullPath(args[1]) : null;

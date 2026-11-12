@@ -200,6 +200,17 @@ public sealed class EngineEffectWriteService
             after = (byte[])after.Clone();
             after[EngineEffectLayout.NameSuffixOffset] = suffix;
         }
+        // A name that fills all 15 payload bytes leaves +0x0F as its terminator.
+        // Setting a nonzero suffix in the same request would replace that
+        // terminator and make the engine read past the slot.
+        var suffixByte = after[EngineEffectLayout.NameSuffixOffset];
+        if (suffixByte != 0 &&
+            EngineEffectSlotRules.NameEnd(after) >= EngineEffectLayout.NameSuffixOffset)
+        {
+            errors.Add("名称：名称已占满 15 字节，+0x0F 是名称结束符；" +
+                       "请先把名称缩短到 14 字节以内，再设置非零后缀。");
+            return;
+        }
         if (after.AsSpan().SequenceEqual(before.RawBytes)) return;
         AddChange(changes, errors, new EngineEffectWriteChange
         {
@@ -491,7 +502,7 @@ public sealed class EngineEffectWriteService
     }
 
     /// <summary>Only a game process launched from this project's EXE owns these files.</summary>
-    internal static bool IsGameRunning(ProjectWorkspace workspace)
+    public static bool IsGameRunning(ProjectWorkspace workspace)
     {
         var target = Path.GetFullPath(ProjectFileLocator.Resolve(workspace.RootPath, "Ekd5.exe"));
         foreach (var process in Process.GetProcesses())

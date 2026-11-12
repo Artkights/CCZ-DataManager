@@ -1,0 +1,4999 @@
+{
+  "schemaVersion": 1,
+  "generatedFrom": "2026-11-12 local knowledge inventory",
+  "sources": [
+    {
+      "path": "工具整合包/本地知识库/03-机制详解/成长与宝物常量总表-三基底.csv",
+      "sha256": "42EE4AF4C33E502EEBA8BDD2157E14D4792AADA2E7AEDD318CC901DADC17ACD5"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-ability-display-table.json",
+      "sha256": "C73FE26C7EE3FDABA7E20CD786F4F7BBC8FB8FAA49C2FFA98DAD31F4BEA5B664"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-ai-and-terrain.json",
+      "sha256": "5A51DF87832621BD4595F6087B10BE13CC58C6286D6626117C6B30FB0718C7C7"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-ai-branch-2-13-15.json",
+      "sha256": "2B8322F2DA3C7B0DF60B36584FB8B4BE6BDF626A1C5F5E9F03293B85025113BE"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-ai-branch-346-scoring.json",
+      "sha256": "74F5A0A83617E74428D4E59D50D4D76722A8B2902D693CA87C619C9F8A634721"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-ai-branch-712-scoring.json",
+      "sha256": "AD8ED3FA7105137F5F34044334EC8365D99768F2E6B90E6C3782150C316D29FC"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-ai-cross-base-audit.json",
+      "sha256": "C299284AD8D44BF5DEBE2582B481E763CE78773AACECF0EA6EBE0003CC61D59D"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-ai-damage-scoring.json",
+      "sha256": "CF2E2B05429C5456827592BBA9D97FFA272BB6CB387516071A088DB6CD01AFFD"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-ai-handler-constants-66.json",
+      "sha256": "43B06F2E6332659375FF25DC0FF087E0CC6EC8FC1988ACB7ABC7FDBEFD5D87E9"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-anchor-relocation-66.json",
+      "sha256": "41398F72782F11CE675B6BD6B1DD79C903C094E1FB76929777847050EB141D3A"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-api-name-table.json",
+      "sha256": "BE5794FDC7B255129AE92284CDEA6E25CF4CAA635564B8378640E2AB6BF2F27B"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-arithmetic-immediates-census.json",
+      "sha256": "2331A079C8F8275E53D786FCC4116DE174EAEEB9FA36435B6E0E79CAC36D87AF"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-armor-exp-cross-base.json",
+      "sha256": "A35DC4302B1141B12419D1009B4B8D7BDDE0F44B5F53900C1968C43533CA6A88"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-assignment-field-policy.json",
+      "sha256": "F756C235C58B6C48E5E467F7F7D8CC2CF86B2C0C0CF00E737AE5EAC75CCA3622"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-auto-battle-flags.json",
+      "sha256": "CFD734F32A02631A395B1A270EE994D858B7F564C1C391FC17E3A9B0DA3089A6"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-avi-player.json",
+      "sha256": "AF656FE5A9F6D824B75FEB967453C8D557CE7E4B1AA9D1B9EA21C6CDC5C1A416"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-battle-mode-byte.json",
+      "sha256": "FFDBBF524EBEC607D716C9F2DCED0D3BF586F087A0142E368509A0FD21D11EC8"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-battle-script-actions.json",
+      "sha256": "720F930D84619EED6CB3F261FA83223B3DE349F87BD8BCEBF94BACB648CE1E5C"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-battle-unit-table.json",
+      "sha256": "6F776232F7D0726337E65F4334CF26CDDCC24B252118DFD0B492961EC110243E"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-battle-viewport-context.json",
+      "sha256": "02372E499D0802DFA00CA676E06F8DBF5CEFC8A189BA28A052E00541158B6465"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-capacity-and-sentinels.json",
+      "sha256": "AA6AA50EF6FB74C78EDEA32D3294759C29727AD038A7306A349211BF80F7C0A9"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-cell-byte-map.json",
+      "sha256": "2D66420EFDA3E9CDB3D6877D37716289E71894583B633FCE45ED00CD90052870"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-cell-flag-writer.json",
+      "sha256": "41DD5937185B15FB9C3FD421ED515623789BB80B9A73597F9C0DC4A3211FC48F"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-char-exp-cross-base.json",
+      "sha256": "4B24A78C49D6D5545C9F25C18E9CCAA7B20BAAB6FE8948CBB70EEA6D1065F11C"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-character-accessors.json",
+      "sha256": "B5592131FB20AA4F82CA87C90E094AB1C7970D207D8609E609FC97FE25AC7020"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-character-adaptation-table.json",
+      "sha256": "6345527EB87A9B236A8AE107455F6471AAB25ACD6C1D355866A461858F0363DF"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-color-palette.json",
+      "sha256": "180B4D40C524486759A97F34380D5C8E081E77DF2A0189BE13FBDC70EEE695E7"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-crit-combo-mode.json",
+      "sha256": "DD35352E19AE5BA83ED8A4C5F4A1D2123DA01928696258E029CB8394199D35E7"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-cross-base-audit-late.json",
+      "sha256": "5DDAF70A106A98555E131AD6C2D0385B0F32702B0C270408543340E43CCCB3B6"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-current-record-pointer.json",
+      "sha256": "62658F52B7EC7FEC5460D18667631C9DAB110385B8F5F1C3D4EE2E4CC8460BD5"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-damage-apply-mode.json",
+      "sha256": "9BCE6FD1F624DAFBC4F07BEA6CEC38D8278E171D2D53AC1AB70BFD82B2BD11EB"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-dialog-framework.json",
+      "sha256": "99E78D94DA17B6FFC70BADF86D06FB39F3E7F3C978092077E7EFB4A324FE7001"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-dialog-workarea-4fff68.json",
+      "sha256": "D2ADAD633789F047525F693BC8FE2E869B344B69AF395BE079A00856BC1A2BE5"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-dialog332-confirm.json",
+      "sha256": "0D488405C22E83A9AD060560A78D771B2AE992DD9E2A971E5C422E92F29B9A44"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-dialog332-refresh.json",
+      "sha256": "0A973E4336F63560AF3B8EC5C3A3FAB4E0A4CCDDC106A6BDC5B9AA5C81E95EF2"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-embedded-byte-tables.json",
+      "sha256": "91818B329DFD8FC85CECCAD5425F70AD6EEC1AB0A63500B4E4C32E3160A8992F"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-equipment-growth.json",
+      "sha256": "E1583B30A51090413ECF4479F48B9F4620690EB6FB6C2D4142F3C33CD863C539"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-equipment-slot-bound.json",
+      "sha256": "D24C4FD910E7C1A7D89D3BC00E9275BB3C72DF8FF935BA52B0C4E025D0A67634"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-font-name-table.json",
+      "sha256": "4E35F7DC824160BB9FBCF1EC1102A57E42714B960B8BD622F34D4632FE1A6464"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-formula-site-audit.json",
+      "sha256": "AC138A0F6292B55F56FC95DEFD3FFAE4D04D29927D7009B69686123564257BE0"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-general-constants.json",
+      "sha256": "0A941F16923C3BB75F8EB2631BFD046DCCA4F022108A1F71DEF7A9F293EAA0DE"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-general-coverage.json",
+      "sha256": "BC3410DDA20E88FC4DC55DE7C5884813242E69F723085D3CF5ED51AF7FC81253"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-global-mode-flags.json",
+      "sha256": "EF80E4EA86F788676F27452C509989768258598A16FCD0BD31E81485CC192D9A"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-global-ui-state-block.json",
+      "sha256": "6B184FD3A17C6DFA831662C2604B07152876DB82545A7810779C52C53376453D"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-grid-bound-correction.json",
+      "sha256": "9A18848914009FC4455AF8E3F6196B4EF8880EC08FE398BB50E1483C8F61AF93"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-grid-dimension-pair.json",
+      "sha256": "A8DDE42E114A1D46582A71EAE4372E3276407909F046DCC2C1B889C69BF02507"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-history-intel-341.json",
+      "sha256": "2491941B0F2A35E733FE6F702A558CF915E1D8E2D50E8858E1E89374313A74AF"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-hit-height-modifier.json",
+      "sha256": "3BA8695A3FC713FAEB637299A912B602D49A783172BE1DE70ED2B8F1F379A96C"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-hit-retry-cross-base.json",
+      "sha256": "5A4D2A03F1430758F5AD45621A327C9DEAC5E50497A3DA191FF8C3E55D9A7E39"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-item-effect-code-and-range-table.json",
+      "sha256": "4D0E947DFDACAF659FEC59D166C946B1029B345D9E150B2FD63F5CD9B129CA4D"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-item-loader-64-parser.json",
+      "sha256": "A1743A5015C4223680CC0FEC2A9B7A1CD120577AF2EDCF393C7464D6D36A1DAB"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-item-price-boundary.json",
+      "sha256": "5FB2B88F3299BF5CE5DB0B0AA2654F4F1BEF82D1B73DA6A816CAE91E4F80D8A3"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-item-record-fields.json",
+      "sha256": "C1CC233187D596DF478D495D1F56B0EE7C3924EE45FEAA6A33287AFE0C6DE437"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-item-record-normalization.json",
+      "sha256": "B0E7A3E77AFB73391DDD1D28C9A9DC10BA5AE2D42899C119F91FB7068D69FA91"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-item-record-table.json",
+      "sha256": "5E4C3DD4D9D365AA44FC71A3ADD6CB9E8A46748189F6B295D4EAE04803679446"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-item-type-action-mapping-66.json",
+      "sha256": "C893CC71C04E5BB02A09159ADE2E1EFA22A4852648D578EFABB7352E51911B15"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-item-type-classification.json",
+      "sha256": "F16EA1E6077193C152A971529481E02B59826AD13D63A8908BB6DD7297340CDA"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-job-attribute-matrix.json",
+      "sha256": "DE86C7B02C1A552AF51F49A983A5E08F732FAAE82D2C6F3BDCC15D67828B60EF"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-job-penetration.json",
+      "sha256": "186BFA289747A81B9DE843640E60C8FA40EEF2EF4B6CCD909DF5EA363796FE1C"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-layer-block-constants.json",
+      "sha256": "ED560FBE5482C41BC9A4B78BEF67BDF3123F352AA31BBB0AC3F7659E5BA13FEA"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-layer-buffer-11.json",
+      "sha256": "3D45D2D9C0074D1227B3BF85530158B83C87E7AFD963E2CD1F7D80BD809AE54D"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-level-context-struct.json",
+      "sha256": "48AB27B7491E91EBFD445C4301A49EEB5E5551DC1B303343AC77ED9E48B88963"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-mechanisms.json",
+      "sha256": "99D2FF7F5A83DA4DA78E36FF4EA228CE6A7853AAB2EFDC15819BD31F80CFB7E5"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-memory-arenas.json",
+      "sha256": "61E5E6413F029AF8640108E5688414080D76C080875194B007F779E88AA61CA7"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-merit-table.json",
+      "sha256": "10D4C916FF4E7E792F17FA7AAE9EEBA87423D855EA46E6902462CC227D696D1A"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-money-global.json",
+      "sha256": "A26E86C0C4D7C7DEB6BB1FA9D71C81A48770B8F4CB993F923FC9BDB1EDFDBCA1"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-movement-terrain.json",
+      "sha256": "FB076F6F3D9AA0D45A5467A3CE52B9123AF659A19D177C97794033E723A4B319"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-new-anchors-batch-66.json",
+      "sha256": "177418834010DCCF26C94518BDB865381AFECDA4C014205E2D60377699AB0A67"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-payment-chain.json",
+      "sha256": "625C07A0ED3B7DCAEED377A6EE4D8CE2D81AB25BAF053C379977C311F2B337A7"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-personal-exp-cross-base.json",
+      "sha256": "77A77D623BB21142C9C33308468BB9E9F9CC5C85384FE225CFE864D88E79DD49"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-physical-binding-groups.json",
+      "sha256": "A600E8DD28F9F789DB7D3595E2233CE259CE95CE66FB6CED544B07210F47220C"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-physical-damage-chain.json",
+      "sha256": "CEAEF42609C88D321BD6D6DF7D8331B2A98B4E8567BD61F3B1BCD10F16C8AD37"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-physical-level-table.json",
+      "sha256": "B1676C654D7419989BF6E917EDE547E1F4434B9D0383601F55D5654860D7C763"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-physical-range-correction.json",
+      "sha256": "2AD38316E41D6AD1F953610376F229773A3BD381E0FB08DB062DDA6D8F547BEA"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-quick-window-host.json",
+      "sha256": "33AB1CFB8B6AE9ED5CCAB81BB7D0300E9E190E01A16417D154D2ED04CF18DEB1"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-random-variant-table.json",
+      "sha256": "0ED4E4963C7FC4546DFBD15BB8E67CD545EB2F4BE5D8F8C8E0281C15B57497A5"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-save-file-format.json",
+      "sha256": "7966D45F42EABDFE5C4C48E5BCD3A254DEBCCE38A354F8978E38E889A10F7A71"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-save-load-constants.json",
+      "sha256": "9580F6EAEFD53E94AF17B0431F07ABFE040EAA18678CFECD80679D0EB5A78BA8"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-scan-lifecycle.json",
+      "sha256": "CF959851AEDCA1051F2F8AF71AA8BA9E7E81B5D5994B8DABF480E478810FF1E8"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-scan-operand-provenance.json",
+      "sha256": "93302DD50E4B9765D6914D8491692DC761BD26D3FA028586D69ADA563ABC136D"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-scan-performance-equivalence.json",
+      "sha256": "8D6AFCE4E0E3DF40BF849BA270D85115FDBF3AD5B6E4B44CBA1AEDC71116ACE4"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-script-context-caches.json",
+      "sha256": "F7DA71EC8D02EEC93F21413120A90FA2A0EBF3AF159B0BF58F964038E0A7BCC9"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-script-handler-capacity.json",
+      "sha256": "5FD83388B733412F65082058F781B01A4CAB5F3BF34213A5FA8DF4B09BB2A601"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-script-number-parser.json",
+      "sha256": "61D2CD4D3D19B0F897CEE0776B2882A559661409E00649C463C96707BEE07089"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-script-opcodes-7c-7d.json",
+      "sha256": "6F5E231AC10B1B06BCD339A4F7D80F7A42B535221E31D8A72B9C14D5EAED5099"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-settings-block-fields.json",
+      "sha256": "6BC5DA670DA86712A0A67CD54B3F0ADD4B2C0A87A9E77CBAFFBCDC6C804BD171"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-settings-dialog-kankyou.json",
+      "sha256": "7987A1F08F73636E738BF5EA35AE91D6E07C3CFC3C0684128E812D938445E248"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-shop-growth.json",
+      "sha256": "05EF2620997B09952526D605EC528B793497E8FC6A0706C8CFAD1C9B580D4ACC"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-slot-type-candidate.json",
+      "sha256": "14DE68BF33F7C74B896FE60B1AF67828E5182B843BD3095CD85FA503A7AB1AE0"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-sound-settings.json",
+      "sha256": "AB349E3C9DFD21DA140A47476AC8791288E6988F2221DEBC5E462949F1F35998"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-strategy-direction-weather.json",
+      "sha256": "FD7A7B51C8A4F6313A493EA4E507865DB7F344CC378870BAC086D8FF81CECB3B"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-table-506800.json",
+      "sha256": "2702B178653BB21750281F4010995D899721BC12CAC6E217650B84F3BB8F6C21"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-target-direction-score.json",
+      "sha256": "FED1676421F6A21C232950C20F411EF2B833D0D1422FF3365A04556B31B074F9"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-temp-attribute-block.json",
+      "sha256": "0E185E6A70F314A550E1CF14356C07091C69423ED3ABE6B96C6CA4427FFC7FC6"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-text-buffers-save-header.json",
+      "sha256": "1BFFAC98B870DFFE463FCAB4CBAA5A13ECE19558BE7C9718473956DC175F1B60"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-training-ground-context.json",
+      "sha256": "36C8C1A8C2C402C1E97F2FA4829A734EE777D215715847D23490B1BB69FBF310"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-turn-weather-state.json",
+      "sha256": "C1CF4073926C297A31D7BB3E6E5B994D3376C9627D39E6FED5981BECCE47DC9D"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-unit-alloc-records.json",
+      "sha256": "67CA34BB4333739AB114056F2B1250522A5A49D4783F6AF05D6638E99060F19D"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-unit-slot-arrays.json",
+      "sha256": "87758AD6B62279BFDFAF34673E23AD9174FE7ABA7331C940DD32FD08A9903E3C"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-unit-status-bitfield.json",
+      "sha256": "38FDA88FA02B19FC4B65D7ABA868330A741BCB437FCBCCB9C3DF0394552F4C68"
+    },
+    {
+      "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-weapon-exp-cross-base.json",
+      "sha256": "044C0233E93312BD0F9449069C438EF7DA0C6642CFC539EA2413B94B3792EED8"
+    }
+  ],
+  "candidateResolutionSource": {
+    "path": "config/engine-constant-candidate-resolutions.json",
+    "sha256": "88600ACE86AC46C137EDC5B4DF2A672715AFCCBE5B59CD332245892C0D7CA323"
+  },
+  "bases": {
+    "6.4": {
+      "name": "洗隋",
+      "sha256": "91121D4B5F7FBB987475943A590B76308C0DDB8B6BCD17C218EEDC6568CE2AD8"
+    },
+    "6.5": {
+      "name": "加强版6.5未加密版",
+      "sha256": "77D82535926EAFCBF44538874EDD07E69CFC83492335A83258F16B866F06606A"
+    },
+    "6.6": {
+      "name": "复刻版6.6山贼",
+      "sha256": "25D488C874A08553903CDAD9A07FF6FBCD1A38EE6C6B6386F40152DA963D833A"
+    }
+  },
+  "definitions": [
+    {
+      "id": "equip-generation-band",
+      "module": "成长与转职",
+      "title": "装备代次分段",
+      "minimum": 1,
+      "maximum": 85,
+      "kind": "Byte",
+      "source": "成长与宝物常量总表-三基底.csv",
+      "description": "装备代次分段",
+      "unit": "值",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4226473,
+              "length": 1,
+              "instructionVa": 4226472,
+              "instruction": "mov al, 0x14",
+              "valueOffset": 0,
+              "original": 20
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4226473,
+              "length": 1,
+              "instructionVa": 4226472,
+              "instruction": "mov al, 0x14",
+              "valueOffset": 0,
+              "original": 20
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4226473,
+              "length": 1,
+              "instructionVa": 4226472,
+              "instruction": "mov al, 0x28",
+              "valueOffset": 0,
+              "original": 40
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "equip-special-level-divisor",
+      "module": "成长与转职",
+      "title": "宝物平均等级除数",
+      "minimum": 1,
+      "maximum": 255,
+      "kind": "Byte",
+      "source": "成长与宝物常量总表-三基底.csv",
+      "description": "宝物平均等级除数",
+      "unit": "级",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4226962,
+              "length": 1,
+              "instructionVa": 4226961,
+              "instruction": "mov cl, 6",
+              "valueOffset": 0,
+              "original": 6
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4226962,
+              "length": 1,
+              "instructionVa": 4226961,
+              "instruction": "mov cl, 6",
+              "valueOffset": 0,
+              "original": 6
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4226962,
+              "length": 1,
+              "instructionVa": 4226961,
+              "instruction": "mov cl, 4",
+              "valueOffset": 0,
+              "original": 4
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "equip-normal-level-divisor",
+      "module": "成长与转职",
+      "title": "普通装备段内除数",
+      "minimum": 1,
+      "maximum": 255,
+      "kind": "Byte",
+      "source": "成长与宝物常量总表-三基底.csv",
+      "description": "普通装备段内除数",
+      "unit": "值",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4226979,
+              "length": 1,
+              "instructionVa": 4226978,
+              "instruction": "mov cl, 4",
+              "valueOffset": 0,
+              "original": 4
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4226979,
+              "length": 1,
+              "instructionVa": 4226978,
+              "instruction": "mov cl, 4",
+              "valueOffset": 0,
+              "original": 4
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4226979,
+              "length": 1,
+              "instructionVa": 4226978,
+              "instruction": "mov cl, 5",
+              "valueOffset": 0,
+              "original": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "promotion-level-step",
+      "module": "成长与转职",
+      "title": "转职需求等级间隔",
+      "minimum": 1,
+      "maximum": 127,
+      "kind": "Byte",
+      "source": "成长与宝物常量总表-三基底.csv",
+      "description": "转职需求等级间隔",
+      "unit": "级",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4314083,
+              "length": 1,
+              "instructionVa": 4314082,
+              "instruction": "add al, 0x14",
+              "valueOffset": 0,
+              "original": 20
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4314083,
+              "length": 1,
+              "instructionVa": 4314082,
+              "instruction": "add al, 0x14",
+              "valueOffset": 0,
+              "original": 20
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4314083,
+              "length": 1,
+              "instructionVa": 4314082,
+              "instruction": "add al, 0x14",
+              "valueOffset": 0,
+              "original": 20
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "promotion-max-job-id",
+      "module": "成长与转职",
+      "title": "可转职兵种ID上限",
+      "minimum": 0,
+      "maximum": 79,
+      "kind": "Byte",
+      "source": "成长与宝物常量总表-三基底.csv",
+      "description": "可转职兵种ID上限",
+      "unit": "值",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4314092,
+              "length": 1,
+              "instructionVa": 4314091,
+              "instruction": "cmp al, 0x3b",
+              "valueOffset": 0,
+              "original": 59
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4314092,
+              "length": 1,
+              "instructionVa": 4314091,
+              "instruction": "cmp al, 0x3b",
+              "valueOffset": 0,
+              "original": 59
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4314092,
+              "length": 1,
+              "instructionVa": 4314091,
+              "instruction": "cmp al, 0x3b",
+              "valueOffset": 0,
+              "original": 59
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "char-exp-band-limit-65",
+      "module": "经验公式",
+      "title": "升级经验最大分段",
+      "minimum": 0,
+      "maximum": 127,
+      "kind": "Byte",
+      "source": "成长与宝物常量总表-三基底.csv",
+      "description": "升级经验最大分段",
+      "unit": "档",
+      "layouts": [
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4248112,
+              "length": 1,
+              "instructionVa": 4248110,
+              "instruction": "cmp eax, 3",
+              "valueOffset": 0,
+              "original": 3
+            },
+            {
+              "va": 4248116,
+              "length": 4,
+              "instructionVa": 4248115,
+              "instruction": "mov eax, 3",
+              "valueOffset": 0,
+              "original": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "char-exp-band-base-65",
+      "module": "经验公式",
+      "title": "升级经验分段基数",
+      "minimum": 1,
+      "maximum": 127,
+      "kind": "Byte",
+      "source": "成长与宝物常量总表-三基底.csv",
+      "description": "升级经验分段基数",
+      "unit": "档",
+      "layouts": [
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4248122,
+              "length": 1,
+              "instructionVa": 4248120,
+              "instruction": "add eax, 3",
+              "valueOffset": 0,
+              "original": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "transform-type-threshold",
+      "module": "质变门槛",
+      "title": "类型变换等级门槛",
+      "minimum": 1,
+      "maximum": 255,
+      "kind": "Byte",
+      "source": "成长与宝物常量总表-三基底.csv",
+      "description": "原生类型变换路径的等级门槛；自定义质变规则独立管理。",
+      "unit": "级",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4325694,
+              "length": 1,
+              "instructionVa": 4325692,
+              "instruction": "cmp dl, 0x12",
+              "valueOffset": 0,
+              "original": 18
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4325694,
+              "length": 1,
+              "instructionVa": 4325692,
+              "instruction": "cmp dl, 7",
+              "valueOffset": 0,
+              "original": 7
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4325647,
+              "length": 1,
+              "instructionVa": 4325645,
+              "instruction": "cmp dl, 0x10",
+              "valueOffset": 0,
+              "original": 16
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "transform-override-threshold",
+      "module": "质变门槛",
+      "title": "原生覆盖表等级门槛",
+      "minimum": 1,
+      "maximum": 255,
+      "kind": "Byte",
+      "source": "成长与宝物常量总表-三基底.csv",
+      "description": "原生覆盖表生效的等级门槛；自定义规则通过质变设定管理。",
+      "unit": "级",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4325741,
+              "length": 1,
+              "instructionVa": 4325739,
+              "instruction": "cmp dl, 0xc",
+              "valueOffset": 0,
+              "original": 12
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4325741,
+              "length": 1,
+              "instructionVa": 4325739,
+              "instruction": "cmp dl, 0xa",
+              "valueOffset": 0,
+              "original": 10
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4325719,
+              "length": 1,
+              "instructionVa": 4325717,
+              "instruction": "cmp dl, 0x12",
+              "valueOffset": 0,
+              "original": 18
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "money-cap",
+      "module": "金钱与费用",
+      "title": "金钱持有上限",
+      "minimum": 1,
+      "maximum": 2147483647,
+      "kind": "Int32",
+      "source": "engine-money-global.json",
+      "description": "结算增加金钱时的封顶值；比较与回写两处同步。",
+      "unit": "金",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4221968,
+              "length": 4,
+              "instructionVa": 4221966,
+              "instruction": "cmp ecx, 0xf423f",
+              "valueOffset": 0,
+              "original": 999999
+            },
+            {
+              "va": 4221980,
+              "length": 4,
+              "instructionVa": 4221978,
+              "instruction": "mov dword ptr [edx], 0xf423f",
+              "valueOffset": 0,
+              "original": 999999
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4221968,
+              "length": 4,
+              "instructionVa": 4221966,
+              "instruction": "cmp ecx, 0xf423f",
+              "valueOffset": 0,
+              "original": 999999
+            },
+            {
+              "va": 4221980,
+              "length": 4,
+              "instructionVa": 4221978,
+              "instruction": "mov dword ptr [edx], 0xf423f",
+              "valueOffset": 0,
+              "original": 999999
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4221968,
+              "length": 4,
+              "instructionVa": 4221966,
+              "instruction": "cmp ecx, 0xf423f",
+              "valueOffset": 0,
+              "original": 999999
+            },
+            {
+              "va": 4221980,
+              "length": 4,
+              "instructionVa": 4221978,
+              "instruction": "mov dword ptr [edx], 0xf423f",
+              "valueOffset": 0,
+              "original": 999999
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "money-fixed-charge",
+      "module": "金钱与费用",
+      "title": "固定扣款金额",
+      "minimum": 0,
+      "maximum": 999999,
+      "kind": "Int32",
+      "source": "engine-money-global.json",
+      "description": "固定扣款路径 0x414E92 使用的金额。",
+      "unit": "金",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4279960,
+              "length": 4,
+              "instructionVa": 4279954,
+              "instruction": "sub dword ptr [0x4b077c], 0x3e8",
+              "valueOffset": 0,
+              "original": 1000
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4279960,
+              "length": 4,
+              "instructionVa": 4279954,
+              "instruction": "sub dword ptr [0x4b077c], 0x3e8",
+              "valueOffset": 0,
+              "original": 1000
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4279955,
+              "length": 1,
+              "instructionVa": 4279954,
+              "instruction": "or al, 0x81",
+              "valueOffset": 0,
+              "original": 129
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "training-level-cost",
+      "module": "金钱与费用",
+      "title": "练武等级费用系数",
+      "minimum": 1,
+      "maximum": 127,
+      "kind": "Byte",
+      "source": "engine-payment-chain.json",
+      "description": "按人物等级计费时的乘数。",
+      "unit": "金/级",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4339734,
+              "length": 1,
+              "instructionVa": 4339732,
+              "instruction": "imul eax, eax, 0xa",
+              "valueOffset": 0,
+              "original": 10
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4339734,
+              "length": 1,
+              "instructionVa": 4339732,
+              "instruction": "imul eax, eax, 0xa",
+              "valueOffset": 0,
+              "original": 10
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4339734,
+              "length": 1,
+              "instructionVa": 4339732,
+              "instruction": "imul eax, eax, 0xa",
+              "valueOffset": 0,
+              "original": 10
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "training-auto-cost",
+      "module": "金钱与费用",
+      "title": "自动提升费用系数",
+      "minimum": 1,
+      "maximum": 999999,
+      "kind": "Int32",
+      "source": "engine-payment-chain.json",
+      "description": "自动提升菜单的费用乘数；仅修改明确的乘法立即数。",
+      "unit": "金",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4339817,
+              "length": 4,
+              "instructionVa": 4339815,
+              "instruction": "imul eax, edx, 0x3e8",
+              "valueOffset": 0,
+              "original": 1000
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4339817,
+              "length": 4,
+              "instructionVa": 4339815,
+              "instruction": "imul eax, edx, 0x3e8",
+              "valueOffset": 0,
+              "original": 1000
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4339817,
+              "length": 4,
+              "instructionVa": 4339815,
+              "instruction": "imul eax, edx, 0x3e8",
+              "valueOffset": 0,
+              "original": 1000
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "slot-consume-cost",
+      "module": "金钱与费用",
+      "title": "槽位消耗费用系数",
+      "minimum": 1,
+      "maximum": 127,
+      "kind": "Byte",
+      "source": "engine-unit-slot-arrays.json",
+      "description": "消耗槽位时按 (slot0−1)×本值计费。",
+      "unit": "金",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4330179,
+              "length": 1,
+              "instructionVa": 4330177,
+              "instruction": "imul eax, eax, 0xa",
+              "valueOffset": 0,
+              "original": 10
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4330179,
+              "length": 1,
+              "instructionVa": 4330177,
+              "instruction": "imul eax, eax, 0xa",
+              "valueOffset": 0,
+              "original": 10
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4330179,
+              "length": 1,
+              "instructionVa": 4330177,
+              "instruction": "imul eax, eax, 0xa",
+              "valueOffset": 0,
+              "original": 10
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ability-display-cap-0",
+      "module": "能力上限",
+      "title": "攻击显示值上限",
+      "minimum": 1,
+      "maximum": 65535,
+      "kind": "Int32",
+      "source": "engine-ability-display-table.json",
+      "description": "攻击显示值上限",
+      "unit": "点",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4223350,
+              "length": 4,
+              "instructionVa": 4223349,
+              "instruction": "push 0x270f",
+              "valueOffset": 0,
+              "original": 9999
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4223350,
+              "length": 4,
+              "instructionVa": 4223349,
+              "instruction": "push 0x270f",
+              "valueOffset": 0,
+              "original": 9999
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4223350,
+              "length": 4,
+              "instructionVa": 4223349,
+              "instruction": "push 0x270f",
+              "valueOffset": 0,
+              "original": 9999
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ability-display-cap-1",
+      "module": "能力上限",
+      "title": "防御显示值上限",
+      "minimum": 1,
+      "maximum": 65535,
+      "kind": "Int32",
+      "source": "engine-ability-display-table.json",
+      "description": "防御显示值上限",
+      "unit": "点",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4223403,
+              "length": 4,
+              "instructionVa": 4223402,
+              "instruction": "push 0x270f",
+              "valueOffset": 0,
+              "original": 9999
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4223403,
+              "length": 4,
+              "instructionVa": 4223402,
+              "instruction": "push 0x270f",
+              "valueOffset": 0,
+              "original": 9999
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4223403,
+              "length": 4,
+              "instructionVa": 4223402,
+              "instruction": "push 0x270f",
+              "valueOffset": 0,
+              "original": 9999
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ability-display-cap-2",
+      "module": "能力上限",
+      "title": "精神显示值上限",
+      "minimum": 1,
+      "maximum": 65535,
+      "kind": "Int32",
+      "source": "engine-ability-display-table.json",
+      "description": "精神显示值上限",
+      "unit": "点",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4223456,
+              "length": 4,
+              "instructionVa": 4223455,
+              "instruction": "push 0x270f",
+              "valueOffset": 0,
+              "original": 9999
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4223456,
+              "length": 4,
+              "instructionVa": 4223455,
+              "instruction": "push 0x270f",
+              "valueOffset": 0,
+              "original": 9999
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4223456,
+              "length": 4,
+              "instructionVa": 4223455,
+              "instruction": "push 0x270f",
+              "valueOffset": 0,
+              "original": 9999
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ability-display-cap-3",
+      "module": "能力上限",
+      "title": "爆发显示值上限",
+      "minimum": 1,
+      "maximum": 65535,
+      "kind": "Int32",
+      "source": "engine-ability-display-table.json",
+      "description": "爆发显示值上限",
+      "unit": "点",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4223509,
+              "length": 4,
+              "instructionVa": 4223508,
+              "instruction": "push 0x270f",
+              "valueOffset": 0,
+              "original": 9999
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4223509,
+              "length": 4,
+              "instructionVa": 4223508,
+              "instruction": "push 0x270f",
+              "valueOffset": 0,
+              "original": 9999
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4223509,
+              "length": 4,
+              "instructionVa": 4223508,
+              "instruction": "push 0x270f",
+              "valueOffset": 0,
+              "original": 9999
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ability-display-cap-4",
+      "module": "能力上限",
+      "title": "士气显示值上限",
+      "minimum": 1,
+      "maximum": 65535,
+      "kind": "Int32",
+      "source": "engine-ability-display-table.json",
+      "description": "士气显示值上限",
+      "unit": "点",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4223562,
+              "length": 4,
+              "instructionVa": 4223561,
+              "instruction": "push 0x270f",
+              "valueOffset": 0,
+              "original": 9999
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4223562,
+              "length": 4,
+              "instructionVa": 4223561,
+              "instruction": "push 0x270f",
+              "valueOffset": 0,
+              "original": 9999
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4223562,
+              "length": 4,
+              "instructionVa": 4223561,
+              "instruction": "push 0x270f",
+              "valueOffset": 0,
+              "original": 9999
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hp-display-cap",
+      "module": "能力上限",
+      "title": "HP计算上限",
+      "minimum": 1,
+      "maximum": 65535,
+      "kind": "Int32",
+      "source": "engine-ability-display-table.json",
+      "description": "HP计算上限",
+      "unit": "点",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4223616,
+              "length": 4,
+              "instructionVa": 4223615,
+              "instruction": "push 0xffff",
+              "valueOffset": 0,
+              "original": 65535
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4223616,
+              "length": 4,
+              "instructionVa": 4223615,
+              "instruction": "push 0xffff",
+              "valueOffset": 0,
+              "original": 65535
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4223616,
+              "length": 4,
+              "instructionVa": 4223615,
+              "instruction": "push 0xffff",
+              "valueOffset": 0,
+              "original": 65535
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mp-display-cap",
+      "module": "能力上限",
+      "title": "MP计算上限",
+      "minimum": 1,
+      "maximum": 65535,
+      "kind": "Int32",
+      "source": "engine-ability-display-table.json",
+      "description": "MP计算上限",
+      "unit": "点",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4223660,
+              "length": 4,
+              "instructionVa": 4223659,
+              "instruction": "push 0x270f",
+              "valueOffset": 0,
+              "original": 9999
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4223660,
+              "length": 4,
+              "instructionVa": 4223659,
+              "instruction": "push 0x270f",
+              "valueOffset": 0,
+              "original": 9999
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4223660,
+              "length": 4,
+              "instructionVa": 4223659,
+              "instruction": "push 0x270f",
+              "valueOffset": 0,
+              "original": 9999
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hit-direction-step",
+      "module": "命中修正",
+      "title": "方向每档命中增幅",
+      "minimum": 0,
+      "maximum": 127,
+      "kind": "Byte",
+      "source": "engine-hit-height-modifier.json",
+      "description": "按方向分类 0/1/2 乘本值，再按百分比增加命中。",
+      "unit": "%",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4230688,
+              "length": 1,
+              "instructionVa": 4230686,
+              "instruction": "imul eax, eax, 5",
+              "valueOffset": 0,
+              "original": 5
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4230688,
+              "length": 1,
+              "instructionVa": 4230686,
+              "instruction": "imul eax, eax, 5",
+              "valueOffset": 0,
+              "original": 5
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4230688,
+              "length": 1,
+              "instructionVa": 4230686,
+              "instruction": "imul eax, eax, 5",
+              "valueOffset": 0,
+              "original": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hit-extra-bonus",
+      "module": "命中修正",
+      "title": "附加条件命中增幅",
+      "minimum": 0,
+      "maximum": 100,
+      "kind": "Byte",
+      "source": "engine-hit-height-modifier.json",
+      "description": "阵营及全局条件满足后追加的命中百分比。",
+      "unit": "%",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4230726,
+              "length": 1,
+              "instructionVa": 4230725,
+              "instruction": "push 5",
+              "valueOffset": 0,
+              "original": 5
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4230726,
+              "length": 1,
+              "instructionVa": 4230725,
+              "instruction": "push 5",
+              "valueOffset": 0,
+              "original": 5
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4230726,
+              "length": 1,
+              "instructionVa": 4230725,
+              "instruction": "push 5",
+              "valueOffset": 0,
+              "original": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hit-wrapper-floor",
+      "module": "命中修正",
+      "title": "最终命中保底",
+      "minimum": 0,
+      "maximum": 100,
+      "kind": "Byte",
+      "source": "engine-hit-height-modifier.json",
+      "description": "最终命中保底",
+      "unit": "%",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4230898,
+              "length": 1,
+              "instructionVa": 4230897,
+              "instruction": "push 1",
+              "valueOffset": 0,
+              "original": 1
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4230898,
+              "length": 1,
+              "instructionVa": 4230897,
+              "instruction": "push 1",
+              "valueOffset": 0,
+              "original": 1
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4230898,
+              "length": 1,
+              "instructionVa": 4230897,
+              "instruction": "push 1",
+              "valueOffset": 0,
+              "original": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hit-wrapper-cap",
+      "module": "命中修正",
+      "title": "最终命中封顶",
+      "minimum": 1,
+      "maximum": 100,
+      "kind": "Byte",
+      "source": "engine-hit-height-modifier.json",
+      "description": "最终命中封顶",
+      "unit": "%",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4230914,
+              "length": 1,
+              "instructionVa": 4230913,
+              "instruction": "push 0x64",
+              "valueOffset": 0,
+              "original": 100
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4230914,
+              "length": 1,
+              "instructionVa": 4230913,
+              "instruction": "push 0x64",
+              "valueOffset": 0,
+              "original": 100
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4230914,
+              "length": 1,
+              "instructionVa": 4230913,
+              "instruction": "push 0x64",
+              "valueOffset": 0,
+              "original": 100
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "strategy-special-series",
+      "module": "策略修正",
+      "title": "方向0增幅兵种系ID",
+      "minimum": 0,
+      "maximum": 255,
+      "kind": "Byte",
+      "source": "engine-strategy-direction-weather.json",
+      "description": "方向0增幅兵种系ID",
+      "unit": "ID",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4440465,
+              "length": 1,
+              "instructionVa": 4440462,
+              "instruction": "cmp byte ptr [ebp - 0x14], 0x40",
+              "valueOffset": 0,
+              "original": 64
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4440465,
+              "length": 1,
+              "instructionVa": 4440462,
+              "instruction": "cmp byte ptr [ebp - 0x14], 0x1e",
+              "valueOffset": 0,
+              "original": 30
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4440465,
+              "length": 1,
+              "instructionVa": 4440462,
+              "instruction": "cmp byte ptr [ebp - 0x14], 0x15",
+              "valueOffset": 0,
+              "original": 21
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "strategy-series-bonus",
+      "module": "策略修正",
+      "title": "方向0指定兵种系增幅",
+      "minimum": 0,
+      "maximum": 127,
+      "kind": "Byte",
+      "source": "engine-strategy-direction-weather.json",
+      "description": "方向0指定兵种系增幅",
+      "unit": "%",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4440471,
+              "length": 1,
+              "instructionVa": 4440468,
+              "instruction": "add dword ptr [ebp - 0xc], 0x14",
+              "valueOffset": 0,
+              "original": 20
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4440471,
+              "length": 1,
+              "instructionVa": 4440468,
+              "instruction": "add dword ptr [ebp - 0xc], 0x28",
+              "valueOffset": 0,
+              "original": 40
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4440471,
+              "length": 1,
+              "instructionVa": 4440468,
+              "instruction": "add dword ptr [ebp - 0xc], 0x14",
+              "valueOffset": 0,
+              "original": 20
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "strategy-terrain-a",
+      "module": "策略修正",
+      "title": "方向0增幅地形ID一",
+      "minimum": 0,
+      "maximum": 29,
+      "kind": "Byte",
+      "source": "engine-strategy-direction-weather.json",
+      "description": "方向0增幅地形ID一",
+      "unit": "ID",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4440485,
+              "length": 1,
+              "instructionVa": 4440484,
+              "instruction": "cmp al, 2",
+              "valueOffset": 0,
+              "original": 2
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4440485,
+              "length": 1,
+              "instructionVa": 4440484,
+              "instruction": "cmp al, 2",
+              "valueOffset": 0,
+              "original": 2
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4440485,
+              "length": 1,
+              "instructionVa": 4440484,
+              "instruction": "cmp al, 2",
+              "valueOffset": 0,
+              "original": 2
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "strategy-terrain-b",
+      "module": "策略修正",
+      "title": "方向0增幅地形ID二",
+      "minimum": 0,
+      "maximum": 29,
+      "kind": "Byte",
+      "source": "engine-strategy-direction-weather.json",
+      "description": "方向0增幅地形ID二",
+      "unit": "ID",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4440489,
+              "length": 1,
+              "instructionVa": 4440488,
+              "instruction": "cmp al, 0x17",
+              "valueOffset": 0,
+              "original": 23
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4440489,
+              "length": 1,
+              "instructionVa": 4440488,
+              "instruction": "cmp al, 0x17",
+              "valueOffset": 0,
+              "original": 23
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4440489,
+              "length": 1,
+              "instructionVa": 4440488,
+              "instruction": "cmp al, 0x17",
+              "valueOffset": 0,
+              "original": 23
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "strategy-weather-threshold",
+      "module": "策略修正",
+      "title": "天气增幅天气ID下限",
+      "minimum": 0,
+      "maximum": 4,
+      "kind": "Byte",
+      "source": "engine-strategy-direction-weather.json",
+      "description": "天气增幅天气ID下限",
+      "unit": "ID",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4440517,
+              "length": 1,
+              "instructionVa": 4440516,
+              "instruction": "cmp al, 2",
+              "valueOffset": 0,
+              "original": 2
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4440517,
+              "length": 1,
+              "instructionVa": 4440516,
+              "instruction": "cmp al, 2",
+              "valueOffset": 0,
+              "original": 2
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4440517,
+              "length": 1,
+              "instructionVa": 4440516,
+              "instruction": "cmp al, 2",
+              "valueOffset": 0,
+              "original": 2
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "strategy-other-series",
+      "module": "策略修正",
+      "title": "方向2增幅对方兵种系ID",
+      "minimum": 0,
+      "maximum": 39,
+      "kind": "Byte",
+      "source": "engine-strategy-direction-weather.json",
+      "description": "方向2增幅对方兵种系ID",
+      "unit": "ID",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4440539,
+              "length": 1,
+              "instructionVa": 4440538,
+              "instruction": "cmp al, 7",
+              "valueOffset": 0,
+              "original": 7
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4440539,
+              "length": 1,
+              "instructionVa": 4440538,
+              "instruction": "cmp al, 7",
+              "valueOffset": 0,
+              "original": 7
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4440539,
+              "length": 1,
+              "instructionVa": 4440538,
+              "instruction": "cmp al, 7",
+              "valueOffset": 0,
+              "original": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "strategy-condition-bonus",
+      "module": "策略修正",
+      "title": "方向天气地形条件增幅",
+      "minimum": 0,
+      "maximum": 127,
+      "kind": "Byte",
+      "source": "engine-strategy-direction-weather.json",
+      "description": "方向天气地形条件增幅",
+      "unit": "%",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4440545,
+              "length": 1,
+              "instructionVa": 4440542,
+              "instruction": "add dword ptr [ebp - 0xc], 0xf",
+              "valueOffset": 0,
+              "original": 15
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4440545,
+              "length": 1,
+              "instructionVa": 4440542,
+              "instruction": "add dword ptr [ebp - 0xc], 0x19",
+              "valueOffset": 0,
+              "original": 25
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4440545,
+              "length": 1,
+              "instructionVa": 4440542,
+              "instruction": "add dword ptr [ebp - 0xc], 0x19",
+              "valueOffset": 0,
+              "original": 25
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ai4-hit-low",
+      "module": "策略AI评分",
+      "title": "AI分支4·命中低阈值",
+      "minimum": 0,
+      "maximum": 100,
+      "kind": "Byte",
+      "source": "engine-ai-branch-346-scoring.json",
+      "description": "AI分支4·命中低阈值",
+      "unit": "点",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4430230,
+              "length": 1,
+              "instructionVa": 4430228,
+              "instruction": "cmp eax, 0x23",
+              "valueOffset": 0,
+              "original": 35
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4430230,
+              "length": 1,
+              "instructionVa": 4430228,
+              "instruction": "cmp eax, 0x23",
+              "valueOffset": 0,
+              "original": 35
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4430230,
+              "length": 1,
+              "instructionVa": 4430228,
+              "instruction": "cmp eax, 0x23",
+              "valueOffset": 0,
+              "original": 35
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ai4-hit-high",
+      "module": "策略AI评分",
+      "title": "AI分支4·命中高阈值",
+      "minimum": 0,
+      "maximum": 100,
+      "kind": "Byte",
+      "source": "engine-ai-branch-346-scoring.json",
+      "description": "AI分支4·命中高阈值",
+      "unit": "点",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4430242,
+              "length": 1,
+              "instructionVa": 4430240,
+              "instruction": "cmp edx, 0x50",
+              "valueOffset": 0,
+              "original": 80
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4430242,
+              "length": 1,
+              "instructionVa": 4430240,
+              "instruction": "cmp edx, 0x50",
+              "valueOffset": 0,
+              "original": 80
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4430242,
+              "length": 1,
+              "instructionVa": 4430240,
+              "instruction": "cmp edx, 0x50",
+              "valueOffset": 0,
+              "original": 80
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ai4-score-low",
+      "module": "策略AI评分",
+      "title": "AI分支4·基础加分",
+      "minimum": 0,
+      "maximum": 127,
+      "kind": "Byte",
+      "source": "engine-ai-branch-346-scoring.json",
+      "description": "AI分支4·基础加分",
+      "unit": "点",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4430236,
+              "length": 1,
+              "instructionVa": 4430233,
+              "instruction": "add dword ptr [ebp - 4], 0x1a",
+              "valueOffset": 0,
+              "original": 26
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4430236,
+              "length": 1,
+              "instructionVa": 4430233,
+              "instruction": "add dword ptr [ebp - 4], 0x1a",
+              "valueOffset": 0,
+              "original": 26
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4430236,
+              "length": 1,
+              "instructionVa": 4430233,
+              "instruction": "add dword ptr [ebp - 4], 0x1a",
+              "valueOffset": 0,
+              "original": 26
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ai4-score-high",
+      "module": "策略AI评分",
+      "title": "AI分支4·高命中加分",
+      "minimum": 0,
+      "maximum": 127,
+      "kind": "Byte",
+      "source": "engine-ai-branch-346-scoring.json",
+      "description": "AI分支4·高命中加分",
+      "unit": "点",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4430248,
+              "length": 1,
+              "instructionVa": 4430245,
+              "instruction": "add dword ptr [ebp - 4], 0x1a",
+              "valueOffset": 0,
+              "original": 26
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4430248,
+              "length": 1,
+              "instructionVa": 4430245,
+              "instruction": "add dword ptr [ebp - 4], 0x1a",
+              "valueOffset": 0,
+              "original": 26
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4430248,
+              "length": 1,
+              "instructionVa": 4430245,
+              "instruction": "add dword ptr [ebp - 4], 0x1a",
+              "valueOffset": 0,
+              "original": 26
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ai3-hp-divisor",
+      "module": "策略AI评分",
+      "title": "AI分支3·HP除数",
+      "minimum": 1,
+      "maximum": 65535,
+      "kind": "Int32",
+      "source": "engine-ai-branch-346-scoring.json",
+      "description": "AI分支3·HP除数",
+      "unit": "点",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4430409,
+              "length": 4,
+              "instructionVa": 4430408,
+              "instruction": "mov ecx, 5",
+              "valueOffset": 0,
+              "original": 5
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4430409,
+              "length": 4,
+              "instructionVa": 4430408,
+              "instruction": "mov ecx, 5",
+              "valueOffset": 0,
+              "original": 5
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4430409,
+              "length": 4,
+              "instructionVa": 4430408,
+              "instruction": "mov ecx, 5",
+              "valueOffset": 0,
+              "original": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ai3-hp-threshold",
+      "module": "策略AI评分",
+      "title": "AI分支3·HP阈值",
+      "minimum": 0,
+      "maximum": 127,
+      "kind": "Byte",
+      "source": "engine-ai-branch-346-scoring.json",
+      "description": "AI分支3·HP阈值",
+      "unit": "点",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4430439,
+              "length": 1,
+              "instructionVa": 4430437,
+              "instruction": "cmp eax, 0x1e",
+              "valueOffset": 0,
+              "original": 30
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4430439,
+              "length": 1,
+              "instructionVa": 4430437,
+              "instruction": "cmp eax, 0x1e",
+              "valueOffset": 0,
+              "original": 30
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4430439,
+              "length": 1,
+              "instructionVa": 4430437,
+              "instruction": "cmp eax, 0x1e",
+              "valueOffset": 0,
+              "original": 30
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ai3-score",
+      "module": "策略AI评分",
+      "title": "AI分支3·条件加分",
+      "minimum": 0,
+      "maximum": 127,
+      "kind": "Byte",
+      "source": "engine-ai-branch-346-scoring.json",
+      "description": "AI分支3·条件加分",
+      "unit": "点",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4430445,
+              "length": 1,
+              "instructionVa": 4430442,
+              "instruction": "add dword ptr [ebp - 4], 0x14",
+              "valueOffset": 0,
+              "original": 20
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4430445,
+              "length": 1,
+              "instructionVa": 4430442,
+              "instruction": "add dword ptr [ebp - 4], 0x14",
+              "valueOffset": 0,
+              "original": 20
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4430445,
+              "length": 1,
+              "instructionVa": 4430442,
+              "instruction": "add dword ptr [ebp - 4], 0x14",
+              "valueOffset": 0,
+              "original": 20
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ai6-hit-low",
+      "module": "策略AI评分",
+      "title": "AI分支6·命中低阈值",
+      "minimum": 0,
+      "maximum": 100,
+      "kind": "Byte",
+      "source": "engine-ai-branch-346-scoring.json",
+      "description": "AI分支6·命中低阈值",
+      "unit": "点",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4430483,
+              "length": 1,
+              "instructionVa": 4430481,
+              "instruction": "cmp eax, 0x3c",
+              "valueOffset": 0,
+              "original": 60
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4430483,
+              "length": 1,
+              "instructionVa": 4430481,
+              "instruction": "cmp eax, 0x3c",
+              "valueOffset": 0,
+              "original": 60
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4430483,
+              "length": 1,
+              "instructionVa": 4430481,
+              "instruction": "cmp eax, 0x3c",
+              "valueOffset": 0,
+              "original": 60
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ai6-hit-high",
+      "module": "策略AI评分",
+      "title": "AI分支6·命中高阈值",
+      "minimum": 0,
+      "maximum": 100,
+      "kind": "Byte",
+      "source": "engine-ai-branch-346-scoring.json",
+      "description": "AI分支6·命中高阈值",
+      "unit": "点",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4430493,
+              "length": 1,
+              "instructionVa": 4430490,
+              "instruction": "cmp byte ptr [ebp - 0x30], 0x50",
+              "valueOffset": 0,
+              "original": 80
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4430493,
+              "length": 1,
+              "instructionVa": 4430490,
+              "instruction": "cmp byte ptr [ebp - 0x30], 0x50",
+              "valueOffset": 0,
+              "original": 80
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4430493,
+              "length": 1,
+              "instructionVa": 4430490,
+              "instruction": "cmp byte ptr [ebp - 0x30], 0x50",
+              "valueOffset": 0,
+              "original": 80
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ai6-score",
+      "module": "策略AI评分",
+      "title": "AI分支6·基础加分",
+      "minimum": 0,
+      "maximum": 127,
+      "kind": "Byte",
+      "source": "engine-ai-branch-346-scoring.json",
+      "description": "AI分支6·基础加分",
+      "unit": "点",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4430489,
+              "length": 1,
+              "instructionVa": 4430486,
+              "instruction": "add dword ptr [ebp - 4], 0xf",
+              "valueOffset": 0,
+              "original": 15
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4430489,
+              "length": 1,
+              "instructionVa": 4430486,
+              "instruction": "add dword ptr [ebp - 4], 0x19",
+              "valueOffset": 0,
+              "original": 25
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4430489,
+              "length": 1,
+              "instructionVa": 4430486,
+              "instruction": "add dword ptr [ebp - 4], 0x19",
+              "valueOffset": 0,
+              "original": 25
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ai6-extra",
+      "module": "策略AI评分",
+      "title": "AI分支6·高命中加分",
+      "minimum": 0,
+      "maximum": 127,
+      "kind": "Byte",
+      "source": "engine-ai-branch-346-scoring.json",
+      "description": "AI分支6·高命中加分",
+      "unit": "点",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4430499,
+              "length": 1,
+              "instructionVa": 4430496,
+              "instruction": "add dword ptr [ebp - 4], 7",
+              "valueOffset": 0,
+              "original": 7
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4430499,
+              "length": 1,
+              "instructionVa": 4430496,
+              "instruction": "add dword ptr [ebp - 4], 7",
+              "valueOffset": 0,
+              "original": 7
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4430499,
+              "length": 1,
+              "instructionVa": 4430496,
+              "instruction": "add dword ptr [ebp - 4], 7",
+              "valueOffset": 0,
+              "original": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ai789-score",
+      "module": "策略AI评分",
+      "title": "AI分支7至9·条件加分",
+      "minimum": 0,
+      "maximum": 127,
+      "kind": "Byte",
+      "source": "engine-ai-branch-712-scoring.json",
+      "description": "AI分支7至9·条件加分",
+      "unit": "点",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4430336,
+              "length": 1,
+              "instructionVa": 4430333,
+              "instruction": "add dword ptr [ebp - 4], 0x32",
+              "valueOffset": 0,
+              "original": 50
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4430336,
+              "length": 1,
+              "instructionVa": 4430333,
+              "instruction": "add dword ptr [ebp - 4], 0x32",
+              "valueOffset": 0,
+              "original": 50
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4430336,
+              "length": 1,
+              "instructionVa": 4430333,
+              "instruction": "add dword ptr [ebp - 4], 0x32",
+              "valueOffset": 0,
+              "original": 50
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ai789-extra-a",
+      "module": "策略AI评分",
+      "title": "AI分支7至9·策略一加分",
+      "minimum": 0,
+      "maximum": 127,
+      "kind": "Byte",
+      "source": "engine-ai-branch-712-scoring.json",
+      "description": "AI分支7至9·策略一加分",
+      "unit": "点",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4430351,
+              "length": 1,
+              "instructionVa": 4430348,
+              "instruction": "add dword ptr [ebp - 4], 5",
+              "valueOffset": 0,
+              "original": 5
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4430351,
+              "length": 1,
+              "instructionVa": 4430348,
+              "instruction": "add dword ptr [ebp - 4], 5",
+              "valueOffset": 0,
+              "original": 5
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4430351,
+              "length": 1,
+              "instructionVa": 4430348,
+              "instruction": "add dword ptr [ebp - 4], 5",
+              "valueOffset": 0,
+              "original": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ai789-extra-b",
+      "module": "策略AI评分",
+      "title": "AI分支7至9·策略二加分",
+      "minimum": 0,
+      "maximum": 127,
+      "kind": "Byte",
+      "source": "engine-ai-branch-712-scoring.json",
+      "description": "AI分支7至9·策略二加分",
+      "unit": "点",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4430361,
+              "length": 1,
+              "instructionVa": 4430358,
+              "instruction": "add dword ptr [ebp - 4], 0xa",
+              "valueOffset": 0,
+              "original": 10
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4430361,
+              "length": 1,
+              "instructionVa": 4430358,
+              "instruction": "add dword ptr [ebp - 4], 0xa",
+              "valueOffset": 0,
+              "original": 10
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4430361,
+              "length": 1,
+              "instructionVa": 4430358,
+              "instruction": "add dword ptr [ebp - 4], 0xa",
+              "valueOffset": 0,
+              "original": 10
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ai10-score",
+      "module": "策略AI评分",
+      "title": "AI分支10·能力条件加分",
+      "minimum": 0,
+      "maximum": 127,
+      "kind": "Byte",
+      "source": "engine-ai-branch-712-scoring.json",
+      "description": "AI分支10·能力条件加分",
+      "unit": "点",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4430622,
+              "length": 1,
+              "instructionVa": 4430619,
+              "instruction": "add dword ptr [ebp - 4], 6",
+              "valueOffset": 0,
+              "original": 6
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4430622,
+              "length": 1,
+              "instructionVa": 4430619,
+              "instruction": "add dword ptr [ebp - 4], 6",
+              "valueOffset": 0,
+              "original": 6
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4430622,
+              "length": 1,
+              "instructionVa": 4430619,
+              "instruction": "add dword ptr [ebp - 4], 6",
+              "valueOffset": 0,
+              "original": 6
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ai11-score",
+      "module": "策略AI评分",
+      "title": "AI分支11·附加权重",
+      "minimum": 0,
+      "maximum": 127,
+      "kind": "Byte",
+      "source": "engine-ai-branch-712-scoring.json",
+      "description": "AI分支11·附加权重",
+      "unit": "点",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4430258,
+              "length": 1,
+              "instructionVa": 4430255,
+              "instruction": "add dword ptr [ebp - 4], 5",
+              "valueOffset": 0,
+              "original": 5
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4430315,
+              "length": 1,
+              "instructionVa": 4430314,
+              "instruction": "mov al, 5",
+              "valueOffset": 0,
+              "original": 5
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4430315,
+              "length": 1,
+              "instructionVa": 4430314,
+              "instruction": "mov al, 5",
+              "valueOffset": 0,
+              "original": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ai12-score-a",
+      "module": "策略AI评分",
+      "title": "AI分支12·兵种条件一加分",
+      "minimum": 0,
+      "maximum": 127,
+      "kind": "Byte",
+      "source": "engine-ai-branch-712-scoring.json",
+      "description": "AI分支12·兵种条件一加分",
+      "unit": "点",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4430680,
+              "length": 1,
+              "instructionVa": 4430677,
+              "instruction": "add dword ptr [ebp - 4], 0xf",
+              "valueOffset": 0,
+              "original": 15
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4430680,
+              "length": 1,
+              "instructionVa": 4430677,
+              "instruction": "add dword ptr [ebp - 4], 0xf",
+              "valueOffset": 0,
+              "original": 15
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4430680,
+              "length": 1,
+              "instructionVa": 4430677,
+              "instruction": "add dword ptr [ebp - 4], 0xf",
+              "valueOffset": 0,
+              "original": 15
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ai12-score-b",
+      "module": "策略AI评分",
+      "title": "AI分支12·兵种条件二加分",
+      "minimum": 0,
+      "maximum": 127,
+      "kind": "Byte",
+      "source": "engine-ai-branch-712-scoring.json",
+      "description": "AI分支12·兵种条件二加分",
+      "unit": "点",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4430690,
+              "length": 1,
+              "instructionVa": 4430687,
+              "instruction": "add dword ptr [ebp - 4], 0xf",
+              "valueOffset": 0,
+              "original": 15
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4430690,
+              "length": 1,
+              "instructionVa": 4430687,
+              "instruction": "add dword ptr [ebp - 4], 0xf",
+              "valueOffset": 0,
+              "original": 15
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4430690,
+              "length": 1,
+              "instructionVa": 4430687,
+              "instruction": "add dword ptr [ebp - 4], 0xf",
+              "valueOffset": 0,
+              "original": 15
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ai12-score-c",
+      "module": "策略AI评分",
+      "title": "AI分支12·状态条件加分",
+      "minimum": 0,
+      "maximum": 127,
+      "kind": "Byte",
+      "source": "engine-ai-branch-712-scoring.json",
+      "description": "AI分支12·状态条件加分",
+      "unit": "点",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4430700,
+              "length": 1,
+              "instructionVa": 4430697,
+              "instruction": "add dword ptr [ebp - 4], 0xa",
+              "valueOffset": 0,
+              "original": 10
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4430700,
+              "length": 1,
+              "instructionVa": 4430697,
+              "instruction": "add dword ptr [ebp - 4], 0xa",
+              "valueOffset": 0,
+              "original": 10
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4430700,
+              "length": 1,
+              "instructionVa": 4430697,
+              "instruction": "add dword ptr [ebp - 4], 0xa",
+              "valueOffset": 0,
+              "original": 10
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ai12-fallback-base",
+      "module": "策略AI评分",
+      "title": "AI分支12·回退评分基数",
+      "minimum": 0,
+      "maximum": 127,
+      "kind": "Byte",
+      "source": "engine-ai-branch-712-scoring.json",
+      "description": "AI分支12·回退评分基数",
+      "unit": "点",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4430717,
+              "length": 1,
+              "instructionVa": 4430715,
+              "instruction": "add eax, 0xa",
+              "valueOffset": 0,
+              "original": 10
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4430717,
+              "length": 1,
+              "instructionVa": 4430715,
+              "instruction": "add eax, 0xa",
+              "valueOffset": 0,
+              "original": 10
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4430717,
+              "length": 1,
+              "instructionVa": 4430715,
+              "instruction": "add eax, 0xa",
+              "valueOffset": 0,
+              "original": 10
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ai2-threshold",
+      "module": "策略AI评分",
+      "title": "AI分支2·能力阈值",
+      "minimum": 0,
+      "maximum": 255,
+      "kind": "Byte",
+      "source": "engine-ai-branch-2-13-15.json",
+      "description": "AI分支2·能力阈值",
+      "unit": "点",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4430732,
+              "length": 1,
+              "instructionVa": 4430731,
+              "instruction": "cmp al, 0x28",
+              "valueOffset": 0,
+              "original": 40
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4430732,
+              "length": 1,
+              "instructionVa": 4430731,
+              "instruction": "cmp al, 0x28",
+              "valueOffset": 0,
+              "original": 40
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4430732,
+              "length": 1,
+              "instructionVa": 4430731,
+              "instruction": "cmp al, 0x28",
+              "valueOffset": 0,
+              "original": 40
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ai2-score",
+      "module": "策略AI评分",
+      "title": "AI分支2·条件加分",
+      "minimum": 0,
+      "maximum": 127,
+      "kind": "Byte",
+      "source": "engine-ai-branch-2-13-15.json",
+      "description": "AI分支2·条件加分",
+      "unit": "点",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4430750,
+              "length": 1,
+              "instructionVa": 4430747,
+              "instruction": "add dword ptr [ebp - 4], 0x64",
+              "valueOffset": 0,
+              "original": 100
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4430750,
+              "length": 1,
+              "instructionVa": 4430747,
+              "instruction": "add dword ptr [ebp - 4], 0x64",
+              "valueOffset": 0,
+              "original": 100
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4430750,
+              "length": 1,
+              "instructionVa": 4430747,
+              "instruction": "add dword ptr [ebp - 4], 0x64",
+              "valueOffset": 0,
+              "original": 100
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ai14-score-0",
+      "module": "策略AI评分",
+      "title": "AI分支14·状态路径1加分",
+      "minimum": 0,
+      "maximum": 127,
+      "kind": "Byte",
+      "source": "engine-ai-branch-2-13-15.json",
+      "description": "AI分支14·状态路径1加分",
+      "unit": "点",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4430811,
+              "length": 1,
+              "instructionVa": 4430808,
+              "instruction": "add dword ptr [ebp - 4], 0xa",
+              "valueOffset": 0,
+              "original": 10
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4430811,
+              "length": 1,
+              "instructionVa": 4430808,
+              "instruction": "add dword ptr [ebp - 4], 0xa",
+              "valueOffset": 0,
+              "original": 10
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4430811,
+              "length": 1,
+              "instructionVa": 4430808,
+              "instruction": "add dword ptr [ebp - 4], 0xa",
+              "valueOffset": 0,
+              "original": 10
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ai14-score-1",
+      "module": "策略AI评分",
+      "title": "AI分支14·状态路径2加分",
+      "minimum": 0,
+      "maximum": 127,
+      "kind": "Byte",
+      "source": "engine-ai-branch-2-13-15.json",
+      "description": "AI分支14·状态路径2加分",
+      "unit": "点",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4430828,
+              "length": 1,
+              "instructionVa": 4430825,
+              "instruction": "add dword ptr [ebp - 4], 0xa",
+              "valueOffset": 0,
+              "original": 10
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4430828,
+              "length": 1,
+              "instructionVa": 4430825,
+              "instruction": "add dword ptr [ebp - 4], 0xa",
+              "valueOffset": 0,
+              "original": 10
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4430828,
+              "length": 1,
+              "instructionVa": 4430825,
+              "instruction": "add dword ptr [ebp - 4], 0xa",
+              "valueOffset": 0,
+              "original": 10
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ai14-score-2",
+      "module": "策略AI评分",
+      "title": "AI分支14·状态路径3加分",
+      "minimum": 0,
+      "maximum": 127,
+      "kind": "Byte",
+      "source": "engine-ai-branch-2-13-15.json",
+      "description": "AI分支14·状态路径3加分",
+      "unit": "点",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4430848,
+              "length": 1,
+              "instructionVa": 4430845,
+              "instruction": "add dword ptr [ebp - 4], 0xb",
+              "valueOffset": 0,
+              "original": 11
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4430848,
+              "length": 1,
+              "instructionVa": 4430845,
+              "instruction": "add dword ptr [ebp - 4], 0xb",
+              "valueOffset": 0,
+              "original": 11
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4430848,
+              "length": 1,
+              "instructionVa": 4430845,
+              "instruction": "add dword ptr [ebp - 4], 0xb",
+              "valueOffset": 0,
+              "original": 11
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ai14-score-3",
+      "module": "策略AI评分",
+      "title": "AI分支14·状态路径4加分",
+      "minimum": 0,
+      "maximum": 127,
+      "kind": "Byte",
+      "source": "engine-ai-branch-2-13-15.json",
+      "description": "AI分支14·状态路径4加分",
+      "unit": "点",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4430861,
+              "length": 1,
+              "instructionVa": 4430858,
+              "instruction": "add dword ptr [ebp - 4], 0xc",
+              "valueOffset": 0,
+              "original": 12
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4430861,
+              "length": 1,
+              "instructionVa": 4430858,
+              "instruction": "add dword ptr [ebp - 4], 0xc",
+              "valueOffset": 0,
+              "original": 12
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4430861,
+              "length": 1,
+              "instructionVa": 4430858,
+              "instruction": "add dword ptr [ebp - 4], 0xc",
+              "valueOffset": 0,
+              "original": 12
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ai15-score-0",
+      "module": "策略AI评分",
+      "title": "AI分支15·状态路径1加分",
+      "minimum": 0,
+      "maximum": 127,
+      "kind": "Byte",
+      "source": "engine-ai-branch-2-13-15.json",
+      "description": "AI分支15·状态路径1加分",
+      "unit": "点",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4430903,
+              "length": 1,
+              "instructionVa": 4430900,
+              "instruction": "add dword ptr [ebp - 4], 0xa",
+              "valueOffset": 0,
+              "original": 10
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4430903,
+              "length": 1,
+              "instructionVa": 4430900,
+              "instruction": "add dword ptr [ebp - 4], 0xa",
+              "valueOffset": 0,
+              "original": 10
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4430903,
+              "length": 1,
+              "instructionVa": 4430900,
+              "instruction": "add dword ptr [ebp - 4], 0xa",
+              "valueOffset": 0,
+              "original": 10
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ai15-score-1",
+      "module": "策略AI评分",
+      "title": "AI分支15·状态路径2加分",
+      "minimum": 0,
+      "maximum": 127,
+      "kind": "Byte",
+      "source": "engine-ai-branch-2-13-15.json",
+      "description": "AI分支15·状态路径2加分",
+      "unit": "点",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4430920,
+              "length": 1,
+              "instructionVa": 4430917,
+              "instruction": "add dword ptr [ebp - 4], 0xa",
+              "valueOffset": 0,
+              "original": 10
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4430920,
+              "length": 1,
+              "instructionVa": 4430917,
+              "instruction": "add dword ptr [ebp - 4], 0xa",
+              "valueOffset": 0,
+              "original": 10
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4430920,
+              "length": 1,
+              "instructionVa": 4430917,
+              "instruction": "add dword ptr [ebp - 4], 0xa",
+              "valueOffset": 0,
+              "original": 10
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ai15-score-2",
+      "module": "策略AI评分",
+      "title": "AI分支15·状态路径3加分",
+      "minimum": 0,
+      "maximum": 127,
+      "kind": "Byte",
+      "source": "engine-ai-branch-2-13-15.json",
+      "description": "AI分支15·状态路径3加分",
+      "unit": "点",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4430940,
+              "length": 1,
+              "instructionVa": 4430937,
+              "instruction": "add dword ptr [ebp - 4], 0xb",
+              "valueOffset": 0,
+              "original": 11
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4430940,
+              "length": 1,
+              "instructionVa": 4430937,
+              "instruction": "add dword ptr [ebp - 4], 0xb",
+              "valueOffset": 0,
+              "original": 11
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4430940,
+              "length": 1,
+              "instructionVa": 4430937,
+              "instruction": "add dword ptr [ebp - 4], 0xb",
+              "valueOffset": 0,
+              "original": 11
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ai15-score-3",
+      "module": "策略AI评分",
+      "title": "AI分支15·状态路径4加分",
+      "minimum": 0,
+      "maximum": 127,
+      "kind": "Byte",
+      "source": "engine-ai-branch-2-13-15.json",
+      "description": "AI分支15·状态路径4加分",
+      "unit": "点",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4430953,
+              "length": 1,
+              "instructionVa": 4430950,
+              "instruction": "add dword ptr [ebp - 4], 0xb",
+              "valueOffset": 0,
+              "original": 11
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4430953,
+              "length": 1,
+              "instructionVa": 4430950,
+              "instruction": "add dword ptr [ebp - 4], 0xb",
+              "valueOffset": 0,
+              "original": 11
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4430953,
+              "length": 1,
+              "instructionVa": 4430950,
+              "instruction": "add dword ptr [ebp - 4], 0xb",
+              "valueOffset": 0,
+              "original": 11
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "equip-generation-base-0",
+      "module": "内嵌参数表",
+      "title": "装备代次类型基表 [0]",
+      "minimum": 0,
+      "maximum": 255,
+      "kind": "Byte",
+      "source": "成长与宝物常量总表-三基底.csv",
+      "description": "装备代次类型基表的第 0 项；固定地址与表外上下文校验。",
+      "unit": "值",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4727847,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 0,
+              "tableStart": 4727847,
+              "tableLength": 13
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4727847,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 0,
+              "tableStart": 4727847,
+              "tableLength": 13
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4727847,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 0,
+              "tableStart": 4727847,
+              "tableLength": 13
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "equip-generation-base-1",
+      "module": "内嵌参数表",
+      "title": "装备代次类型基表 [1]",
+      "minimum": 0,
+      "maximum": 255,
+      "kind": "Byte",
+      "source": "成长与宝物常量总表-三基底.csv",
+      "description": "装备代次类型基表的第 1 项；固定地址与表外上下文校验。",
+      "unit": "值",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4727848,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 3,
+              "tableStart": 4727847,
+              "tableLength": 13
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4727848,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 3,
+              "tableStart": 4727847,
+              "tableLength": 13
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4727848,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 3,
+              "tableStart": 4727847,
+              "tableLength": 13
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "equip-generation-base-2",
+      "module": "内嵌参数表",
+      "title": "装备代次类型基表 [2]",
+      "minimum": 0,
+      "maximum": 255,
+      "kind": "Byte",
+      "source": "成长与宝物常量总表-三基底.csv",
+      "description": "装备代次类型基表的第 2 项；固定地址与表外上下文校验。",
+      "unit": "值",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4727849,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 6,
+              "tableStart": 4727847,
+              "tableLength": 13
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4727849,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 6,
+              "tableStart": 4727847,
+              "tableLength": 13
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4727849,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 6,
+              "tableStart": 4727847,
+              "tableLength": 13
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "equip-generation-base-3",
+      "module": "内嵌参数表",
+      "title": "装备代次类型基表 [3]",
+      "minimum": 0,
+      "maximum": 255,
+      "kind": "Byte",
+      "source": "成长与宝物常量总表-三基底.csv",
+      "description": "装备代次类型基表的第 3 项；固定地址与表外上下文校验。",
+      "unit": "值",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4727850,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 9,
+              "tableStart": 4727847,
+              "tableLength": 13
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4727850,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 9,
+              "tableStart": 4727847,
+              "tableLength": 13
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4727850,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 9,
+              "tableStart": 4727847,
+              "tableLength": 13
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "equip-generation-base-4",
+      "module": "内嵌参数表",
+      "title": "装备代次类型基表 [4]",
+      "minimum": 0,
+      "maximum": 255,
+      "kind": "Byte",
+      "source": "成长与宝物常量总表-三基底.csv",
+      "description": "装备代次类型基表的第 4 项；固定地址与表外上下文校验。",
+      "unit": "值",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4727851,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 12,
+              "tableStart": 4727847,
+              "tableLength": 13
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4727851,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 12,
+              "tableStart": 4727847,
+              "tableLength": 13
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4727851,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 255,
+              "tableStart": 4727847,
+              "tableLength": 13
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "equip-generation-base-5",
+      "module": "内嵌参数表",
+      "title": "装备代次类型基表 [5]",
+      "minimum": 0,
+      "maximum": 255,
+      "kind": "Byte",
+      "source": "成长与宝物常量总表-三基底.csv",
+      "description": "装备代次类型基表的第 5 项；固定地址与表外上下文校验。",
+      "unit": "值",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4727852,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 15,
+              "tableStart": 4727847,
+              "tableLength": 13
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4727852,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 255,
+              "tableStart": 4727847,
+              "tableLength": 13
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4727852,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 255,
+              "tableStart": 4727847,
+              "tableLength": 13
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "equip-generation-base-6",
+      "module": "内嵌参数表",
+      "title": "装备代次类型基表 [6]",
+      "minimum": 0,
+      "maximum": 255,
+      "kind": "Byte",
+      "source": "成长与宝物常量总表-三基底.csv",
+      "description": "装备代次类型基表的第 6 项；固定地址与表外上下文校验。",
+      "unit": "值",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4727853,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 255,
+              "tableStart": 4727847,
+              "tableLength": 13
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4727853,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 255,
+              "tableStart": 4727847,
+              "tableLength": 13
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4727853,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 255,
+              "tableStart": 4727847,
+              "tableLength": 13
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "equip-generation-base-7",
+      "module": "内嵌参数表",
+      "title": "装备代次类型基表 [7]",
+      "minimum": 0,
+      "maximum": 255,
+      "kind": "Byte",
+      "source": "成长与宝物常量总表-三基底.csv",
+      "description": "装备代次类型基表的第 7 项；固定地址与表外上下文校验。",
+      "unit": "值",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4727854,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 21,
+              "tableStart": 4727847,
+              "tableLength": 13
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4727854,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 21,
+              "tableStart": 4727847,
+              "tableLength": 13
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4727854,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 21,
+              "tableStart": 4727847,
+              "tableLength": 13
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "equip-generation-base-8",
+      "module": "内嵌参数表",
+      "title": "装备代次类型基表 [8]",
+      "minimum": 0,
+      "maximum": 255,
+      "kind": "Byte",
+      "source": "成长与宝物常量总表-三基底.csv",
+      "description": "装备代次类型基表的第 8 项；固定地址与表外上下文校验。",
+      "unit": "值",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4727855,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 24,
+              "tableStart": 4727847,
+              "tableLength": 13
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4727855,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 24,
+              "tableStart": 4727847,
+              "tableLength": 13
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4727855,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 24,
+              "tableStart": 4727847,
+              "tableLength": 13
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "equip-generation-base-9",
+      "module": "内嵌参数表",
+      "title": "装备代次类型基表 [9]",
+      "minimum": 0,
+      "maximum": 255,
+      "kind": "Byte",
+      "source": "成长与宝物常量总表-三基底.csv",
+      "description": "装备代次类型基表的第 9 项；固定地址与表外上下文校验。",
+      "unit": "值",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4727856,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 27,
+              "tableStart": 4727847,
+              "tableLength": 13
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4727856,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 27,
+              "tableStart": 4727847,
+              "tableLength": 13
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4727856,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 27,
+              "tableStart": 4727847,
+              "tableLength": 13
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "equip-generation-base-10",
+      "module": "内嵌参数表",
+      "title": "装备代次类型基表 [10]",
+      "minimum": 0,
+      "maximum": 255,
+      "kind": "Byte",
+      "source": "成长与宝物常量总表-三基底.csv",
+      "description": "装备代次类型基表的第 10 项；固定地址与表外上下文校验。",
+      "unit": "值",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4727857,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 70,
+              "tableStart": 4727847,
+              "tableLength": 13
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4727857,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 70,
+              "tableStart": 4727847,
+              "tableLength": 13
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4727857,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 70,
+              "tableStart": 4727847,
+              "tableLength": 13
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "equip-generation-base-11",
+      "module": "内嵌参数表",
+      "title": "装备代次类型基表 [11]",
+      "minimum": 0,
+      "maximum": 255,
+      "kind": "Byte",
+      "source": "成长与宝物常量总表-三基底.csv",
+      "description": "装备代次类型基表的第 11 项；固定地址与表外上下文校验。",
+      "unit": "值",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4727858,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 73,
+              "tableStart": 4727847,
+              "tableLength": 13
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4727858,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 73,
+              "tableStart": 4727847,
+              "tableLength": 13
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4727858,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 73,
+              "tableStart": 4727847,
+              "tableLength": 13
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "equip-generation-base-12",
+      "module": "内嵌参数表",
+      "title": "装备代次类型基表 [12]",
+      "minimum": 0,
+      "maximum": 255,
+      "kind": "Byte",
+      "source": "成长与宝物常量总表-三基底.csv",
+      "description": "装备代次类型基表的第 12 项；固定地址与表外上下文校验。",
+      "unit": "值",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4727859,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 76,
+              "tableStart": 4727847,
+              "tableLength": 13
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4727859,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 255,
+              "tableStart": 4727847,
+              "tableLength": 13
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4727859,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 76,
+              "tableStart": 4727847,
+              "tableLength": 13
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "equip-growth-gate-0",
+      "module": "内嵌参数表",
+      "title": "宝物能力成长门控 [0]",
+      "minimum": 0,
+      "maximum": 2,
+      "kind": "Byte",
+      "source": "成长与宝物常量总表-三基底.csv",
+      "description": "宝物能力成长门控的第 0 项；固定地址与表外上下文校验。",
+      "unit": "值",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4596495,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 2,
+              "tableStart": 4596495,
+              "tableLength": 7
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4596495,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 2,
+              "tableStart": 4596495,
+              "tableLength": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "equip-growth-gate-1",
+      "module": "内嵌参数表",
+      "title": "宝物能力成长门控 [1]",
+      "minimum": 0,
+      "maximum": 2,
+      "kind": "Byte",
+      "source": "成长与宝物常量总表-三基底.csv",
+      "description": "宝物能力成长门控的第 1 项；固定地址与表外上下文校验。",
+      "unit": "值",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4596496,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 2,
+              "tableStart": 4596495,
+              "tableLength": 7
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4596496,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 2,
+              "tableStart": 4596495,
+              "tableLength": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "equip-growth-gate-2",
+      "module": "内嵌参数表",
+      "title": "宝物能力成长门控 [2]",
+      "minimum": 0,
+      "maximum": 2,
+      "kind": "Byte",
+      "source": "成长与宝物常量总表-三基底.csv",
+      "description": "宝物能力成长门控的第 2 项；固定地址与表外上下文校验。",
+      "unit": "值",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4596497,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 2,
+              "tableStart": 4596495,
+              "tableLength": 7
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4596497,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 2,
+              "tableStart": 4596495,
+              "tableLength": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "equip-growth-gate-3",
+      "module": "内嵌参数表",
+      "title": "宝物能力成长门控 [3]",
+      "minimum": 0,
+      "maximum": 2,
+      "kind": "Byte",
+      "source": "成长与宝物常量总表-三基底.csv",
+      "description": "宝物能力成长门控的第 3 项；固定地址与表外上下文校验。",
+      "unit": "值",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4596498,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 2,
+              "tableStart": 4596495,
+              "tableLength": 7
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4596498,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 2,
+              "tableStart": 4596495,
+              "tableLength": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "equip-growth-gate-4",
+      "module": "内嵌参数表",
+      "title": "宝物能力成长门控 [4]",
+      "minimum": 0,
+      "maximum": 2,
+      "kind": "Byte",
+      "source": "成长与宝物常量总表-三基底.csv",
+      "description": "宝物能力成长门控的第 4 项；固定地址与表外上下文校验。",
+      "unit": "值",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4596499,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 2,
+              "tableStart": 4596495,
+              "tableLength": 7
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4596499,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 2,
+              "tableStart": 4596495,
+              "tableLength": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "equip-growth-gate-5",
+      "module": "内嵌参数表",
+      "title": "宝物能力成长门控 [5]",
+      "minimum": 0,
+      "maximum": 2,
+      "kind": "Byte",
+      "source": "成长与宝物常量总表-三基底.csv",
+      "description": "宝物能力成长门控的第 5 项；固定地址与表外上下文校验。",
+      "unit": "值",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4596500,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 2,
+              "tableStart": 4596495,
+              "tableLength": 7
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4596500,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 2,
+              "tableStart": 4596495,
+              "tableLength": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "equip-growth-gate-6",
+      "module": "内嵌参数表",
+      "title": "宝物能力成长门控 [6]",
+      "minimum": 0,
+      "maximum": 2,
+      "kind": "Byte",
+      "source": "成长与宝物常量总表-三基底.csv",
+      "description": "宝物能力成长门控的第 6 项；固定地址与表外上下文校验。",
+      "unit": "值",
+      "layouts": [
+        {
+          "version": "6.4",
+          "sites": [
+            {
+              "va": 4596501,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 2,
+              "tableStart": 4596495,
+              "tableLength": 7
+            }
+          ]
+        },
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4596501,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 1,
+              "tableStart": 4596495,
+              "tableLength": 7
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ai-direction-floor-0",
+      "module": "内嵌参数表",
+      "title": "AI方向评分下限 [0]",
+      "minimum": 0,
+      "maximum": 100,
+      "kind": "Byte",
+      "source": "engine-ai-handler-constants-66.json",
+      "description": "AI方向评分下限的第 0 项；固定地址与表外上下文校验。",
+      "unit": "值",
+      "layouts": [
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4429272,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 25,
+              "tableStart": 4429272,
+              "tableLength": 4
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4269971,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 25,
+              "tableStart": 4269971,
+              "tableLength": 4
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ai-direction-floor-1",
+      "module": "内嵌参数表",
+      "title": "AI方向评分下限 [1]",
+      "minimum": 0,
+      "maximum": 100,
+      "kind": "Byte",
+      "source": "engine-ai-handler-constants-66.json",
+      "description": "AI方向评分下限的第 1 项；固定地址与表外上下文校验。",
+      "unit": "值",
+      "layouts": [
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4429273,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 30,
+              "tableStart": 4429272,
+              "tableLength": 4
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4269972,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 30,
+              "tableStart": 4269971,
+              "tableLength": 4
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ai-direction-floor-2",
+      "module": "内嵌参数表",
+      "title": "AI方向评分下限 [2]",
+      "minimum": 0,
+      "maximum": 100,
+      "kind": "Byte",
+      "source": "engine-ai-handler-constants-66.json",
+      "description": "AI方向评分下限的第 2 项；固定地址与表外上下文校验。",
+      "unit": "值",
+      "layouts": [
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4429274,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 35,
+              "tableStart": 4429272,
+              "tableLength": 4
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4269973,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 35,
+              "tableStart": 4269971,
+              "tableLength": 4
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ai-direction-floor-3",
+      "module": "内嵌参数表",
+      "title": "AI方向评分下限 [3]",
+      "minimum": 0,
+      "maximum": 100,
+      "kind": "Byte",
+      "source": "engine-ai-handler-constants-66.json",
+      "description": "AI方向评分下限的第 3 项；固定地址与表外上下文校验。",
+      "unit": "值",
+      "layouts": [
+        {
+          "version": "6.5",
+          "sites": [
+            {
+              "va": 4429275,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 25,
+              "tableStart": 4429272,
+              "tableLength": 4
+            }
+          ]
+        },
+        {
+          "version": "6.6",
+          "sites": [
+            {
+              "va": 4269974,
+              "length": 1,
+              "instructionVa": null,
+              "instruction": "内嵌字节表",
+              "valueOffset": 0,
+              "original": 25,
+              "tableStart": 4269971,
+              "tableLength": 4
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "linkedExisting": {
+    "equip-level-cap-special": {
+      "6.4": [
+        {
+          "va": 4226476,
+          "length": 1,
+          "instructionVa": 4226475,
+          "instruction": "mov al, 9",
+          "valueOffset": 0,
+          "original": 9
+        },
+        {
+          "va": 4325838,
+          "length": 1,
+          "instructionVa": 4325837,
+          "instruction": "mov al, 0xa",
+          "valueOffset": 1,
+          "original": 10
+        },
+        {
+          "va": 4325857,
+          "length": 1,
+          "instructionVa": 4325856,
+          "instruction": "cmp al, 9",
+          "valueOffset": 0,
+          "original": 9
+        }
+      ],
+      "6.5": [
+        {
+          "va": 4226476,
+          "length": 1,
+          "instructionVa": 4226475,
+          "instruction": "mov al, 9",
+          "valueOffset": 0,
+          "original": 9
+        },
+        {
+          "va": 4325838,
+          "length": 1,
+          "instructionVa": 4325837,
+          "instruction": "mov al, 0xa",
+          "valueOffset": 1,
+          "original": 10
+        },
+        {
+          "va": 4325857,
+          "length": 1,
+          "instructionVa": 4325856,
+          "instruction": "cmp al, 9",
+          "valueOffset": 0,
+          "original": 9
+        }
+      ],
+      "6.6": [
+        {
+          "va": 4226476,
+          "length": 1,
+          "instructionVa": 4226475,
+          "instruction": "mov al, 0xf",
+          "valueOffset": 0,
+          "original": 15
+        },
+        {
+          "va": 4325838,
+          "length": 1,
+          "instructionVa": 4325837,
+          "instruction": "mov al, 0x10",
+          "valueOffset": 1,
+          "original": 16
+        },
+        {
+          "va": 4325857,
+          "length": 1,
+          "instructionVa": 4325856,
+          "instruction": "cmp al, 0xf",
+          "valueOffset": 0,
+          "original": 15
+        }
+      ]
+    },
+    "equip-level-cap-normal": {
+      "6.4": [
+        {
+          "va": 4226521,
+          "length": 1,
+          "instructionVa": 4226520,
+          "instruction": "mov al, 5",
+          "valueOffset": 0,
+          "original": 5
+        },
+        {
+          "va": 4325842,
+          "length": 1,
+          "instructionVa": 4325841,
+          "instruction": "mov al, 5",
+          "valueOffset": 0,
+          "original": 5
+        }
+      ],
+      "6.5": [
+        {
+          "va": 4226521,
+          "length": 1,
+          "instructionVa": 4226520,
+          "instruction": "mov al, 5",
+          "valueOffset": 0,
+          "original": 5
+        },
+        {
+          "va": 4325842,
+          "length": 1,
+          "instructionVa": 4325841,
+          "instruction": "mov al, 5",
+          "valueOffset": 0,
+          "original": 5
+        }
+      ],
+      "6.6": [
+        {
+          "va": 4226521,
+          "length": 1,
+          "instructionVa": 4226520,
+          "instruction": "mov al, 9",
+          "valueOffset": 0,
+          "original": 9
+        },
+        {
+          "va": 4325842,
+          "length": 1,
+          "instructionVa": 4325841,
+          "instruction": "mov al, 9",
+          "valueOffset": 0,
+          "original": 9
+        }
+      ]
+    }
+  }
+}

@@ -96,7 +96,7 @@ internal static class ExtendDataUiTests
             TestSupport.Assert(service.GetRaw(ExtendDataCategory.Effects, 0).AsSpan(0, 4).SequenceEqual(new byte[] { 255, 0, 0, 255 }), "主动清空没有写入标准4字节空槽");
             workspace.Commands.Undo(); editor.BindEntity(0);
 
-            editor.SearchText = "12";
+            TestSupport.Assert(form.QueryForSmokeTest("12"), "人物特效查询无法执行");
             effectsScroll.AutoScrollPosition = new Point(0, 40); Pump();
             var rememberedEffectsScroll = effectsScroll.AutoScrollPosition;
             editor.DetailTabs.SelectedIndex = 1; Pump();
@@ -155,20 +155,24 @@ internal static class ExtendDataUiTests
             Snapshot(form, screenshotDirectory, "forge");
             Console.WriteLine("EXTEND_UI_STAGE forge-complete");
 
-            var lookup = (SearchableIdComboBox)typeof(MainForm).GetField("_quickLookup", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(form)!;
-            lookup.Text = "12";
-            typeof(ComboBox).GetMethod("OnTextUpdate", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(lookup, [EventArgs.Empty]);
+            form.QuickLocateForSmokeTest(13);
+            TestSupport.Assert(editor.CurrentId == 13 && form.EntityListForSmokeTest.Items.Count == 256,
+                "快速定位没有跳转到配方或错误筛选了列表");
+            TestSupport.Assert(form.QueryForSmokeTest("12"), "锻造配方查询无法执行");
             Pump();
-            TestSupport.Assert(editor.SearchText == "12" && form.EntityListForSmokeTest.Items.Count < 256, "快捷搜索没有过滤锻造配方列表");
+            TestSupport.Assert(editor.SearchText == "12" && form.EntityListForSmokeTest.Items.Count < 256,
+                $"查询没有过滤锻造配方列表：search={editor.SearchText}; count={form.EntityListForSmokeTest.Items.Count}; summary={form.QuerySummaryForSmokeTest}");
             editor.DetailTabs.SelectedIndex = 0; Pump();
             TestSupport.Assert(ReferenceEquals(value, Find<TextBox>(editor, "ExtendEffectValue0")) && ReferenceEquals(effectsScroll, Find<Panel>(editor, "ExtendDataScroll")),
                 "切换分类销毁了已访问分类的字段或滚动容器");
             TestSupport.Assert(effectsScroll.AutoScrollPosition == rememberedEffectsScroll, "切换分类丢失了原滚动位置");
-            TestSupport.Assert(editor.SearchText == "12" && lookup.Text == "12" && form.EntityListForSmokeTest.Items.Count < 1024, "分类独立搜索状态未恢复");
-            editor.SearchText = string.Empty;
+            var query = (SearchableIdComboBox)typeof(MainForm).GetField("_queryText", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(form)!;
+            TestSupport.Assert(editor.SearchText == "12" && query.Text == "12" && form.EntityListForSmokeTest.Items.Count < 1024, "分类独立搜索状态未恢复");
+            TestSupport.Assert(form.QueryForSmokeTest(string.Empty), "清空人物特效查询失败");
             editor.BindEntity(17); Find<ComboBox>(editor, "ExtendPage").SelectedIndex = 12; Pump();
             form.SelectModuleForSmokeTest("人物"); form.SelectModuleForSmokeTest("拓展数据"); Pump();
             TestSupport.Assert(editor.CurrentId == 17 && Find<ComboBox>(editor, "ExtendPage").SelectedIndex == 12, "跨模块重进丢失当前人物/页码");
+            ExtendDataBindingRegressionTests.Run(form);
             CheckLayout(editor, form, screenshotDirectory);
             CheckReload(editor, workspace, service);
 
@@ -289,7 +293,8 @@ internal static class ExtendDataUiTests
         if (string.IsNullOrWhiteSpace(directory)) return;
         Directory.CreateDirectory(directory);
         foreach (var box in Descendants(form).OfType<TextBoxBase>()) { box.SelectionStart = box.TextLength; box.SelectionLength = 0; }
-        foreach (var combo in Descendants(form).OfType<ComboBox>()) { combo.DroppedDown = false; combo.SelectionStart = combo.Text.Length; combo.SelectionLength = 0; }
+        foreach (var combo in Descendants(form).OfType<ComboBox>().Where(combo => combo.Visible && combo.IsHandleCreated))
+        { combo.DroppedDown = false; combo.Select(combo.Text.Length, 0); }
         form.Select();
         Pump();
         using var bitmap = new Bitmap(form.Width, form.Height);

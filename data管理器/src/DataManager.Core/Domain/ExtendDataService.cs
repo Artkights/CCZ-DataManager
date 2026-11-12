@@ -16,6 +16,12 @@ public sealed class ExtendDataService
     private readonly RecordCodecRegistry _codecs = new();
     private EffectNamePoolProbeResult? _effectNames;
     private string? _nameSourceIdentity;
+    private readonly Dictionary<ExtendDataCategory, (CatalogVersion Version, long Revision)> _bindingVersions = [];
+    private readonly Dictionary<ExtendDataCategory, (CatalogVersion Version, IReadOnlyList<IdNameOption> Options)> _entityOptions = [];
+    private long _nextBindingRevision;
+    private (string? Identity, IReadOnlyList<IdNameOption> Options)? _effectOptions;
+    private (DocumentVersion Version, IReadOnlyList<IdNameOption> Options)? _strategyOptions;
+    private (CatalogVersion Version, IReadOnlyList<IdNameOption> Options)? _itemOptions;
 
     public ExtendDataService(ProjectWorkspace workspace) => _workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
     public ProjectWorkspace Workspace => _workspace;
@@ -49,13 +55,24 @@ public sealed class ExtendDataService
 
     public TableDocument GetDocument(ExtendDataCategory category) => _workspace.GetDocument(TableKey(category));
 
+    /// <summary>Changes only when this editor's source data or displayed names change.</summary>
+    public long GetBindingRevision(ExtendDataCategory category)
+    {
+        var version = GetCatalogVersion(category, includeChoices: true);
+        if (!_bindingVersions.TryGetValue(category, out var previous) || previous.Version != version)
+            _bindingVersions[category] = previous = (version, ++_nextBindingRevision);
+        return previous.Revision;
+    }
+
     public IReadOnlyList<IdNameOption> GetEntityOptions(ExtendDataCategory category)
     {
-        if (!GetStatus(category).Available) return [];
+        if (!_workspace.Documents.ContainsKey(TableKey(category))) return [];
+        var version = GetCatalogVersion(category, includeChoices: false);
+        if (_entityOptions.TryGetValue(category, out var cached) && cached.Version == version) return cached.Options;
         var document = GetDocument(category);
         var effects = category == ExtendDataCategory.Growth ? GetEffectOptions().ToDictionary(option => option.Id, option => option.Name) : null;
         var persons = category is ExtendDataCategory.Effects or ExtendDataCategory.Strategies ? Lookup("persons") : null;
-        return document.Data.Rows.Cast<DataRow>().Select(row =>
+        var options = document.Data.Rows.Cast<DataRow>().Select(row =>
         {
             var id = Convert.ToInt32(row["ID"], CultureInfo.InvariantCulture);
             var name = category == ExtendDataCategory.Forge ? Convert.ToString(row["名称"], CultureInfo.InvariantCulture) ?? string.Empty
@@ -64,13 +81,13 @@ public sealed class ExtendDataService
             if (category == ExtendDataCategory.Growth && id == 255) name = "空特技 / 保留记录（只读）";
             return new IdNameOption(id, SafeName(name, category == ExtendDataCategory.Forge ? "未命名配方" : "名称不可读取"));
         }).ToArray();
+        _entityOptions[category] = (version, options);
+        return options;
     }
 
     public EffectNamePoolProbeResult GetEffectNameSource()
     {
-        var path = ProjectFileLocator.Resolve(_workspace.RootPath, "Ekd5.exe");
-        var info = new FileInfo(path);
-        var identity = $"{path}|{(info.Exists ? info.Length : -1)}|{(info.Exists ? info.LastWriteTimeUtc.Ticks : 0)}";
+        var (path, identity) = EffectNameIdentity();
         if (_effectNames == null || identity != _nameSourceIdentity)
         {
             _effectNames = new EffectNamePoolProbe().Inspect(path);
@@ -82,27 +99,67 @@ public sealed class ExtendDataService
     public IReadOnlyList<IdNameOption> GetEffectOptions()
     {
         var source = GetEffectNameSource();
-        return Enumerable.Range(0, 255).Select(id => new IdNameOption(id,
+        if (_effectOptions is { } cached && cached.Identity == _nameSourceIdentity) return cached.Options;
+        var options = Enumerable.Range(0, 255).Select(id => new IdNameOption(id,
             SafeName(source.Names.GetValueOrDefault(id), source.Success ? "未命名特技" : "名称不可读取")))
             .Append(new IdNameOption(255, "无")).ToArray();
+        _effectOptions = (_nameSourceIdentity, options);
+        return options;
     }
 
     public IReadOnlyList<IdNameOption> GetStrategyOptions()
     {
+        var version = Version("strategies");
+        if (_strategyOptions is { } cached && cached.Version == version) return cached.Options;
         var names = Lookup("strategies");
-        return Enumerable.Range(0, 255).Select(id => new IdNameOption(id, SafeName(names.GetValueOrDefault(id), "未命名策略")))
+        var options = Enumerable.Range(0, 255).Select(id => new IdNameOption(id, SafeName(names.GetValueOrDefault(id), "未命名策略")))
             .Append(new IdNameOption(255, "无")).ToArray();
+        _strategyOptions = (version, options);
+        return options;
     }
 
     public IReadOnlyList<IdNameOption> GetItemOptions()
     {
+        var version = ItemCatalogVersion();
+        if (_itemOptions is { } cached && cached.Version == version) return cached.Options;
         var names = Lookup("items-low", "items-high", "items-extended");
         var result = Enumerable.Range(0, 512)
             .Select(id => new IdNameOption(id, id == 255 ? "无（空槽/保留）" :
                 SafeName(names.GetValueOrDefault(id), id >= 256 ? "未命名扩展物品" : "未命名装备")))
             .ToList();
+        _itemOptions = (version, result);
         return result;
     }
+
+    private DocumentVersion Version(string key) => _workspace.Documents.TryGetValue(key, out var document)
+        ? new(document, document.Revision) : default;
+
+    private CatalogVersion ItemCatalogVersion() => new(default, default,
+        Version("items-low"), Version("items-high"), Version("items-extended"), null);
+
+    private CatalogVersion GetCatalogVersion(ExtendDataCategory category, bool includeChoices)
+    {
+        var source = Version(TableKey(category));
+        var names = category is ExtendDataCategory.Effects or ExtendDataCategory.Strategies ? Version("persons") : default;
+        if (category == ExtendDataCategory.Strategies && includeChoices)
+            return new(source, names, Version("strategies"), default, default, null);
+        if (category == ExtendDataCategory.Forge && includeChoices)
+            return ItemCatalogVersion() with { Source = source };
+        var effectIdentity = category == ExtendDataCategory.Growth || category == ExtendDataCategory.Effects && includeChoices
+            ? EffectNameIdentity().Identity : null;
+        return new(source, names, default, default, default, effectIdentity);
+    }
+
+    private (string Path, string Identity) EffectNameIdentity()
+    {
+        var path = ProjectFileLocator.Resolve(_workspace.RootPath, "Ekd5.exe");
+        var info = new FileInfo(path);
+        return (path, $"{path}|{(info.Exists ? info.Length : -1)}|{(info.Exists ? info.LastWriteTimeUtc.Ticks : 0)}");
+    }
+
+    private readonly record struct DocumentVersion(TableDocument? Document, long Revision);
+    private readonly record struct CatalogVersion(DocumentVersion Source, DocumentVersion Names,
+        DocumentVersion Low, DocumentVersion High, DocumentVersion Extended, string? EffectIdentity);
 
     public int ReadInt(ExtendDataCategory category, int entityId, string field)
         => checked((int)ReadLong(category, entityId, field));

@@ -28,14 +28,24 @@ internal static class ResourceFileRecovery
             E5Archive.Invalidate(target.TargetPath);
             return;
         }
+        var knownBefore = current.Exists == target.BeforeExists && (!current.Exists || current.Length == target.BeforeLength && current.Sha256 == target.BeforeSha256);
+        var knownAfter = current.Exists == target.AfterExists && (!current.Exists || current.Length == target.AfterLength && current.Sha256 == target.AfterSha256);
+        if (!knownBefore && !knownAfter) throw new IOException("资源恢复冲突：当前文件已被外部修改，保留当前内容：" + target.TargetPath);
         var temporary = target.TargetPath + ".imagemanager.restore." + Guid.NewGuid().ToString("N");
         try
         {
             if (shouldExist)
             {
-                var source = useAfter ? target.AfterSnapshotPath : target.SnapshotPath;
-                Verify(source, true, length, hash);
-                File.Copy(source, temporary, false);
+                VerifySnapshot(target, useAfter);
+                var blob = useAfter ? target.AfterBlob : target.BeforeBlob;
+                if (blob != null)
+                {
+                    using var output = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write);
+                    new Ccz.HistoryStorage.BlobStore(target.BlobStoreRoot ?? throw new InvalidDataException("缺少历史blob目录。"))
+                        .CopyVerified(blob, output);
+                    output.Flush(true);
+                }
+                else File.Copy(useAfter ? target.AfterSnapshotPath : target.SnapshotPath, temporary, false);
                 Verify(temporary, true, length, hash);
             }
             if (File.Exists(target.TargetPath))
@@ -78,5 +88,15 @@ internal static class ResourceFileRecovery
         }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }
+    }
+
+    public static void VerifySnapshot(HistoryTarget target, bool useAfter)
+    {
+        var blob = useAfter ? target.AfterBlob : target.BeforeBlob;
+        if (blob == null) { Verify(useAfter ? target.AfterSnapshotPath : target.SnapshotPath, true,
+            useAfter ? target.AfterLength : target.BeforeLength, useAfter ? target.AfterSha256 : target.BeforeSha256); return; }
+        if (blob.Hash != (useAfter ? target.AfterSha256 : target.BeforeSha256) || blob.Length != (useAfter ? target.AfterLength : target.BeforeLength))
+            throw new InvalidDataException("历史blob引用与资源快照元数据不一致。");
+        new Ccz.HistoryStorage.BlobStore(target.BlobStoreRoot ?? throw new InvalidDataException("缺少历史blob目录。")).Verify(blob);
     }
 }

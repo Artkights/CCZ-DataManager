@@ -14,11 +14,25 @@ public sealed class EngineConstantPanel : UserControl
     private readonly TextBox _text = new() { Width = 420, MaxLength = 16 };
     private readonly Button _write = new() { Text = "写入此常量", AutoSize = true };
     private readonly Button _refresh = new() { Text = "刷新", AutoSize = true };
+    private readonly Button _openDedicated = new() { Text = "打开设定", AutoSize = true, Visible = false };
+    private readonly TextBox _search = new() { Width = 230, PlaceholderText = "查找常量、说明或地址" };
+    private readonly ComboBox _module = new() { Width = 145, DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly Label _editorHint = new() { Dock = DockStyle.Fill, AutoEllipsis = true };
     private readonly EngineConstantService _service = new();
     private ProjectWorkspace? _workspace;
     private IReadOnlyList<EngineConstantValue> _values = [];
     private bool _binding;
+    private IReadOnlyDictionary<string, string> _dedicatedValues = new Dictionary<string, string>();
+    private IReadOnlyDictionary<string, EngineConstantEdit> _pendingEdits = new Dictionary<string, EngineConstantEdit>();
+
+    private static readonly DedicatedConstant[] DedicatedConstants =
+    [
+        new("transform-rules", "质变设定", "装备质变等级规则", "transform", "按特效号配置等级规则，与宝物引用共用质变草稿。"),
+        new("tier-thresholds", "档位设定", "五维档位阈值", "tier", "通过档位表统一编辑阈值、档数与显示。"),
+        new("tier-labels", "档位设定", "档位显示文字", "tier", "显示文字最多 2 字节 GBK，通过档位设定编辑。"),
+        new("tier-cap", "档位设定", "档位封顶", "tier", "封顶由档数与引擎布局共同生成，随档位表保存。"),
+        new("tier-corrections", "档位设定", "6.6 五维修正表", "readonly", "只读保留：当前样本为空组；word 单位ID、负数编码与扩容边界缺少非空样本证据。")
+    ];
 
     public EngineConstantPanel()
     {
@@ -32,10 +46,17 @@ public sealed class EngineConstantPanel : UserControl
 
         var body = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Margin = Padding.Empty };
         body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        body.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
+        body.RowStyles.Add(new RowStyle(SizeType.Absolute, 62));
         body.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         body.RowStyles.Add(new RowStyle(SizeType.Absolute, 96));
-        body.Controls.Add(_hint, 0, 0);
+        var header = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2, Margin = Padding.Empty };
+        header.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+        header.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        header.Controls.Add(_hint, 0, 0);
+        var filters = new FlowLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(8, 0, 0, 0), WrapContents = false };
+        filters.Controls.AddRange([_module, _search]);
+        header.Controls.Add(filters, 0, 1);
+        body.Controls.Add(header, 0, 0);
         body.Controls.Add(_grid, 0, 1);
         body.Controls.Add(editor, 0, 2);
         Controls.Add(body);
@@ -43,9 +64,32 @@ public sealed class EngineConstantPanel : UserControl
         _grid.SelectionChanged += (_, _) => BindSelection();
         _write.Click += (_, _) => WriteSelected();
         _refresh.Click += (_, _) => RefreshValues();
+        _search.TextChanged += (_, _) => PopulateGrid();
+        _module.SelectedIndexChanged += (_, _) => { if (!_binding) PopulateGrid(); };
+        _openDedicated.Click += (_, _) =>
+        {
+            if (_grid.SelectedRows.Count > 0 && _grid.SelectedRows[0].Tag is DedicatedConstant selected)
+                NavigationRequested?.Invoke(this, new EngineConstantNavigationEventArgs(selected.Target, selected.Id));
+        };
     }
 
     public event EventHandler<EngineConstantStatusEventArgs>? StatusChanged;
+    public event EventHandler<EngineConstantNavigationEventArgs>? NavigationRequested;
+
+    /// <summary>The host stages constants into the same Save transaction as data and growth drafts.</summary>
+    public Func<EngineConstantEdit, bool>? StageEdit { get; set; }
+
+    public void SetDedicatedValues(IReadOnlyDictionary<string, string> values)
+    {
+        _dedicatedValues = values;
+        PopulateGrid();
+    }
+
+    public void SetPendingEdits(IReadOnlyDictionary<string, EngineConstantEdit> edits)
+    {
+        _pendingEdits = edits;
+        PopulateGrid();
+    }
 
     public void Bind(ProjectWorkspace workspace)
     {
@@ -57,11 +101,14 @@ public sealed class EngineConstantPanel : UserControl
     {
         _workspace = null;
         _values = [];
+        _dedicatedValues = new Dictionary<string, string>();
+        _pendingEdits = new Dictionary<string, EngineConstantEdit>();
         _grid.Rows.Clear();
         _editorTitle.Text = "尚未打开项目。";
         _number.Enabled = false;
         _text.Enabled = false;
         _write.Enabled = false;
+        _openDedicated.Visible = false;
     }
 
     public void RefreshValues()
@@ -74,27 +121,17 @@ public sealed class EngineConstantPanel : UserControl
             _hint.Text = version == "6.6"
                 ? $"当前基底 {version}。疾风攻击每点增伤改兵种76槽特效值；其他特效值到特效分配页改。写入自动备份并复读。"
                 : $"当前基底 {version}。本页改代码固定值和文本槽；特效值到特效分配页改。写入自动备份并复读。";
+            if (StageEdit != null)
+                _hint.Text = $"当前基底 {version}。常量应用到草稿后统一保存；质变与档位条目可打开对应设定。";
+            var previousModule = _module.SelectedItem?.ToString();
             _binding = true;
-            try
-            {
-                _grid.Rows.Clear();
-                foreach (var value in _values)
-                {
-                    var index = _grid.Rows.Add(value.Definition.Module, value.Definition.DisplayName,
-                        Display(value), value.Definition.LocationText, value.Definition.Description,
-                        value.Nature);
-                    _grid.Rows[index].Tag = value;
-                    if (!value.SignatureMatches) _grid.Rows[index].DefaultCellStyle.ForeColor = Color.Gray;
-                }
-                _grid.ClearSelection();
-                if (_grid.Rows.Count > 0)
-                {
-                    _grid.CurrentCell = _grid.Rows[0].Cells[0];
-                    _grid.Rows[0].Selected = true;
-                }
-            }
-            finally { _binding = false; }
-            BindSelection();
+            _module.Items.Clear();
+            _module.Items.Add("全部模块");
+            _module.Items.AddRange(_values.Select(value => value.Definition.Module)
+                .Concat(DedicatedConstants.Select(value => value.Module)).Distinct().Order().Cast<object>().ToArray());
+            _module.SelectedItem = previousModule != null && _module.Items.Contains(previousModule) ? previousModule : "全部模块";
+            _binding = false;
+            PopulateGrid();
             RaiseStatus($"常量 {_values.Count} 项，当前基底可改 {_values.Count(value => value.SignatureMatches)} 项；选择一行修改。", false);
         }
         catch (Exception ex)
@@ -102,6 +139,57 @@ public sealed class EngineConstantPanel : UserControl
             Reset();
             RaiseStatus("常量读取失败：" + ex.Message, true);
         }
+    }
+
+    private void PopulateGrid()
+    {
+        if (_binding || _workspace == null) return;
+        var selectedId = _grid.SelectedRows.Count > 0 ? _grid.SelectedRows[0].Tag switch
+        {
+            EngineConstantValue value => value.Definition.Id,
+            DedicatedConstant dedicated => dedicated.Id,
+            _ => null
+        } : null;
+        var filter = _search.Text.Trim();
+        var selectedModule = _module.SelectedItem?.ToString();
+        bool Matches(string module, string text) =>
+            (selectedModule is null or "全部模块" || module == selectedModule) &&
+            (filter.Length == 0 || text.Contains(filter, StringComparison.OrdinalIgnoreCase));
+        _binding = true;
+        try
+        {
+            _grid.Rows.Clear();
+            foreach (var value in _values)
+            {
+                var d = value.Definition;
+                if (!Matches(d.Module, $"{d.Id} {d.DisplayName} {d.Description} {d.LocationText}")) continue;
+                var display = _pendingEdits.TryGetValue(d.Id, out var pending)
+                    ? (pending.NumericValue?.ToString() ?? pending.TextValue ?? "") + "（草稿）" : Display(value);
+                var index = _grid.Rows.Add(d.Module, d.DisplayName, display, d.LocationText, d.Description, value.Nature);
+                _grid.Rows[index].Tag = value;
+                if (!value.SignatureMatches) _grid.Rows[index].DefaultCellStyle.ForeColor = Color.Gray;
+            }
+            foreach (var dedicated in DedicatedConstants)
+            {
+                if (!Matches(dedicated.Module, $"{dedicated.Name} {dedicated.Description}")) continue;
+                var index = _grid.Rows.Add(dedicated.Module, dedicated.Name,
+                    dedicated.Target == "readonly" ? EngineTierCorrectionReader.ReadSummary(_workspace) :
+                        _dedicatedValues.GetValueOrDefault(dedicated.Id, "由专用编辑器管理"),
+                    dedicated.Target == "readonly" ? "VA 0x00507EC0（只读）" :
+                        dedicated.Target == "tier" ? "兵种 / 档位设定" : "引擎扫描 / 质变设定",
+                    dedicated.Description, dedicated.Target == "readonly" ? "结构只读" : "专用编辑器");
+                _grid.Rows[index].Tag = dedicated;
+            }
+            _grid.ClearSelection();
+            if (_grid.Rows.Count > 0)
+            {
+                _grid.CurrentCell = _grid.Rows[0].Cells[0];
+                _grid.Rows[0].Selected = true;
+            }
+        }
+        finally { _binding = false; }
+        if (selectedId != null) SelectDefinition(selectedId);
+        BindSelection();
     }
 
     private void ConfigureGrid()
@@ -132,7 +220,8 @@ public sealed class EngineConstantPanel : UserControl
     {
         var host = new Panel { Dock = DockStyle.Fill, Padding = new Padding(8, 4, 8, 6) };
         var commands = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 34, WrapContents = false };
-        commands.Controls.AddRange([_editorTitle, _number, _text, _write, _refresh]);
+        commands.AutoScroll = true;
+        commands.Controls.AddRange([_editorTitle, _number, _text, _write, _openDedicated, _refresh]);
         _editorTitle.Margin = new Padding(0, 8, 10, 0);
         _number.Margin = new Padding(0, 5, 8, 0);
         _text.Margin = new Padding(0, 5, 8, 0);
@@ -148,6 +237,20 @@ public sealed class EngineConstantPanel : UserControl
     private void BindSelection()
     {
         if (_binding) return;
+        if (_grid.SelectedRows.Count > 0 && _grid.SelectedRows[0].Tag is DedicatedConstant dedicated)
+        {
+            _editorTitle.Text = dedicated.Name;
+            _number.Visible = _text.Visible = _write.Visible = false;
+            _openDedicated.Visible = true;
+            _openDedicated.Enabled = dedicated.Target != "readonly";
+            _openDedicated.Text = dedicated.Target == "transform" ? "打开质变设定" : "打开档位设定";
+            if (dedicated.Target == "readonly") _openDedicated.Text = "只读结构";
+            _editorHint.Text = dedicated.Description;
+            return;
+        }
+        _openDedicated.Visible = false;
+        _write.Visible = true;
+        _write.Text = StageEdit == null ? "写入此常量" : "应用到草稿";
         var value = _grid.SelectedRows.Count > 0 ? _grid.SelectedRows[0].Tag as EngineConstantValue : null;
         if (value == null)
         {
@@ -167,17 +270,19 @@ public sealed class EngineConstantPanel : UserControl
         _binding = true;
         try
         {
-            if (isText) _text.Text = value.TextValue;
+            _pendingEdits.TryGetValue(definition.Id, out var pending);
+            if (isText) _text.Text = pending?.TextValue ?? value.TextValue;
             else
             {
                 _number.Minimum = definition.Minimum;
                 _number.Maximum = definition.Maximum;
-                _number.Value = Math.Clamp(value.NumericValue ?? 0, definition.Minimum, definition.Maximum);
+                _number.Value = Math.Clamp(pending?.NumericValue ?? value.NumericValue ?? 0, definition.Minimum, definition.Maximum);
             }
         }
         finally { _binding = false; }
         _editorHint.Text = value.SignatureMatches
-            ? $"可改；范围 {definition.Minimum}..{definition.Maximum}；写入后会复读校验。"
+            ? $"可改；范围 {definition.Minimum}..{definition.Maximum}；" +
+                (StageEdit == null ? "写入后会复读校验。" : "应用到草稿后，保存项目时统一写入并复读校验。")
             : "只读：" + FriendlyHint(value.Diagnostic);
     }
 
@@ -205,6 +310,16 @@ public sealed class EngineConstantPanel : UserControl
             edit = new(definition.Id, number, null);
             description = $"{value.NumericValue} → {number}";
         }
+        if (StageEdit != null)
+        {
+            if (StageEdit(edit))
+            {
+                var pending = new Dictionary<string, EngineConstantEdit>(_pendingEdits) { [edit.Id] = edit };
+                SetPendingEdits(pending);
+                RaiseStatus($"{definition.DisplayName} 已应用到草稿，保存项目时统一写入。", false);
+            }
+            return;
+        }
         if (MessageBox.Show(this, $"{definition.DisplayName}：{description}。{Environment.NewLine}{Environment.NewLine}" +
                 "写入前会备份 Ekd5.exe，写入后自动复读；确认写入？",
                 "写入引擎常量", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
@@ -216,6 +331,7 @@ public sealed class EngineConstantPanel : UserControl
             return;
         }
         RaiseStatus(result.Message, false);
+        RefreshValues();
     }
 
     private static string Display(EngineConstantValue value) => value.Definition.Kind == EngineConstantKind.Text
@@ -243,9 +359,20 @@ public sealed class EngineConstantPanel : UserControl
     /// <summary>从战斗公式页跳转过来时按常量 ID 选中对应行。</summary>
     internal void SelectDefinition(string id)
     {
+        if (!_grid.Rows.Cast<DataGridViewRow>().Any(row => row.Tag is EngineConstantValue value && value.Definition.Id == id ||
+                row.Tag is DedicatedConstant dedicated && dedicated.Id == id) &&
+            (_values.Any(value => value.Definition.Id == id) || DedicatedConstants.Any(value => value.Id == id)))
+        {
+            _binding = true;
+            _search.Clear();
+            _module.SelectedItem = "全部模块";
+            _binding = false;
+            PopulateGrid();
+        }
         for (var index = 0; index < _grid.Rows.Count; index++)
         {
-            if (_grid.Rows[index].Tag is EngineConstantValue value && value.Definition.Id == id)
+            if (_grid.Rows[index].Tag is EngineConstantValue value && value.Definition.Id == id ||
+                _grid.Rows[index].Tag is DedicatedConstant dedicated && dedicated.Id == id)
             {
                 SelectRowForSmokeTest(index);
                 return;
@@ -270,6 +397,13 @@ public sealed class EngineConstantPanel : UserControl
     {
         public BufferedGrid() => DoubleBuffered = true;
     }
+    private sealed record DedicatedConstant(string Id, string Module, string Name, string Target, string Description);
+}
+
+public sealed class EngineConstantNavigationEventArgs(string target, string constantId) : EventArgs
+{
+    public string Target { get; } = target;
+    public string ConstantId { get; } = constantId;
 }
 
 public sealed class EngineConstantStatusEventArgs(string message, bool error) : EventArgs

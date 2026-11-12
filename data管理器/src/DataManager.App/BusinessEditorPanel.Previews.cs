@@ -90,8 +90,7 @@ public sealed partial class BusinessEditorPanel
 
     private void BuildPersonPreviewColumns(Control host)
     {
-        var is66 = _workspace.ActiveProfile.ProfileId.Equals("ccz-6.6", StringComparison.OrdinalIgnoreCase);
-        var count = is66 ? 4 : 3;
+        const int count = 3;
         var table = new TableLayoutPanel
         {
             Name = "PersonPreviewColumns", Dock = DockStyle.Fill, ColumnCount = count, RowCount = 2,
@@ -101,17 +100,35 @@ public sealed partial class BusinessEditorPanel
         table.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
         table.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         host.Controls.Add(table);
+        var headerRows = new List<(TableLayoutPanel Form, Control Editor, Button Button)>();
+        void FitHeaderHeight()
+        {
+            var needed = 56 * table.DeviceDpi / 96f;
+            foreach (var row in headerRows)
+            {
+                var labelHeight = row.Form.Font.Height + 6 * table.DeviceDpi / 96;
+                var editorHeight = row.Editor is ComboBox combo ? combo.PreferredHeight : row.Editor.PreferredSize.Height;
+                var inputHeight = Math.Max(editorHeight, row.Button.GetPreferredSize(Size.Empty).Height) + row.Editor.Margin.Vertical + 6;
+                row.Form.RowStyles[0].SizeType = SizeType.Absolute;
+                row.Form.RowStyles[0].Height = labelHeight;
+                row.Form.RowStyles[1].SizeType = SizeType.Absolute;
+                row.Form.RowStyles[1].Height = inputHeight;
+                needed = Math.Max(needed, labelHeight + inputHeight + 4);
+            }
+            table.RowStyles[0].Height = needed;
+        }
 
-        void AddHeader(FieldBinding? binding, int column, int span = 1)
+        void AddHeader(FieldBinding? binding, int column, string category, string buttonText)
         {
             if (binding == null) return;
             var header = new Panel { Dock = DockStyle.Fill, Margin = new Padding(4, 0, 4, 2) };
             var form = new TableLayoutPanel
             {
-                ColumnCount = 1, RowCount = 2, Margin = Padding.Empty, Padding = Padding.Empty,
+                ColumnCount = 2, RowCount = 2, Margin = Padding.Empty, Padding = Padding.Empty,
                 Anchor = AnchorStyles.None
             };
             form.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            form.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             form.RowStyles.Add(new RowStyle(SizeType.Percent, 45));
             form.RowStyles.Add(new RowStyle(SizeType.Percent, 55));
             var label = new Label
@@ -119,47 +136,47 @@ public sealed partial class BusinessEditorPanel
                 Text = binding.Label ?? FieldLabel(binding.Document.Definition.Key, binding.Field.Name),
                 Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter, Margin = Padding.Empty
             };
-            Button? locationButton = null;
-            if (binding.Document.Definition.Key == "person-s-assign")
+            var locationButton = new Button { Name = "LocatePerson" + category + "Image", Text = buttonText,
+                AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                Dock = DockStyle.Fill, Margin = new Padding(4, 0, 0, 0), Padding = Padding.Empty, TabStop = true };
+            locationButton.Click += (_, _) =>
             {
-                var locate = new Button { Name = "LocatePersonSImage", Text = "定位 S", AutoSize = true,
-                    Dock = DockStyle.Right, Margin = Padding.Empty, Padding = Padding.Empty, TabStop = true };
-                locate.Click += (_, _) =>
-                {
-                    if (Flush()) SImageLocationRequested?.Invoke(_id,
+                if (!Flush()) return;
+                if (category == "S")
+                    SImageLocationRequested?.Invoke(_id,
                         EntityNumber("person-s-assign", "S形象ID", -1), EntityNumber("persons", "兵种", -1));
-                };
-                _diagnosticTips.SetToolTip(locate, "按当前草稿指定定位实际 Unit 图号；三转人物或默认兵种可选择阶段/阵营。图片导入会即时保存。\n存档同步仍使用磁盘上已保存的人物指定。");
-                form.ColumnCount = 2;
-                form.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-                locationButton = locate;
-            }
+                else PersonImageLocationRequested?.Invoke(category, _id,
+                    EntityNumber(binding.Document.Definition.Key, binding.Field.Name, -1));
+            };
+            _diagnosticTips.SetToolTip(locationButton, category == "S"
+                ? "按当前草稿指定定位实际 Unit 图号；三转人物或默认兵种可选择阶段/阵营。图片导入会即时保存。\n存档同步仍使用磁盘上已保存的人物指定。"
+                : "按当前草稿编号定位图片设定中的对应条目。图片导入会即时保存。");
             var editor = CreateEditor(binding.Document, binding.Row, binding.RowIndex, binding.Field);
             editor.Dock = DockStyle.None; editor.Anchor = AnchorStyles.Left | AnchorStyles.Right;
             editor.Margin = new Padding(0, 1, 0, 1);
             form.Controls.Add(label, 0, 0); form.Controls.Add(editor, 0, 1);
-            if (locationButton != null)
-            {
-                form.SetColumnSpan(label, 2);
-                form.Controls.Add(locationButton, 1, 1);
-            }
-            header.Controls.Add(form); table.Controls.Add(header, column, 0); table.SetColumnSpan(header, span);
+            form.SetColumnSpan(label, 2);
+            form.Controls.Add(locationButton, 1, 1);
+            headerRows.Add((form, editor, locationButton));
+            editor.FontChanged += (_, _) => FitHeaderHeight();
+            editor.SizeChanged += (_, _) => FitHeaderHeight();
+            locationButton.FontChanged += (_, _) => FitHeaderHeight();
+            header.Controls.Add(form); table.Controls.Add(header, column, 0);
             void ArrangeHeader()
             {
-                // One portrait number controls both the portrait and half body.
-                // Center its input over their shared boundary in the 6.6 layout.
-                var width = Math.Min(header.ClientSize.Width, 184 * header.DeviceDpi / 96);
+                var width = Math.Min(header.ClientSize.Width, Math.Max(210 * header.DeviceDpi / 96,
+                    locationButton.GetPreferredSize(Size.Empty).Width + 96 * header.DeviceDpi / 96));
                 form.Bounds = new Rectangle(Math.Max(0, (header.ClientSize.Width - width) / 2), 0, Math.Max(1, width), header.ClientSize.Height);
             }
             header.ClientSizeChanged += (_, _) => ArrangeHeader();
             header.DpiChangedAfterParent += (_, _) => ArrangeHeader();
+            header.FontChanged += (_, _) => ArrangeHeader();
             ArrangeHeader();
         }
 
-        AddHeader(Fields("persons").FirstOrDefault(binding => binding.Field.Name == "头像"), 0, is66 ? 2 : 1);
-        AddHeader(Fields("person-r-assign").Select(binding => binding with { Label = "R形象编号" }).FirstOrDefault(), count - 2);
-        AddHeader(Fields("person-s-assign").Select(binding => binding with { Label = "S形象编号" }).FirstOrDefault(), count - 1);
-        void FitHeaderHeight() => table.RowStyles[0].Height = Math.Max(56 * table.DeviceDpi / 96f, table.Font.Height * 2 + 14);
+        AddHeader(Fields("persons").FirstOrDefault(binding => binding.Field.Name == "头像"), 0, "Face", "定位头像");
+        AddHeader(Fields("person-r-assign").Select(binding => binding with { Label = "R形象编号" }).FirstOrDefault(), 1, "R", "定位 R");
+        AddHeader(Fields("person-s-assign").Select(binding => binding with { Label = "S形象编号" }).FirstOrDefault(), 2, "S", "定位 S");
         table.FontChanged += (_, _) => FitHeaderHeight();
         table.DpiChangedAfterParent += (_, _) => FitHeaderHeight();
         table.HandleCreated += (_, _) => FitHeaderHeight();
@@ -180,7 +197,7 @@ public sealed partial class BusinessEditorPanel
         if (table == null)
         {
             table = kind == BusinessPageKind.Persons
-                ? (_workspace.ActiveProfile.ProfileId.Equals("ccz-6.6", StringComparison.OrdinalIgnoreCase) ? Columns(25, 25, 25, 25) : Columns(34, 33, 33)) : Rows(
+                ? Columns(1, 1, 1) : Rows(
                 (kind is BusinessPageKind.Strategies or BusinessPageKind.DetailedJobs)
                     ? [(SizeType.Percent, 34), (SizeType.Percent, 33), (SizeType.Percent, 33)]
                     : [(SizeType.Percent, 100)]);
@@ -226,11 +243,6 @@ public sealed partial class BusinessEditorPanel
                 var verifiedR = _workspace.Documents.TryGetValue("person-r-assign", out var r) && r.Definition.Capability == TableCapability.Editable;
                 var verifiedS = _workspace.Documents.TryGetValue("person-s-assign", out var s) && s.Definition.Capability == TableCapability.Editable;
                 Card($"Face:{face}", $"头像 {face}", cancellation => Still("Face", face, cancellation));
-                if (_workspace.ActiveProfile.ProfileId.Equals("ccz-6.6", StringComparison.OrdinalIgnoreCase))
-                {
-                    var halfBodyImage = ResourceCatalogAdapter.HalfBodyImageNumber(face);
-                    Card($"Fb:{halfBodyImage}", $"半身像 {halfBodyImage}", cancellation => Still("Fb.e5", halfBodyImage, cancellation));
-                }
                 Card($"R:{rId}:{verifiedR}", $"R {rId}", cancellation => verifiedR && rId >= 0 ? Still("Pmapobj.e5", rId, cancellation) : Task.FromResult(new ResourcePreviewAnimation([], 160, "R形象指定缺少布局证据")));
                 Card($"S:{(verifiedS ? sId : 0)}:{(verifiedS && sId != 0 ? 0 : job)}:mov:0", verifiedS ? $"S {sId}" : "默认S", cancellation => _resources.DecodeCharacterSAsync(root, verifiedS ? sId : 0, job, 1, cancellation));
                 break;

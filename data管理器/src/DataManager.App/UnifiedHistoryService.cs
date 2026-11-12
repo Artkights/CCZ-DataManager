@@ -16,7 +16,29 @@ public sealed class UnifiedHistoryService(ProjectWorkspace workspace, ResourceCa
     public IReadOnlyList<UnifiedHistoryEntry> List()
     {
         if (string.IsNullOrWhiteSpace(workspace.RootPath)) return [];
-        var entries = workspace.GetHistory().Select(entry => new UnifiedHistoryEntry("数据", entry.OperationId,
+        return BuildEntries(workspace.GetHistoryMetadata(), _resourceHistory.List(workspace.RootPath));
+    }
+
+    public Task<IReadOnlyList<UnifiedHistoryEntry>> ListAsync(CancellationToken cancellationToken = default)
+    {
+        var root = workspace.RootPath;
+        if (string.IsNullOrWhiteSpace(root)) return Task.FromResult<IReadOnlyList<UnifiedHistoryEntry>>([]);
+        // Capture the root before scheduling: no workspace, DataTable or UI
+        // objects are read by the worker, including after a project switch.
+        return Task.Run(() =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var data = new DataManager.Core.History.HistoryStore().ListMetadata(root);
+            var images = new ResourceHistoryAdapter().List(root);
+            cancellationToken.ThrowIfCancellationRequested();
+            return BuildEntries(data, images);
+        }, cancellationToken);
+    }
+
+    private static IReadOnlyList<UnifiedHistoryEntry> BuildEntries(
+        IReadOnlyList<HistoryEntry> data, IReadOnlyList<ResourceHistoryEntry> images)
+    {
+        var entries = data.Select(entry => new UnifiedHistoryEntry("数据", entry.OperationId,
             new DateTimeOffset(entry.CreatedAt), entry.OperationKind, entry.Summary, entry.Status switch
             {
                 HistoryStatus.Active => "已保存", HistoryStatus.Reverted => "已撤回",
@@ -29,7 +51,7 @@ public sealed class UnifiedHistoryService(ProjectWorkspace workspace, ResourceCa
             $"版本：{entry.ProfileId}；布局：{entry.VariantId}；修订：{entry.LayoutRevision}{Environment.NewLine}" +
             string.Join(Environment.NewLine, entry.AppearanceSyncMessages.Concat(entry.Tables.Select(change =>
                 $"{change.TableName} {change.Id}：{change.FieldName}，{change.OldValue} → {change.NewValue}（0x{change.AbsoluteOffset:X} +{change.ByteLength}）"))))).ToList();
-        entries.AddRange(_resourceHistory.List(workspace.RootPath).Select(entry => new UnifiedHistoryEntry("形象",
+        entries.AddRange(images.Select(entry => new UnifiedHistoryEntry("形象",
             entry.OperationId, entry.Timestamp, entry.Operation, entry.Summary, entry.Status, entry.Targets,
             entry.BeforeSha, entry.AfterSha, entry.CanUndo, entry.CanRedo,
             string.Join(Environment.NewLine, entry.Targets))));

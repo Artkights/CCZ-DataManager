@@ -66,6 +66,8 @@ public sealed class BatchRenameService : IBatchRenameService
 
     public MutationResult Apply(ProjectProfile project, RenamePlan plan)
     {
+        using var projectLock = Ccz.HistoryStorage.ProjectWriteLock.Acquire(project.RootPath);
+        _history.Recover(project);
         if (!plan.CanApply) return new MutationResult(Guid.NewGuid().ToString("N"), false, "批量改名预检未通过", null,
             Array.Empty<string>(), plan.Errors);
         if (project.IsReadOnly) return new MutationResult(Guid.NewGuid().ToString("N"), false, "当前项目只读，不能改名", null, [], []);

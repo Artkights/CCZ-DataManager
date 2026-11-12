@@ -118,7 +118,7 @@ internal static class BundleVerification
             var imageProject = new ProjectProfileService().Detect(root) with { IsReadOnly = true };
             var catalogService = new ImageCatalogService();
             IReadOnlyList<ImageResourceDescriptor> catalog = [];
-            var monitoredPaths = new[] { "Data.e5", "Star.e5", "Imsg.e5", "Ekd5.exe" }
+            var monitoredPaths = new[] { "Data.e5", "Star.e5", "Imsg.e5", "Ekd5.exe", "Hitarea.e5", "Effarea.e5", "Spalet.e5" }
                 .Select(name => ProjectFileLocator.Resolve(root, name)).Where(File.Exists)
                 .Concat(Directory.Exists(Path.Combine(root, "SV")) ? Directory.EnumerateFiles(Path.Combine(root, "SV")) : [])
                 .Concat(imageProject.ResourcePaths.Values.Where(File.Exists)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
@@ -189,7 +189,7 @@ internal static class BundleVerification
                     workspace.Open(root);
                     var workbooks = new PageWorkbookService(workspace);
                     var results = new List<object>();
-                    foreach (var page in new[] { BusinessPageKind.Persons, BusinessPageKind.Items })
+                    foreach (var page in new[] { BusinessPageKind.Persons, BusinessPageKind.Items, BusinessPageKind.Strategies })
                     {
                         var output = Path.Combine(Path.GetDirectoryName(reportPath)!,
                             Path.GetFileNameWithoutExtension(reportPath) + $"-{page}.xlsx");
@@ -202,6 +202,8 @@ internal static class BundleVerification
                     }
                     return new { Workbooks = results, workspace.IsDirty };
                 });
+                Check("策略首次进入与效果索引", () => StrategyBundleVerification.Verify(root, reportPath));
+                Check("四项整合质变档位与常量界面", () => GrowthBundleVerification.Verify(root, reportPath));
                 Check("图片资源目录", () =>
                 {
                     catalog = catalogService.BuildCatalog(imageProject);
@@ -233,6 +235,7 @@ internal static class BundleVerification
                 });
                 Check("图片导入候选与物理242隔离（不提交）", () => VerifyFileImportCandidate(root, reportPath));
                 Check("攻击与效果范围逐图解码", () => VerifyRangeImages(root, imageProject, catalogService, catalog));
+                Check("范围管理共享组件与三个子页", () => VerifyIntegratedRanges(root, reportPath));
                 if (!resourcesOnly) Check("Weather 四帧纵向动画", () =>
                 {
                     var resource = catalog.Single(item => item.Kind == ResourceKind.WeatherSpecial);
@@ -320,13 +323,16 @@ internal static class BundleVerification
                     form.LoadProjectForSmokeTest(root);
                     form.SelectModuleForSmokeTest("__engine");
                     var scanDeadline = DateTime.UtcNow.AddSeconds(60);
-                    while (form.EngineScanPendingForSmokeTest && DateTime.UtcNow < scanDeadline)
+                    // Hashing now precedes the scan task on a worker. Waiting
+                    // only for that task can return before it has been created,
+                    // or before the completed report reaches the UI context.
+                    while ((form.EngineScanPendingForSmokeTest || form.EngineReportForSmokeTest == null) && DateTime.UtcNow < scanDeadline)
                     {
                         Application.DoEvents();
                         Thread.Sleep(10);
                     }
                     Application.DoEvents();
-                    if (form.EngineScanPendingForSmokeTest)
+                    if (form.EngineScanPendingForSmokeTest || form.EngineReportForSmokeTest == null)
                         throw new InvalidDataException("发布程序的后台引擎扫描未在60秒内完成。");
                     var screenshots = new List<object>();
                     foreach (var size in new[] { new Size(1280, 720), new Size(1920, 1080) })
@@ -404,6 +410,71 @@ internal static class BundleVerification
         }
         catch { return 2; }
         return failures == 0 ? 0 : 1;
+    }
+
+    private static object VerifyIntegratedRanges(string root, string reportPath)
+    {
+        using var form = new MainForm(openDefaultProject: false)
+        {
+            StartPosition = FormStartPosition.Manual,
+            Location = new Point(-30000, -30000),
+            ShowInTaskbar = false
+        };
+        form.Show();
+        form.LoadProjectForSmokeTest(root);
+        form.SelectModuleForSmokeTest("__ranges");
+        Application.DoEvents();
+        var host = form.RangeHostForSmokeTest;
+        var session = form.RangeSessionForSmokeTest ?? throw new InvalidDataException("发布文件没有创建范围会话。");
+        var pages = host.Tabs.TabPages.Cast<TabPage>().Select(page => page.Text).ToArray();
+        if (!pages.SequenceEqual(["攻击范围", "穿透范围", "拓展范围"]) || !host.Visible ||
+            !form.RangeNavigationCollapsedForSmokeTest)
+            throw new InvalidDataException("发布文件没有显示原范围三子页及独立目录布局。");
+        if (!Path.GetFullPath(session.Game.RootPath).Equals(Path.GetFullPath(root), StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("范围会话没有绑定当前工作区。");
+        var assembly = typeof(RangeManager.App.RangeManagementPanel).Assembly;
+        var resources = assembly.GetManifestResourceNames()
+            .Where(name => name.StartsWith("RangeManager.App.Assets.Range.", StringComparison.Ordinal)).ToArray();
+        if (resources.Length != 6) throw new InvalidDataException("范围共享组件的固定图像资源不完整。");
+        var screenshots = new List<object>();
+        foreach (var size in new[] { new Size(1280, 800), new Size(1920, 1080) })
+        {
+            form.Size = size;
+            if (form.Size != size)
+                SetWindowPos(form.Handle, IntPtr.Zero, -30000, -30000, size.Width, size.Height, 0x0010 | 0x0004 | 0x0400);
+            for (var page = 0; page < pages.Length; page++)
+            {
+                host.Tabs.SelectedIndex = page;
+                form.PerformLayout();
+                Application.DoEvents();
+                if (form.Size != size) throw new InvalidDataException($"范围窗口实际尺寸 {form.Size} 与要求 {size} 不一致。");
+                if (page < 2)
+                {
+                    var editor = page == 0 ? host.AttackEditor : host.PierceEditor;
+                    if (editor.IdListForTest.Items.Count == 0 || editor.PreviewForTest.Width == 0 ||
+                        editor.PreviewForTest.Height == 0)
+                        throw new InvalidDataException("发布文件的范围目录或预览为空。");
+                }
+                else if (session.Extension.Supported && host.ExtensionEditor.GridForTest.Rows.Count !=
+                    session.Bindings.Count(binding => binding.Key.Kind == RangeManager.App.RangeKind.Attack))
+                    throw new InvalidDataException("发布文件的拓展范围映射没有覆盖原有攻击范围目录。");
+                var output = Path.Combine(Path.GetDirectoryName(reportPath)!,
+                    Path.GetFileNameWithoutExtension(reportPath) + $"-range-{page}-{size.Width}x{size.Height}.png");
+                using var bitmap = new Bitmap(form.Width, form.Height);
+                form.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
+                bitmap.Save(output, ImageFormat.Png);
+                screenshots.Add(new { Page = pages[page], Path = output, Sha256 = HashFile(output) });
+            }
+        }
+        form.SelectModuleForSmokeTest("人物");
+        Application.DoEvents();
+        if (host.Visible || form.RangeNavigationCollapsedForSmokeTest ||
+            !ReferenceEquals(session, form.RangeSessionForSmokeTest) || form.WorkspaceForSmokeTest.IsDirty)
+            throw new InvalidDataException("离开范围页没有恢复原布局，或只读验收产生草稿/替换会话。");
+        var version = session.Game.VersionText;
+        form.Close();
+        return new { Pages = pages, SharedAssembly = assembly.GetName().Name, EmbeddedResources = resources,
+            Version = version, Screenshots = screenshots };
     }
 
     private static object VerifyFileImportCandidate(string root, string reportPath)

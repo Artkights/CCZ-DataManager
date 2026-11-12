@@ -86,6 +86,33 @@ public static class BmpPayloadService
         return ImageImportRasterNormalization.CopyArgb((Bitmap)image);
     }
 
+    /// <summary>Decode a complete-width slice of a validated uncompressed BMP strip without allocating
+    /// its other planes. Header, palette, row orientation and reserved 32bpp semantics stay with Decode.</summary>
+    internal static Bitmap? TryDecodeRows(byte[] original, int top, int height)
+    {
+        var layout = ReadLayout(original);
+        if (layout == null) return null;
+        if (top < 0 || height <= 0 || (long)top + height > layout.Height) throw new ArgumentOutOfRangeException(nameof(top));
+        var result = new byte[checked(layout.PixelOffset + layout.Stride * height)];
+        original.AsSpan(0, layout.PixelOffset).CopyTo(result);
+        var dib = BinaryPrimitives.ReadInt32LittleEndian(original.AsSpan(14, 4));
+        if (dib == 12) BinaryPrimitives.WriteUInt16LittleEndian(result.AsSpan(20, 2), checked((ushort)height));
+        else
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(result.AsSpan(22, 4), layout.TopDown ? -height : height);
+            BinaryPrimitives.WriteInt32LittleEndian(result.AsSpan(34, 4), checked(layout.Stride * height));
+        }
+        BinaryPrimitives.WriteInt32LittleEndian(result.AsSpan(2, 4), result.Length);
+        for (var y = 0; y < height; y++)
+        {
+            var sourceRow = layout.TopDown ? top + y : layout.Height - 1 - top - y;
+            var targetRow = layout.TopDown ? y : height - 1 - y;
+            original.AsSpan(layout.PixelOffset + sourceRow * layout.Stride, layout.Stride)
+                .CopyTo(result.AsSpan(layout.PixelOffset + targetRow * layout.Stride));
+        }
+        return Decode(result);
+    }
+
     public static byte[] Rebuild(byte[] original, Bitmap edited, IReadOnlyList<Color>? rawPalette = null)
     {
         if (original.Length >= 2 && original[0] == 'B' && original[1] == 'M')

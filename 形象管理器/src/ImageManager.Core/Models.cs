@@ -441,6 +441,10 @@ public sealed class AiAtlasNormalizationResult : IDisposable
 
 public sealed class HistoryTarget
 {
+    public Ccz.HistoryStorage.BlobReference? BeforeBlob { get; set; }
+    public Ccz.HistoryStorage.BlobReference? AfterBlob { get; set; }
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string? BlobStoreRoot { get; set; }
     public FileAttributes? BeforeAttributes { get; set; }
     public FileAttributes? AfterAttributes { get; set; }
     public string TargetPath { get; set; } = string.Empty;

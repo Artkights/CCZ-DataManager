@@ -9,6 +9,7 @@ using DataManager.Core.Migration;
 using DataManager.Core.TableDefinitions;
 using DataManager.Images;
 using ImageManager.App;
+using Ccz.ManagerUi;
 
 namespace DataManager.App;
 
@@ -69,10 +70,13 @@ public sealed partial class MainForm : Form
     private readonly Label _gridBudget = new() { Dock = DockStyle.Bottom, Height = 26, Visible = false, TextAlign = ContentAlignment.MiddleLeft };
     private bool HasPendingChanges => _workspace.IsDirty || _businessEditors.Values.Any(editor => editor.HasPendingChanges) ||
         _grid.IsCurrentCellDirty || (_gridTextGuard?.HasPendingChanges == true && _grid.IsCurrentCellInEditMode) ||
-        _battleFormulaPanel.HasPendingChanges;
+        _battleFormulaPanel.HasPendingChanges || HasAnyEngineChanges || _constantDraft.Count > 0 || _transformPanel.HasPendingInput;
 
     public MainForm(bool openDefaultProject = true)
     {
+        AutoScaleMode = AutoScaleMode.Dpi;
+        AutoScaleDimensions = new SizeF(96, 96);
+        _rangeCatalog = new WorkspaceRangeCatalog(_resourceAdapter!);
         _applicationIcon = LoadApplicationIcon();
         Icon = _applicationIcon;
         _imageEditor = new IntegratedResourcePanel(_resourceAdapter) { Visible = false };
@@ -80,8 +84,10 @@ public sealed partial class MainForm : Form
         _businessEditor = CreateBusinessEditor();
         _businessEditors[BusinessPageKind.Persons] = _businessEditor;
         _imageEditor.CategoriesChanged += () => RefreshResourceCategories();
+        _imageEditor.ResourcesChanged += RefreshBusinessResourcePickers;
         InitializeConstantsPanel();
         InitializeBattleFormulaPanel();
+        InitializeRangeManagement();
         Text = $"data 与形象管理器 - 曹操传加强版 6.4/6.5/6.6 · {Application.ProductVersion.Split('+')[0]}";
         StartPosition = FormStartPosition.CenterScreen;
         Width = 1500;
@@ -98,6 +104,12 @@ public sealed partial class MainForm : Form
                 // explicit project. Never replace that selection at startup.
                 if (string.IsNullOrWhiteSpace(_workspace.RootPath)) OpenDefaultOrPrompt();
             };
+    }
+
+    private void RefreshBusinessResourcePickers()
+    {
+        foreach (var editor in _businessEditors.Values.Distinct())
+            if (!editor.IsDisposed && !editor.Disposing) editor.RefreshResourcePickers();
     }
 
     private static Icon LoadApplicationIcon()
@@ -137,15 +149,7 @@ public sealed partial class MainForm : Form
 
     private void BuildLayout()
     {
-        var toolStrip = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Top,
-            Height = 38,
-            Padding = new Padding(8, 4, 8, 3),
-            WrapContents = false,
-            AutoScroll = true,
-            BackColor = Color.FromArgb(245, 247, 250)
-        };
+        var toolStrip = ManagerUiStyle.CreateToolbar();
         foreach (var button in new[] { _saveButton, _undoButton, _redoButton, _historyUndoButton, _historyRedoButton, _batchButton, _importButton, _exportButton, _scanButton, _migrationButton, _diagnosticsButton, _resourceAddButton, _resourceReplaceButton, _resourceDeleteButton })
         {
             button.Margin = new Padding(0, 0, 6, 0);
@@ -162,11 +166,7 @@ public sealed partial class MainForm : Form
         }
 
         var header = new Panel { Dock = DockStyle.Top, Height = 34, Padding = new Padding(8, 1, 8, 1) };
-        _moduleTabs.Dock = DockStyle.Fill;
-        _moduleTabs.Multiline = false;
-        _moduleTabs.Appearance = TabAppearance.FlatButtons;
-        _moduleTabs.ItemSize = new Size(120, 28);
-        _moduleTabs.SizeMode = TabSizeMode.FillToRight;
+        ManagerUiStyle.ConfigureTabs(_moduleTabs);
         header.Controls.Add(_moduleTabs);
 
         var left = new Panel { Dock = DockStyle.Fill, Padding = new Padding(8) };
@@ -194,14 +194,14 @@ public sealed partial class MainForm : Form
         rightHeader.Controls.Add(_historyFilter);
         void FitShellText()
         {
+            // Window sizes and the existing acceptance matrix use physical
+            // pixels; DPI scaling belongs to the content, not this window cap.
+            if (MinimumSize != new Size(1100, 650)) MinimumSize = new Size(1100, 650);
             settingsStrip.PerformLayout();
-            toolStrip.Height = Math.Max(38 * DeviceDpi / 96, toolStrip.Controls.Cast<Control>().Select(control => control.PreferredSize.Height).DefaultIfEmpty(28).Max() + toolStrip.Padding.Vertical);
-            header.Height = Math.Max(34 * DeviceDpi / 96, _moduleTabs.Font.Height + 15);
-            _moduleTabs.ItemSize = new Size(_moduleTabs.ItemSize.Width, Math.Max(28 * DeviceDpi / 96, _moduleTabs.Font.Height + 10));
+            ManagerUiStyle.FitShellText(this, toolStrip, header, _moduleTabs);
             rightHeader.Height = Math.Max(24 * DeviceDpi / 96, Font.Height + 6);
         }
-        FontChanged += (_, _) => FitShellText();
-        HandleCreated += (_, _) => FitShellText();
+        _ = new LayoutScheduler(this, FitShellText);
         FitShellText();
 
         _grid.Dock = DockStyle.Fill;
@@ -234,9 +234,11 @@ public sealed partial class MainForm : Form
         editor.Controls.Add(_engineDetail);
         editor.Controls.Add(_engineItemAssignments);
         editor.Controls.Add(_engineJobAssignments);
+        editor.Controls.Add(_transformPanel);
         editor.Controls.Add(_engineSubTabs);
         editor.Controls.Add(_constantPanel);
         editor.Controls.Add(_battleFormulaPanel);
+        editor.Controls.Add(_rangeHost);
         editor.Controls.Add(_diagnosticBox);
         editor.Controls.Add(_gridBudget);
         _gridBudget.SizeChanged += (_, _) => RefreshGridBudget();
@@ -290,6 +292,7 @@ public sealed partial class MainForm : Form
         _engineDetail.PendingChangesChanged += (_, _) => RefreshDirtyState();
         _engineDetail.WriteCompleted += (_, _) => EngineWriteCompleted();
         InitializeEngineAssignmentNavigation();
+        _transformPanel.PendingChangesChanged += (_, _) => RefreshDirtyState();
         _grid.CellBeginEdit += GridCellBeginEdit;
         _grid.CellValidating += GridCellValidating;
         _grid.CellValueChanged += GridCellValueChanged;
@@ -508,6 +511,7 @@ public sealed partial class MainForm : Form
 
     private void OpenProject(string path)
     {
+        if (_historyIoBusy) return;
         if (!PreparePendingEdits()) return;
         if (!ConfirmLeaveEngine()) return;
         if (!ConfirmLeaveFormula()) return;
@@ -521,6 +525,8 @@ public sealed partial class MainForm : Form
                 if (choose.ShowDialog(this) != DialogResult.OK) return;
                 path = choose.SelectedRoot;
             }
+            else path = candidates[0];
+            RangeManager.App.RangeSaveTransaction.Recover(path);
             var loaded = ProjectLoadDialog.LoadWorkspace(this, path);
             if (loaded == null) return;
             _workspace = loaded;
@@ -535,6 +541,8 @@ public sealed partial class MainForm : Form
     private void ApplyOpenedProject(ScanReport report, string path)
     {
         _imageEditor.ClearProject();
+        if (_growthDraft != null) _growthDraft.Changed -= GrowthChanged;
+        _growthDraft = null; _selectedTransform = null;
         ResetBusinessEditors();
         ResetQueryNavigation();
         _gridTextGuard?.Dispose(); _gridTextGuard = null; _guardedGridEditor = null;
@@ -544,8 +552,15 @@ public sealed partial class MainForm : Form
         _engineReport = null;
         _engineRows.Clear();
         _engineDetail.Reset();
+        _constantDraft.Clear();
+        _workspace.RegisterDraftParticipant(this);
         _constantPanel.Reset();
         _battleFormulaPanel.Reset();
+        // Recover image/save groups before any range or resource editor observes a partial prior commit.
+        var imageProfile = DataManager.Images.ProjectImageHistory.Canonicalize(new ImageManager.Core.ProjectProfileService().Detect(_workspace.RootPath));
+        if (DataManager.Images.ProjectImageHistory.Create(imageProfile).Recover(imageProfile))
+            report = _workspace.Open(_workspace.RootPath, _workspace.ActiveProfile.ProfileId, _workspace.ActiveProfile.VariantId);
+        LoadRangeWorkspace();
         ResetEngineAssignments();
         UpdateScanSummary(report);
         _diagnosticBox.Text = FormatScanDiagnostics(report, 20);
@@ -560,6 +575,7 @@ public sealed partial class MainForm : Form
             foreach (var module in _workspace.Modules)
                 _moduleTabs.TabPages.Add(new TabPage(module.DisplayName) { Tag = module.Key });
             _moduleTabs.TabPages.Add(new TabPage("图片设定") { Tag = "__resources" });
+            _moduleTabs.TabPages.Add(new TabPage("范围管理") { Tag = RangeTabKey });
             _moduleTabs.TabPages.Add(new TabPage("历史记录") { Tag = "__history" });
             _moduleTabs.TabPages.Add(new TabPage("引擎扫描") { Tag = "__engine" });
             _moduleTabs.TabPages.Add(new TabPage("公式设定") { Tag = "__formulas" });
@@ -599,6 +615,8 @@ public sealed partial class MainForm : Form
         _activeModuleKey = key;
         RememberGridWidths();
         var layoutHost = _grid.Parent!;
+        SuspendLayout();
+        _navigationSplit?.SuspendLayout();
         layoutHost.SuspendLayout();
         try
         {
@@ -615,8 +633,13 @@ public sealed partial class MainForm : Form
         _resourceReplaceButton.Visible = false;
         _resourceDeleteButton.Visible = false;
         _engineDetail.Visible = false;
+        _transformPanel.Visible = false;
         _constantPanel.Visible = false;
         _battleFormulaPanel.Visible = false;
+        _businessEditor.DeactivateView();
+        _rangeManagementPanel.DeactivateView();
+        _rangeHost.Visible = false;
+        if (_navigationSplit != null) _navigationSplit.Panel1Collapsed = key == RangeTabKey;
         _engineItemAssignments.Visible = false;
         _engineJobAssignments.Visible = false;
         _engineSubTabs.Visible = false;
@@ -624,7 +647,12 @@ public sealed partial class MainForm : Form
         _emptyQueryLabel.Visible = false;
         _queryGroup.Visible = !key.StartsWith("__", StringComparison.Ordinal);
         _entityList.Visible = true;
-        _quickLookup.Visible = !_resourceModule && key is not "__history" and not "__scan" and not "__formulas";
+        _quickLookup.Visible = !_resourceModule && key is not "__history" and not "__scan" and not "__formulas" && key != RangeTabKey;
+        if (key == RangeTabKey)
+        {
+            ShowRangeManagementView();
+            return;
+        }
         if (key == "__history")
         {
             _businessEditor.Visible = false; _imageEditor.Visible = false; _grid.Visible = true;
@@ -698,7 +726,13 @@ public sealed partial class MainForm : Form
         }
         else ShowNoTable();
         }
-        finally { layoutHost.ResumeLayout(true); }
+        finally
+        {
+            layoutHost.ResumeLayout(true);
+            _navigationSplit?.ResumeLayout(true);
+            ResumeLayout(true);
+            if (_businessEditor.Visible) _businessEditor.ActivateView();
+        }
     }
 
     private void SelectModule()
@@ -838,7 +872,12 @@ public sealed partial class MainForm : Form
         }
         if (IsEngineTab)
         {
-            if (EngineSubpage != 0)
+            if (EngineSubpage == EnginePage.Transform)
+            {
+                if (!_suppressEngineSelection && _entityList.SelectedItem is TransformChoice transform) SelectTransform(transform.Id);
+                return;
+            }
+            if (EngineSubpage != EnginePage.Effects)
             {
                 if (!_suppressEngineSelection && _entityList.SelectedItem is EngineAssignmentEntityChoice assignmentChoice) SelectEngineAssignmentEntity(assignmentChoice.Id);
                 return;
@@ -867,7 +906,7 @@ public sealed partial class MainForm : Form
 
     private void SelectEntityById(int id)
     {
-        if (IsEngineTab) { if (EngineSubpage == 0) SelectEngineEffectById(id); else SelectEngineAssignmentEntity(id); return; }
+        if (IsEngineTab) { if (EngineSubpage == EnginePage.Effects) SelectEngineEffectById(id); else if (EngineSubpage == EnginePage.Transform) SelectTransform(id); else SelectEngineAssignmentEntity(id); return; }
         if (!RevealQueryEntity(id)) return;
         if (_businessKind.HasValue) { SelectBusinessEntity(id); return; }
         if (_currentDocument == null || !_currentDocument.Data.Columns.Contains("ID")) return;
@@ -1020,16 +1059,32 @@ public sealed partial class MainForm : Form
     private UnifiedHistoryService CreateUnifiedHistory()
         => new(_workspace, _resourceAdapter ??= new ResourceCatalogAdapter());
 
-    private void ShowHistoryView()
+    private int _historyViewRequestVersion;
+    private async void ShowHistoryView()
     {
+        var request = ++_historyViewRequestVersion;
+        var root = _workspace.RootPath;
         _historyFilter.Visible = true;
+        _grid.DataSource = null;
+        _grid.ReadOnly = true;
+        SetStatus("正在读取历史目录…");
+        IReadOnlyList<UnifiedHistoryEntry> records;
+        try { records = await CreateUnifiedHistory().ListAsync(); }
+        catch (Exception ex)
+        {
+            if (!IsDisposed && !Disposing && request == _historyViewRequestVersion && _workspace.RootPath == root)
+                SetStatus("历史读取失败：" + ex.Message, true);
+            return;
+        }
+        if (IsDisposed || Disposing || request != _historyViewRequestVersion || _workspace.RootPath != root ||
+            _moduleTabs.SelectedTab?.Tag as string != "__history") return;
         var table = new DataTable("历史记录");
         foreach (var name in new[] { "时间", "来源", "状态", "操作", "摘要", "文件", "操作ID", "详情", "修改前指纹", "修改后指纹" })
             table.Columns.Add(name);
         _historyEntries.Clear();
         try
         {
-            foreach (var entry in CreateUnifiedHistory().List())
+            foreach (var entry in records)
             {
                 _historyEntries[entry.Source + ":" + entry.OperationId] = entry;
                 table.Rows.Add(entry.Timestamp.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss"), entry.Source,
@@ -1046,7 +1101,7 @@ public sealed partial class MainForm : Form
             ApplyGridWidths("__history");
             foreach (var hidden in new[] { "操作ID", "详情", "修改前指纹", "修改后指纹" }) _grid.Columns[hidden].Visible = false;
             _grid.Columns["摘要"].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
-            _diagnosticBox.Text = "选择记录后可撤回或重做。数据与形象记录保留各自的文件指纹检查。";
+            _diagnosticBox.Text = "选择记录后可撤回或重做。数据与形象记录保留各自的文件指纹检查。新历史使用 history-v3；历史恢复请使用新版管理器，旧记录和备份继续保留。";
         }
         finally { _suppressGridEvents = false; }
         ApplyHistoryFilter();
@@ -1128,8 +1183,10 @@ public sealed partial class MainForm : Form
             ? _currentDocument.Data.Rows.IndexOf(view.Row) : -1;
     }
 
-    private bool PreparePendingEdits()
+    private string? _pendingEditError;
+    private bool PreparePendingEdits(bool allowInvalidRanges = false)
     {
+        _pendingEditError = null;
         if (string.IsNullOrWhiteSpace(_workspace.RootPath)) return true;
         try
         {
@@ -1145,34 +1202,63 @@ public sealed partial class MainForm : Form
         if (!_grid.EndEdit()) { SetStatus("当前表格编辑无效，请先修正标出的单元格。", true); return false; }
         if (_grid.DataSource != null && BindingContext?[_grid.DataSource] is CurrencyManager manager) manager.EndCurrentEdit();
         if (!_battleFormulaPanel.PreparePendingEdits()) return false;
-            return _businessEditor.PreparePendingEdits();
+        if (!_transformPanel.Flush()) { _pendingEditError = "请修正质变规则中的无效输入。"; SetStatus(_pendingEditError, true); return false; }
+        if (!_rangeManagementPanel.TryCommitPendingEdits(out var rangeError) && !allowInvalidRanges)
+        { _pendingEditError = rangeError; SetStatus(rangeError, true); return false; }
+            var prepared = _businessEditor.PreparePendingEdits();
+            if (!prepared) _pendingEditError = _businessEditor.LastValidationError;
+            return prepared;
         }
-        catch (Exception ex) { SetStatus($"当前输入无法提交：{ex.Message}", true); return false; }
+        catch (Exception ex) { _pendingEditError = $"当前输入无法提交：{ex.Message}"; SetStatus(_pendingEditError, true); return false; }
     }
 
     private SaveResult CommitPendingEdits()
     {
-        if (!PreparePendingEdits()) return new SaveResult(false, 0, 0, 0, null, ["当前输入尚未通过验证，草稿已保留。"]);
+        if (!PreparePendingEdits()) return new SaveResult(false, 0, 0, 0, null,
+            [_pendingEditError ?? "当前输入尚未通过验证，草稿已保留。"]);
         var previous = _suppressGridEvents;
         _suppressGridEvents = true;
         try
         {
+            _workspace.RegisterDraftParticipant(this);
             var result = _workspace.Save();
-            if (result.Saved)
-            {
-                try
-                {
-                    foreach (var editor in _businessEditors.Values) editor.AcceptSavedChanges();
-                    RefreshSavedNames();
-                }
-                catch (Exception ex)
-                {
-                    return result with { Messages = [result.Messages.FirstOrDefault() + $" 界面刷新未完成：{ex.Message}；可重新读取项目刷新显示。"] };
-                }
-            }
-            return result;
+            return CompletePendingSave(result);
         }
         finally { _suppressGridEvents = previous; }
+    }
+
+    private async Task<SaveResult> CommitPendingEditsAsync()
+    {
+        if (!PreparePendingEdits()) return new SaveResult(false, 0, 0, 0, null,
+            [_pendingEditError ?? "当前输入尚未通过验证，草稿已保留。"]);
+        var previous = _suppressGridEvents;
+        _suppressGridEvents = true;
+        try { _workspace.RegisterDraftParticipant(this); return CompletePendingSave(await _workspace.SaveAsync()); }
+        finally { _suppressGridEvents = previous; }
+    }
+
+    private SaveResult CompletePendingSave(SaveResult result)
+    {
+        if (!result.Saved) FocusRangeValidationFailure(string.Join(Environment.NewLine, result.Messages));
+        if (result.Saved)
+        {
+            try
+            {
+                foreach (var editor in _businessEditors.Values) editor.AcceptSavedChanges();
+                RefreshSavedNames();
+                RefreshRangeAfterInternalWrite();
+                RefreshBusinessResourcePickers();
+                if (_growthDraft != null) { _growthDraft.Reload(); UpdateDedicatedConstants(); }
+                if (IsEngineTab) ShowEngineScanView(forceRescan: true);
+                _constantPanel.RefreshValues();
+                if (IsFormulaTab) _battleFormulaPanel.RefreshValues();
+            }
+            catch (Exception ex)
+            {
+                return result with { Messages = [result.Messages.FirstOrDefault() + $" 界面刷新未完成：{ex.Message}；可重新读取项目刷新显示。"] };
+            }
+        }
+        return result;
     }
 
     private void GridEditingControlShowing(object? sender, DataGridViewEditingControlShowingEventArgs e)
@@ -1327,7 +1413,7 @@ public sealed partial class MainForm : Form
 
     private void DraftUndo()
     {
-        if (!PreparePendingEdits()) return;
+        if (!PreparePendingEdits(allowInvalidRanges: true)) return;
         string? message;
         try { message = _workspace.Commands.Undo(); }
         catch (Exception ex) { SetStatus($"撤回未完成，命令仍保留：{ex.Message}", true); return; }
@@ -1341,7 +1427,7 @@ public sealed partial class MainForm : Form
 
     private void DraftRedo()
     {
-        if (!PreparePendingEdits()) return;
+        if (!PreparePendingEdits(allowInvalidRanges: true)) return;
         string? message;
         try { message = _workspace.Commands.Redo(); }
         catch (Exception ex) { SetStatus($"前进未完成，命令仍保留：{ex.Message}", true); return; }
@@ -1353,19 +1439,34 @@ public sealed partial class MainForm : Form
         SetStatus($"已前进：{message}");
     }
 
-    private void SaveProject()
+    private bool _historyIoBusy;
+    private int _historyIoGeneration;
+
+    private async void SaveProject()
     {
-        if (IsFormulaTab || _battleFormulaPanel.HasPendingChanges) { TryCommitFormulaChanges(); return; }
-        if (IsEngineTab) { TryCommitAllEngineChanges(); return; }
+        if (_historyIoBusy) return;
         if (!PreparePendingEdits()) return;
         SaveResult result;
-        try { result = CommitPendingEdits(); }
+        var wasEnabled = Enabled;
+        var generation = ++_historyIoGeneration;
+        try
+        {
+            _historyIoBusy = true; Enabled = false; UseWaitCursor = true;
+            SetStatus("正在准备和压缩保存历史…");
+            result = await CommitPendingEditsAsync();
+        }
         catch (Exception ex)
         {
             MessageBox.Show(this, ex.Message, "保存失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
             SetStatus(ex.Message, true);
             return;
         }
+        finally
+        {
+            _historyIoBusy = false;
+            if (!IsDisposed && !Disposing) { Enabled = wasEnabled; UseWaitCursor = false; }
+        }
+        if (IsDisposed || Disposing || generation != _historyIoGeneration) return;
         SetStatus(result.Messages.FirstOrDefault() ?? "保存完成", !result.Saved || result.AppearanceSync?.HasWarnings == true);
         RefreshDirtyState();
         if (!result.Saved) MessageBox.Show(this, string.Join(Environment.NewLine, result.Messages), "保存失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -1378,13 +1479,19 @@ public sealed partial class MainForm : Form
 
     private void HistoryRedo() => RestoreHistory(redo: true);
 
-    private void RestoreHistory(bool redo)
+    private async void RestoreHistory(bool redo)
     {
+        if (_historyIoBusy) return;
         if (!PreparePendingEdits()) return;
         if (string.IsNullOrWhiteSpace(_workspace.RootPath)) return;
         if (HasPendingChanges && !ConfirmDiscardOrSave(redo ? "重做已保存历史" : "撤回已保存历史")) return;
+        var root = _workspace.RootPath;
+        var generation = ++_historyIoGeneration;
+        var wasEnabled = Enabled;
         try
         {
+            _historyIoBusy = true; Enabled = false; UseWaitCursor = true;
+            SetStatus("正在读取并校验历史恢复快照…");
             UnifiedHistoryEntry? entry = null;
             if (_grid.DataSource is DataTable { TableName: "历史记录" } && _grid.CurrentRow != null)
             {
@@ -1393,19 +1500,46 @@ public sealed partial class MainForm : Form
                 _historyEntries.TryGetValue(source + ":" + id, out entry);
             }
             if (entry != null && !(redo ? entry.CanRedo : entry.CanUndo)) entry = null;
-            entry ??= CreateUnifiedHistory().FindDefault(redo);
+            if (entry == null)
+            {
+                var entries = (await CreateUnifiedHistory().ListAsync()).Where(item => redo ? item.CanRedo : item.CanUndo);
+                entry = redo ? entries.OrderBy(item => item.Timestamp).FirstOrDefault() : entries.OrderByDescending(item => item.Timestamp).FirstOrDefault();
+            }
             if (entry == null) { SetStatus(redo ? "没有可重做的历史记录。" : "没有可撤回的历史记录。"); return; }
-            var result = CreateUnifiedHistory().Restore(entry, redo);
+            (bool Success, string Message) result;
+            if (entry.Source == "数据")
+            {
+                using var prepared = await _workspace.History.PrepareRestoreAsync(root, _workspace.ActiveProfile.ProfileId,
+                    _workspace.ActiveProfile.VariantId, _workspace.ActiveProfile.LayoutRevision, entry.OperationId, redo);
+                if (IsDisposed || Disposing || generation != _historyIoGeneration || _workspace.RootPath != root) return;
+                var restored = _workspace.History.RestorePrepared(prepared);
+                result = (restored.Success, restored.Message);
+            }
+            else
+            {
+                var operationId = entry.OperationId;
+                var restored = await Task.Run(() => redo ? new ResourceHistoryAdapter().Redo(root, operationId) : new ResourceHistoryAdapter().Undo(root, operationId));
+                result = (restored.Success, restored.Message);
+            }
+            if (IsDisposed || Disposing || generation != _historyIoGeneration || _workspace.RootPath != root) return;
             if (result.Success)
             {
                 _resourceAdapter?.Invalidate(_workspace.RootPath);
-                if (entry.Source == "形象") _workspace.ReloadLoadedDocuments();
+                _workspace.ReloadLoadedDocuments();
+                ReloadRangeAfterHistory();
+                _growthDraft?.Reload(discardChanges: true);
+                _engineReportFingerprint = null; _engineAssignmentFingerprint = null;
                 RefreshCurrentView();
             }
             SetStatus(result.Message, !result.Success);
             if (!result.Success) MessageBox.Show(this, result.Message, "历史操作未完成", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
         catch (Exception ex) { SetStatus("历史操作失败：" + ex.Message, true); }
+        finally
+        {
+            _historyIoBusy = false;
+            if (!IsDisposed && !Disposing) { Enabled = wasEnabled; UseWaitCursor = false; }
+        }
     }
 
     private void OpenBatchDialog()
@@ -1468,6 +1602,7 @@ public sealed partial class MainForm : Form
                     if (!files.TryAdd(key, path)) throw new InvalidDataException($"目录包含重复的物理表 CSV：{key}。");
                 }
                 if (files.Count == 0) throw new InvalidDataException("所选目录没有当前页对应的 CSV 文件。");
+                if (!ConfirmStrategyCsvImport(files)) return;
                 var result = business.ImportPageCsvAtomic(kind, files);
                 RefreshBusinessSelection(); RefreshQueryNavigation(); RefreshDirtyState();
                 SetStatus($"已原子导入 {result.Tables.Count} 张物理表，{result.ChangedCells} 个字段进入草稿。");
@@ -1480,6 +1615,7 @@ public sealed partial class MainForm : Form
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
         try
         {
+            if (!ConfirmStrategyCsvImport(new Dictionary<string, string> { [_currentDocument.Definition.Key] = dialog.FileName })) return;
             _suppressGridEvents = true;
             CsvImportResult result;
             try { result = _workspace.ImportCsv(_currentDocument, dialog.FileName); }
@@ -1577,6 +1713,7 @@ public sealed partial class MainForm : Form
         if (!ConfirmLeaveFormula()) return;
         if (HasPendingChanges && !ConfirmDiscardOrSave("重新扫描")) return;
         var report = _workspace.Rescan();
+        RefreshRangeAfterInternalWrite();
         UpdateScanSummary(report);
         _diagnosticBox.Text = FormatScanDiagnostics(report, 20);
         SyncProfileSelectors();
@@ -1586,6 +1723,8 @@ public sealed partial class MainForm : Form
 
     private void RefreshCurrentView()
     {
+        RefreshRangeAfterInternalWrite();
+        if (IsRangeTab) { ShowRangeManagementView(); RefreshDirtyState(); return; }
         if (_moduleTabs.SelectedTab?.Tag as string == "__history") { ShowHistoryView(); RefreshDirtyState(); return; }
         if (IsFormulaTab) { ShowFormulaSettingsView(); RefreshDirtyState(); return; }
         if (IsEngineTab) { ShowEngineScanView(forceRescan: true); RefreshDirtyState(); return; }
@@ -1669,6 +1808,7 @@ public sealed partial class MainForm : Form
 
     private void OnFormClosing(object? sender, FormClosingEventArgs e)
     {
+        if (_historyIoBusy) { e.Cancel = true; SetStatus("正在完成保存或恢复事务，请稍候。"); return; }
         if (!PreparePendingEdits()) { e.Cancel = true; return; }
         if (!ConfirmLeaveEngine()) { e.Cancel = true; return; }
         if (!ConfirmLeaveFormula()) { e.Cancel = true; return; }
@@ -1696,10 +1836,13 @@ public sealed partial class MainForm : Form
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing)
+        if (disposing && !IsDisposed)
         {
             ReleaseGridWidthSources();
             CancelEngineScan();
+            ReleaseRangeWorkspace();
+            _rangeCatalog.DetailedChanged -= RangeCatalogChanged;
+            _rangeCatalog.Dispose();
             foreach (var panel in _businessEditors.Values.Distinct()) panel.Dispose();
             _businessEditors.Clear();
             _imageEditor.Dispose();
@@ -1717,6 +1860,7 @@ public sealed partial class MainForm : Form
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
+        if (_historyIoBusy) return true;
         if (_imageEditor.Visible && _imageEditor.ExecuteShortcut(keyData)) return true;
         var ctrl = keyData.HasFlag(Keys.Control);
         var alt = keyData.HasFlag(Keys.Alt);

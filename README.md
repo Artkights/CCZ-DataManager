@@ -1,8 +1,10 @@
 # 曹操传 Data 管理器源码
 
-面向曹操传加强版 **6.4 洗隋、6.5、6.6** 的 .NET 8 WinForms 编辑器。当前源码版本为 **1.2026.1101.114**，以 DataManager.App.csproj 中的版本为准。
+面向曹操传加强版 **6.4 洗隋、6.5、6.6** 的 .NET 8 WinForms 编辑器。当前源码版本为四项整合版 **1.2026.1112.1（2026-11-12）**，以 DataManager.App.csproj 中的版本为准。
 
 本仓库保留 data管理器 与同级 形象管理器 的原始目录结构。后者提供共享资源编解码、S 形象编号规则、参考图与地形编辑组件；构建时需要同时检出两个目录。
+
+本次整合以 Data 管理器 1.2026.1111.4、质变管理器 1.2026.1111.6、档位管理器 1.2026.1112.3 为基线。质变和档位共用纯 net8.0 的 `EngineGrowth.Core`；两个独立管理器仍可分别构建。
 
 ## 主要能力
 
@@ -10,7 +12,10 @@
 - CSV 与业务 XLSX 工作簿交换，包含隐藏基线、导入冲突检测和整本校验。
 - 战斗公式、引擎常量与特效参数的读取、定位及受约束写入。
 - 形象与资源预览、导入和迁移，参考图包交换、Mmap/Pmap 内场景地形编辑。
-- 人物 R/S 形象与存档同步、查询与选中记录预览。
+- 人物头像/R/S 下拉缩略图、统一定位按钮、三列预览，以及 R/S 形象与存档同步。
+- 引擎扫描内的质变等级规则与 0～511 武器/防具引用，兵种页的全局 2～12 档设定。
+- 174 个逻辑常量定义（比基线新增 86 个）、专用设定跳转与逐候选知识来源对账。
+- 质变和档位补丁的空间所有权、旧 TMR1/TIER1 兼容，以及表格/特效/常量/成长草稿统一保存、回滚和历史。
 
 不同基底的字段、编码、特效分配池和可写能力分别由 Profile、签名和探测结果约束。支持版本名称不代表任意修改版均可直接写入。
 
@@ -23,6 +28,14 @@
 ~~~powershell
 dotnet build data管理器/DataManager.sln -c Release
 dotnet run --project data管理器/src/DataManager.App -c Release --no-build
+~~~
+
+独立管理器与共享核心：
+
+~~~powershell
+dotnet build data管理器/src/TransformManager.App -c Release
+dotnet build data管理器/src/TierManager.App -c Release
+dotnet build data管理器/src/EngineGrowth.Core.Tests -c Release
 ~~~
 
 可选的形象工具与测试工程：
@@ -44,7 +57,7 @@ dotnet run --project data管理器/src/DataManager.Tests -c Release --no-build -
 dotnet run --project 形象管理器/src/ImageManager.Tests -c Release -- --atlas-package
 ~~~
 
-其他集成测试可能需要指定的完整游戏基底、资源或外部图片样本。游戏文件和两张 Atlas 外部图片 fixture 不随源码提供；--atlas-flexible 等入口需要自行准备对应样本。默认无参运行不等于完整、独立于基底的测试入口。
+其他集成测试可能需要指定的完整游戏基底、资源或外部图片样本。仓库包含 `ImageManager.Tests/Fixtures/Atlas` 中的两张图片 fixture，游戏文件不随源码提供；需要其他外部样本的入口仍须自行准备。默认无参运行不等于完整、独立于基底的测试入口。
 
 ## 发布
 
@@ -54,9 +67,14 @@ dotnet publish data管理器/src/DataManager.App -c Release -p:PublishProfile=Si
 
 当前 SingleFileWinX64 配置为 Windows x64、单文件、框架依赖发布（SelfContained=false）。运行发布程序需要 **.NET 8 Windows Desktop Runtime x64**。发布 EXE、游戏基底、运行历史和构建缓存不包含在本次源码同步中。
 
+`data管理器/tools/Build-ReleasePackage.ps1` 按白名单生成完整源码 ZIP，并在独立解压目录构建主程序、测试项目、两个独立管理器与核心测试。`Sync-GitHubSources.ps1` 使用同一清单同步源码。构建所需的知识对账证据快照随源码保留，正常构建无需重新生成目录。
+
 ## 文档
 
-- [本次源码同步与验证](data管理器/文档/源码同步-20261102.md)
+- [四项整合使用说明](data管理器/文档/四项整合使用说明-1.2026.1112.1.md)
+- [四项整合验收报告](data管理器/文档/四项整合验收报告-1.2026.1112.1.md)
+- [常量迁移与知识对账](data管理器/文档/常量迁移与知识对账.md)
+- [共享成长核心与补丁空间](data管理器/文档/共享成长核心-质变与档位.md)
 - [使用说明及历史更新记录](data管理器/README.md)
 - [6.4 洗隋兼容适配](data管理器/文档/6.4洗隋兼容适配.md)
 - [业务工作簿交换](data管理器/文档/业务工作簿交换.md)
@@ -66,3 +84,5 @@ dotnet publish data管理器/src/DataManager.App -c Release -p:PublishProfile=Si
 - [结构化曹操传 MOD 知识库](https://github.com/Artkights/Knowledge-base-for-CCZ-mod)
 
 文档中的历史版本、发布目录和验收结果对应各自记录的源码及样本，不代表当前源码已通过游戏运行验收。修改前的早期源码另保存在标签 baseline-before-simplification-20261022。
+
+本版最终 Release EXE 在 6.4、6.5、6.6、6.6 国庆四个样本上各通过 18 项只读内置验收，写入测试均使用副本。实际测试宿主和发布 EXE 的 `DeviceDpi` 为 144；100%/125%/150% 为字体倍率测试，未覆盖 96/120 DPI、跨屏或游戏内实战。详细范围以本版验收报告为准。

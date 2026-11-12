@@ -1,5 +1,6 @@
 using System.Globalization;
 using DataManager.Core.Models;
+using Ccz.ManagerUi;
 
 namespace DataManager.App;
 
@@ -102,8 +103,9 @@ public sealed partial class BusinessEditorPanel
         // still refer to a previous font after the new one has been assigned.
         // Keep every owned font alive for the whole page lifetime.
         var fittedFonts = new Dictionary<(string Family, float Pixels, FontStyle Style), Font>();
-        (Size Size, int Dpi, Font Font)? previousLayout = null;
+        (Size Size, int Dpi, Font Font, int NativePadding)? previousLayout = null;
         var arranging = false;
+        LayoutScheduler? scheduler = null;
         int MinimumColumnWidth(Control column, Font font)
         {
             var width = column.Padding.Horizontal + column.Margin.Horizontal;
@@ -121,8 +123,9 @@ public sealed partial class BusinessEditorPanel
                 _disposingDetailPages || _releaseCompleted ||
                 body.ClientSize.Width < 100 || body.ClientSize.Height < 100) return;
             var baseline = Font;
+            var nativePadding = number == null ? 7 : number.PreferredSize.Height - number.Font.Height;
             if (previousLayout is { } previous && previous.Size == body.ClientSize &&
-                previous.Dpi == page.DeviceDpi && previous.Font.Equals(baseline)) return;
+                previous.Dpi == page.DeviceDpi && previous.Font.Equals(baseline) && previous.NativePadding == nativePadding) return;
             arranging = true;
             try
             {
@@ -130,7 +133,6 @@ public sealed partial class BusinessEditorPanel
                 // native numeric editors must still fit a 720-pixel window.
                 // Restore the surrounding form's normal font as room increases.
                 var normalPixels = baseline.SizeInPoints * page.DeviceDpi / 72f;
-                var nativePadding = number == null ? 7 : number.PreferredSize.Height - number.Font.Height;
                 var counterHeight = pageColumns.Min(column => body.ClientSize.Height - column.Margin.Vertical - column.Padding.Vertical);
                 var pixels = normalPixels;
                 Font candidate;
@@ -146,7 +148,13 @@ public sealed partial class BusinessEditorPanel
                     if ((fitsHeight && minimumWidths.Sum() <= body.ClientSize.Width) || pixels <= 9) break;
                     pixels = Math.Max(9, pixels - .5f);
                 }
-                page.Font = candidate;
+                if (!page.Font.Equals(candidate))
+                {
+                    page.Font = candidate;
+                    // Measure the native children again after inherited Font
+                    // and preferred-height notifications have propagated.
+                    scheduler?.Request();
+                }
                 var remainder = Math.Max(0, body.ClientSize.Width - minimumWidths.Sum());
                 for (var column = 0; column < pageColumns.Length; column++)
                 {
@@ -159,23 +167,22 @@ public sealed partial class BusinessEditorPanel
                     terrainColumns.ColumnStyles[0].SizeType = SizeType.Absolute;
                     terrainColumns.ColumnStyles[0].Width = body.ColumnStyles[2].Width;
                 }
-                previousLayout = (body.ClientSize, page.DeviceDpi, baseline);
+                previousLayout = (body.ClientSize, page.DeviceDpi, baseline, nativePadding);
             }
             finally { arranging = false; }
         }
-        body.ClientSizeChanged += (_, _) => Arrange();
-        page.DpiChangedAfterParent += (_, _) => Arrange();
-        page.HandleCreated += (_, _) => Arrange();
-        page.VisibleChanged += (_, _) => { if (page.Visible) Arrange(); };
-        EventHandler fontChanged = (_, _) => Arrange();
+        scheduler = new LayoutScheduler(page, Arrange);
+        body.ClientSizeChanged += (_, _) => scheduler.Request();
+        EventHandler fontChanged = (_, _) => scheduler.Request();
         FontChanged += fontChanged;
+        RegisterViewLayout(page, () => scheduler.Request());
         page.Disposed += (_, _) =>
         {
             FontChanged -= fontChanged;
             foreach (var font in fittedFonts.Values) font.Dispose();
             fittedFonts.Clear();
         };
-        Arrange();
+        scheduler.Request();
     }
 
     private static Control EditableMatrix(string caption, string[] headers, Control[][] rows, int columnGroups)
@@ -221,8 +228,6 @@ public sealed partial class BusinessEditorPanel
             Font? headerFont = null;
             var headerFonts = new Dictionary<(string Family, float Size, GraphicsUnit Unit, FontStyle Style), Font>();
             var arranging = false;
-            var queued = false;
-            var handleGeneration = 0;
             void Arrange()
             {
                 if (arranging || MatrixIsReleasing(host) || MatrixIsReleasing(table) || MatrixIsReleasing(viewport)) return;
@@ -283,35 +288,16 @@ public sealed partial class BusinessEditorPanel
                 }
                 finally { arranging = false; }
             }
-            void QueueArrange()
-            {
-                if (queued || !table.IsHandleCreated || MatrixIsReleasing(table) || MatrixIsReleasing(host)) return;
-                queued = true;
-                var generation = handleGeneration;
-                table.BeginInvoke(() =>
-                {
-                    if (generation != handleGeneration) return;
-                    queued = false;
-                    if (!table.IsHandleCreated || MatrixIsReleasing(table) || MatrixIsReleasing(host)) return;
-                    Arrange();
-                    // A parent's FontChanged event precedes the native editors'
-                    // inherited font and height updates. Recenter them after
-                    // propagation, using their final heights rather than the
-                    // previous font's height.
-                    table.PerformLayout();
-                });
-            }
-            table.HandleDestroyed += (_, _) => { handleGeneration++; queued = false; };
-            viewport.SizeChanged += (_, _) => Arrange();
-            table.FontChanged += (_, _) => { Arrange(); QueueArrange(); };
-            table.DpiChangedAfterParent += (_, _) => { Arrange(); QueueArrange(); };
-            table.HandleCreated += (_, _) => { Arrange(); QueueArrange(); };
+            var scheduler = new LayoutScheduler(viewport, () => { Arrange(); table.PerformLayout(); });
+            table.FontChanged += (_, _) => scheduler.Request();
+            table.DpiChangedAfterParent += (_, _) => scheduler.Request();
+            table.HandleCreated += (_, _) => scheduler.Request();
             host.Disposed += (_, _) =>
             {
                 foreach (var font in headerFonts.Values) font.Dispose();
                 headerFonts.Clear();
             };
-            Arrange();
+            scheduler.Request();
         }
         return host;
     }

@@ -12,8 +12,30 @@ internal static class ScannerTests
         var exactRoot = TestSupport.CreateCoreCopy(basePath);
         try
         {
-            var exact = new ProjectWorkspace().Open(exactRoot);
-            TestSupport.Assert(exact.ProfileMatch?.MatchKind == ProfileMatchKind.Exact && exact.Diagnostics.Any(line => line.Contains("PE", StringComparison.OrdinalIgnoreCase)), "6.5 精确扫描或 PE 诊断失败");
+            var workspace = new ProjectWorkspace();
+            var report = workspace.Open(exactRoot);
+            var snapshot = Known65FixtureSnapshot.CoreNames.ToDictionary(name => name,
+                name => File.ReadAllBytes(Path.Combine(exactRoot, name)), StringComparer.OrdinalIgnoreCase);
+            if (Known65FixtureSnapshot.MatchesKnown(snapshot))
+                TestSupport.Assert(report.ProfileMatch?.MatchKind == ProfileMatchKind.Exact,
+                    "已知四文件快照未进行精确匹配");
+            else
+            {
+                // The local fixture can contain deliberate engine patches that
+                // have no history back to an embedded fingerprint. Exercise its
+                // real consumers without claiming an exact sample identity.
+                var consumers = EmbeddedEngineLayoutProbe.InspectAssignments65(snapshot["Ekd5.exe"]);
+                TestSupport.Assert(report.ProfileMatch is { ProfileId: "ccz-6.5", MatchKind: ProfileMatchKind.Compatible or ProfileMatchKind.Partial } &&
+                    consumers.R.Verified && consumers.S.Verified,
+                    "非已知快照的 6.5 样本缺少兼容版本或严格 R/S 消费者证据");
+                foreach (var (key, consumer) in new[] { ("person-r-assign", consumers.R), ("person-s-assign", consumers.S) })
+                    TestSupport.Assert(workspace.GetDocument(key).Definition is { Capability: TableCapability.Editable } definition &&
+                        definition.DataOffset == consumer.Offset && definition.CapabilityEvidence.Contains(consumer.Evidence, StringComparison.Ordinal),
+                        "兼容样本未按本项目独立 PE 消费者开放 " + key);
+                Console.WriteLine("SCANNER_SOURCE_EVIDENCE compatible-6.5/strict-PE-consumers; source is not an embedded four-file snapshot");
+            }
+            TestSupport.Assert(report.Diagnostics.Any(line => line.StartsWith("Ekd5.exe PE：", StringComparison.Ordinal)),
+                "扫描未给出通过 MZ/PE 检查的节区诊断");
         }
         finally { Directory.Delete(exactRoot, true); }
         var unavailable = new ProfileRegistry().Resolve("ccz-6.6", "66-standard-v1").Tables.Single(table => table.Key == "strategy-terrain-availability");

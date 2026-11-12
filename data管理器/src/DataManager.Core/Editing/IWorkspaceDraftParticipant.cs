@@ -8,6 +8,7 @@ public interface IWorkspaceDraftParticipant
     bool HasPendingChanges { get; }
     IReadOnlyList<PreparedBinaryEdit> PrepareBinaryEdits() => [];
     IReadOnlyList<PreparedFileEdit> PrepareFileEdits() => [];
+    IReadOnlyList<PreparedFileTransform> PrepareFileTransforms() => [];
     Action CaptureSaveRecovery() => () => { };
     void AcceptSaved();
     void Discard();

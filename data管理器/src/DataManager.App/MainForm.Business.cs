@@ -8,6 +8,8 @@ public sealed partial class MainForm
 {
     internal void LoadProjectForSmokeTest(string path)
     {
+        path = DataManager.Core.Binary.ProjectRootLocator.Resolve(path);
+        RangeManager.App.RangeSaveTransaction.Recover(path);
         var report = _workspace.Open(path);
         ApplyOpenedProject(report, path);
     }
@@ -29,8 +31,11 @@ public sealed partial class MainForm
     internal DataGridView PhysicalGridForSmokeTest => _grid;
     internal void ShowPhysicalTableForSmokeTest(string tableKey)
     {
-        _tableSelector.SelectedItem = _tableSelector.Items.Cast<TableChoice>().Single(choice => choice.Key == tableKey);
-        SelectTable();
+        var choice = _tableSelector.Items.Cast<TableChoice>().Single(choice => choice.Key == tableKey);
+        // A changed selection raises SelectedIndexChanged synchronously. Invoke
+        // explicitly only when the current item was already selected.
+        if (Equals(_tableSelector.SelectedItem, choice)) SelectTable();
+        else _tableSelector.SelectedItem = choice;
     }
 
     internal IReadOnlyList<PageCsvExport> ExportBusinessCsvForSmokeTest(string directory)

@@ -183,7 +183,7 @@ public sealed class EngineEffectScanService
                 EffectId = id,
                 Name = nameSlot == null ? string.Empty : EngineEffectSlotRules.DecodeName(nameSlot),
                 SuffixByte = suffix,
-                SuffixLabel = suffix is { } value ? EngineEffectSuffixLabels.Label(value) : string.Empty,
+                SuffixLabel = suffix is { } value ? EngineEffectSuffixLabels.Label(layout.Version, value) : string.Empty,
                 Description = descriptionSlot == null ? string.Empty : EngineEffectSlotRules.DecodeDescription(descriptionSlot),
                 DescriptionByteCount = descriptionSlot == null ? 0 : EngineEffectSlotRules.DescriptionByteCount(descriptionSlot),
                 HasNameSlot = nameSlot != null,
@@ -287,6 +287,8 @@ public sealed class EngineEffectScanService
             ? $"内嵌特效名称池 0x{namePool.TableAddress:X8}（文件+0x{namePool.TableFileOffset:X}，" +
               $"{namePool.RowCount}×{namePool.SlotSize} 字节，严格 GBK，共享只读）：{namePool.Evidence}"
             : "内嵌特效名称池未定位（两个消费者不一致或映射不完整），名称只按 Imsg.e5 读取。");
+        diagnostics.Add($"后缀类型码：{layout.Version} 支持 0x00..0x{EngineEffectSuffixLabels.MaximumSuffix(layout.Version):X2}；" +
+                        "超出范围的尾码在引擎中不产生后缀。");
         if (callsById.TryGetValue(byte.MaxValue, out var sentinelCalls))
             diagnostics.Add($"特效号 255 作为“无特效”哨兵被 {sentinelCalls.Length} 个静态调用点引用" +
                             "（没有名称槽与分配行，不是可分配特效）。");

@@ -12,7 +12,7 @@ public sealed partial class MainForm
     private readonly EngineAssignmentPanel _engineItemAssignments = new(false) { Visible = false };
     private readonly EngineAssignmentPanel _engineJobAssignments = new(true) { Visible = false };
     private readonly TextBox _engineEntityFilter = new() { Width = 218, PlaceholderText = "筛选左侧编号或名称" };
-    private readonly Dictionary<int, string> _engineEntityFilters = [];
+    private readonly Dictionary<EnginePage, string> _engineEntityFilters = [];
     private readonly EngineEffectAssignmentService _engineAssignmentService = new();
     private EngineEffectAssignmentCatalog? _engineAssignmentCatalog;
     private EngineEffectAssignmentDraft? _engineAssignmentDraft;
@@ -20,9 +20,10 @@ public sealed partial class MainForm
     private string? _engineAssignmentFingerprint;
     private int? _engineSelectedItem;
     private int? _engineSelectedJob;
-    private int _enginePreviousSubpage;
+    private EnginePage _enginePreviousSubpage;
     private bool _bindingEngineSubpage;
-    private int EngineSubpage => Math.Max(0, _engineSubTabs.SelectedIndex);
+    private enum EnginePage { Effects, Items, Jobs, Transform, Constants }
+    private EnginePage EngineSubpage => _engineSubTabs.SelectedTab?.Tag is EnginePage page ? page : EnginePage.Effects;
     private bool HasEngineAssignmentChanges => _engineAssignmentDraft?.HasPendingChanges == true;
     private bool HasAnyEngineChanges => _engineDetail.HasPendingChanges || HasEngineAssignmentChanges;
 
@@ -30,8 +31,10 @@ public sealed partial class MainForm
     {
         _engineFilterHost.Controls.Add(_engineCancelScan);
         _engineCancelScan.Click += (_, _) => { CancelEngineScan(); _engineCancelScan.Visible = false; SetStatus("引擎扫描已取消；再次进入子页可重新扫描。"); };
-        foreach (var name in new[] { "特效管理", "宝物特效", "兵种特效", "常量" }) _engineSubTabs.TabPages.Add(name);
+        foreach (var (page, name) in new[] { (EnginePage.Effects, "特效管理"), (EnginePage.Items, "宝物特效"), (EnginePage.Jobs, "兵种特效"), (EnginePage.Transform, "质变设定"), (EnginePage.Constants, "常量") })
+            _engineSubTabs.TabPages.Add(new TabPage(name) { Tag = page });
         _engineSubTabs.SelectedIndex = 0;
+        _engineSubTabs.Selecting += (_, args) => { if (!PreparePendingEdits()) args.Cancel = true; };
         _engineSubTabs.SelectedIndexChanged += (_, _) =>
         {
             if (_bindingEngineSubpage) return;
@@ -45,7 +48,8 @@ public sealed partial class MainForm
         _engineEntityFilter.TextChanged += (_, _) =>
         {
             if (_bindingEngineSubpage || !IsEngineTab) return;
-            if (EngineSubpage == 0) EngineFilterChanged();
+            if (EngineSubpage == EnginePage.Effects) EngineFilterChanged();
+            else if (EngineSubpage == EnginePage.Transform) PopulateTransformList();
             else PopulateAssignmentEntityList();
         };
         foreach (var panel in new[] { _engineItemAssignments, _engineJobAssignments })
@@ -157,9 +161,9 @@ public sealed partial class MainForm
     private void ShowEngineAssignmentView()
     {
         _engineDetail.Visible = false;
-        _engineItemAssignments.Visible = EngineSubpage == 1;
-        _engineJobAssignments.Visible = EngineSubpage == 2;
-        var panel = EngineSubpage == 2 ? _engineJobAssignments : _engineItemAssignments;
+        _engineItemAssignments.Visible = EngineSubpage == EnginePage.Items;
+        _engineJobAssignments.Visible = EngineSubpage == EnginePage.Jobs;
+        var panel = EngineSubpage == EnginePage.Jobs ? _engineJobAssignments : _engineItemAssignments;
         panel.BringToFront();
         _engineSubTabs.SendToBack();
         _engineOnlyWithCalls.Visible = false;
@@ -179,7 +183,7 @@ public sealed partial class MainForm
     private void PopulateAssignmentEntityList()
     {
         if (_engineAssignmentCatalog is not { } catalog) return;
-        var isJob = EngineSubpage == 2;
+        var isJob = EngineSubpage == EnginePage.Jobs;
         var current = isJob ? _engineSelectedJob : _engineSelectedItem;
         var entities = isJob ? catalog.Jobs.Select(job => new EngineAssignmentEntityChoice(job.Id, job.Name))
             : catalog.Items.Select(item => new EngineAssignmentEntityChoice(item.Id, item.Name));
@@ -210,7 +214,7 @@ public sealed partial class MainForm
     private void BindSelectedEngineAssignment()
     {
         if (_engineAssignmentDraft is not { } draft || _engineAssignmentCatalog is not { } catalog) return;
-        var isJob = EngineSubpage == 2;
+        var isJob = EngineSubpage == EnginePage.Jobs;
         var id = isJob ? _engineSelectedJob : _engineSelectedItem;
         var panel = isJob ? _engineJobAssignments : _engineItemAssignments;
         if (id == null || _entityList.Items.Count == 0) { panel.ShowEmpty("没有符合筛选条件的对象。"); return; }
@@ -296,11 +300,11 @@ public sealed partial class MainForm
     {
         if (_entityList.Items.Cast<object>().OfType<EngineAssignmentEntityChoice>().All(choice => choice.Id != id)) _engineEntityFilter.Clear();
         var index = _entityList.Items.Cast<object>().ToList().FindIndex(item => item is EngineAssignmentEntityChoice choice && choice.Id == id);
-        if (index < 0) { SetStatus($"没有找到{(EngineSubpage == 2 ? "兵种" : "宝物")} {id}。", true); return; }
+        if (index < 0) { SetStatus($"没有找到{(EngineSubpage == EnginePage.Jobs ? "兵种" : "宝物")} {id}。", true); return; }
         _suppressEngineSelection = true;
         try { _entityList.SelectedIndex = index; }
         finally { _suppressEngineSelection = false; }
-        if (EngineSubpage == 2) _engineSelectedJob = id; else _engineSelectedItem = id;
+        if (EngineSubpage == EnginePage.Jobs) _engineSelectedJob = id; else _engineSelectedItem = id;
         _quickLookup.SetBoundValue(id.ToString(CultureInfo.InvariantCulture));
         BindSelectedEngineAssignment();
     }
@@ -363,37 +367,15 @@ public sealed partial class MainForm
 
     private bool TryCommitAllEngineChanges()
     {
-        if (!HasAnyEngineChanges) return true;
-        if (_engineReport == null) return false;
         try
         {
-            var assignment = HasEngineAssignmentChanges && _engineAssignmentDraft is { } draft
-                ? _engineAssignmentService.BuildPreview(_workspace, _engineReport, draft, _engineDetail.HasPendingEquipmentUnbind) : null;
-            var detail = _engineDetail.HasPendingChanges ? _engineDetail.BuildPendingPreview(deferEquipmentFfGuard: assignment != null) : null;
-            var errors = (detail?.Errors ?? []).Concat(assignment?.Errors ?? []).ToArray();
-            if (errors.Length > 0) { MessageBox.Show(this, string.Join(Environment.NewLine, errors), "引擎草稿预览", MessageBoxButtons.OK, MessageBoxIcon.Warning); return false; }
-            var candidates = EngineEffectTransactionService.MergeCandidates((detail?.Candidates ?? []).Concat(assignment?.Candidates ?? []));
-            var changes = UnifiedEngineChanges(candidates);
-            var preview = new EngineEffectWritePreview { EffectId = -1, FollowEffectId = detail?.FollowEffectId, Candidates = candidates,
-                Changes = changes, CanWrite = changes.Count > 0, Summary = string.Join(Environment.NewLine, new[] { detail?.Summary, assignment?.Summary }.Where(text => !string.IsNullOrWhiteSpace(text))) };
-            using (var dialog = new EngineEffectWritePreviewDialog(preview, assignment?.Impact))
-                if (dialog.ShowDialog(this) != DialogResult.OK) return false;
-            EngineEffectScanReport? verifiedReport = null;
-            var result = new EngineEffectTransactionService().Commit(_workspace, "引擎特效与分配统一写入", candidates, () =>
-            {
-                if (detail != null) new EngineEffectWriteService().Verify(_workspace, detail);
-                if (assignment != null) verifiedReport = _engineAssignmentService.Verify(_workspace, assignment);
-            });
-            if (!result.Success) { MessageBox.Show(this, result.Message, "引擎写入失败", MessageBoxButtons.OK, MessageBoxIcon.Error); return false; }
-            _engineDetail.AcceptPendingCommit(new EngineEffectWriteResult { Success = true, FollowEffectId = detail?.FollowEffectId, Message = result.Message });
-            DiscardEngineAssignmentChanges();
-            _engineAssignmentCatalog = null;
-            _engineAssignmentReport = null;
-            EngineWriteCompleted(verifiedReport);
-            SetStatus(result.Message);
-            return true;
+            var result = CommitPendingEdits();
+            SetStatus(string.Join(Environment.NewLine, result.Messages), !result.Saved);
+            if (!result.Saved) MessageBox.Show(this, string.Join(Environment.NewLine, result.Messages), "保存失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            RefreshDirtyState();
+            return result.Saved;
         }
-        catch (Exception ex) { MessageBox.Show(this, ex.Message, "引擎草稿写入", MessageBoxButtons.OK, MessageBoxIcon.Error); return false; }
+        catch (Exception ex) { SetStatus(ex.Message, true); return false; }
     }
 
     private static IReadOnlyList<EngineEffectWriteChange> UnifiedEngineChanges(IReadOnlyList<WorkspaceBinaryCandidate> candidates)

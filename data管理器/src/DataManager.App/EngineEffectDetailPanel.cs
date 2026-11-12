@@ -34,6 +34,7 @@ public sealed partial class EngineEffectDetailPanel : UserControl
     private byte? _pendingSuffix;
     private string? _pendingDescription;
     private string _baseTitle = string.Empty;
+    private string _suffixVersion = string.Empty;
     private bool _binding;
 
     public EngineEffectDetailPanel()
@@ -47,6 +48,24 @@ public sealed partial class EngineEffectDetailPanel : UserControl
     public event EventHandler? PendingChangesChanged;
     public event EventHandler? WriteCompleted;
     public bool HasPendingChanges => _pendingCalls.Count > 0 || _pendingName != null || _pendingSuffix != null || _pendingDescription != null;
+    internal Action CaptureDraftRecovery()
+    {
+        var calls = _pendingCalls.ToArray(); var name = _pendingName; var suffix = _pendingSuffix; var description = _pendingDescription;
+        return () =>
+        {
+            _pendingCalls.Clear(); foreach (var pair in calls) _pendingCalls.Add(pair.Key, pair.Value);
+            _pendingName = name; _pendingSuffix = suffix; _pendingDescription = description;
+            _binding = true;
+            try
+            {
+                if (name != null) _nameEditor.Editor.Text = name;
+                if (description != null) _descriptionEditor.Editor.Text = description;
+                if (suffix is { } value) SelectSuffix(value);
+            }
+            finally { _binding = false; }
+            BindCurrentCall(_selectedCall, _scope); UpdatePendingUi();
+        };
+    }
     public int? CurrentEffectId => _row?.EffectId;
     public uint? CurrentCallAddress => _selectedCall?.CallAddress;
     public int? LastFollowEffectId { get; private set; }
@@ -144,6 +163,7 @@ public sealed partial class EngineEffectDetailPanel : UserControl
         foreach (var row in report.Effects) _rowsById[row.EffectId] = row;
         _rootInfos = report.RootInfos.ToDictionary(info => info.Address);
         _itemSelectors = null;
+        RebuildSuffixChoices(report.EngineVersion);
         _itemChoices = report.Effects.OrderBy(row => row.EffectId).Select(row => new EngineEffectChoiceItem(row.EffectId,
             string.IsNullOrWhiteSpace(row.Name) ? $"未命名特效 {row.EffectId}" : row.Name)).ToArray();
         _jobChoices = _itemChoices;
@@ -191,7 +211,13 @@ public sealed partial class EngineEffectDetailPanel : UserControl
         _itemChoices = [];
         _jobChoices = [];
         _binding = true;
-        try { _itemIdCombo.Items.Clear(); _personalIdCombo.Items.Clear(); }
+        try
+        {
+            _itemIdCombo.Items.Clear();
+            _personalIdCombo.Items.Clear();
+            _suffixCombo.Items.Clear();
+            _suffixVersion = string.Empty;
+        }
         finally { _binding = false; }
         _references = new Dictionary<int, EngineEffectReferenceSummary>();
         ClearPendingCore();
@@ -272,8 +298,9 @@ public sealed partial class EngineEffectDetailPanel : UserControl
             _baseTitle = $"{row.EffectId.ToString(CultureInfo.InvariantCulture)}：" +
                          (string.IsNullOrWhiteSpace(row.Name) ? "未命名" : row.Name);
             _suffixLabel.Text = row.SuffixByte is { } suffix
-                ? $"后缀 {EngineEffectSuffixLabels.Label(suffix)}" +
-                  (EngineEffectSuffixLabels.Display(suffix) is { Length: > 0 } sample ? $"（示例 {sample}）" : string.Empty)
+                ? $"后缀 {EngineEffectSuffixLabels.Label(_report.EngineVersion, suffix)}" +
+                  (EngineEffectSuffixLabels.Display(_report.EngineVersion, suffix) is { Length: > 0 } sample
+                      ? $"（示例 {sample}）" : string.Empty)
                 : "无名称槽";
             _stateLabel.Text = row.OnlyUnreachableCalls
                 ? "仅死代码调用（运行时不会触发）"
@@ -326,14 +353,6 @@ public sealed partial class EngineEffectDetailPanel : UserControl
 
     private void BuildChoiceItems()
     {
-        for (var value = 0; value <= EngineEffectSuffixLabels.MaximumSuffix; value++)
-        {
-            var sample = EngineEffectSuffixLabels.Display(value);
-            var display = sample.Length > 0 && value is >= 1 and <= 6
-                ? $"{EngineEffectSuffixLabels.Label(value)}（{sample}）"
-                : EngineEffectSuffixLabels.Label(value);
-            _suffixCombo.Items.Add(new SuffixChoice((byte)value, display));
-        }
         foreach (var target in EngineEffectScanService.KnownEntryTargets)
             _entryCombo.Items.Add(new EntryChoice(target,
                 $"0x{target:X8} {EngineEffectScanService.EntryNames[target]}"));
@@ -346,6 +365,28 @@ public sealed partial class EngineEffectDetailPanel : UserControl
             }));
         for (var value = 0; value <= 3; value++)
             _stackingCombo.Items.Add(new StackingChoice(value, $"{value.ToString(CultureInfo.InvariantCulture)} {StackingText(value)}"));
+    }
+
+    /// <summary>The suffix selector differs per base; rebuild it whenever a scan report is bound.</summary>
+    private void RebuildSuffixChoices(string version)
+    {
+        var previous = _binding;
+        _binding = true;
+        try
+        {
+            _suffixCombo.Items.Clear();
+            _suffixVersion = version;
+            var maximum = EngineEffectSuffixLabels.MaximumSuffix(version);
+            for (var value = 0; value <= maximum; value++)
+            {
+                var sample = EngineEffectSuffixLabels.Display(version, value);
+                var text = sample.Length > 0
+                    ? $"{EngineEffectSuffixLabels.Label(version, value)}（示例 {sample}）"
+                    : EngineEffectSuffixLabels.Label(version, value);
+                _suffixCombo.Items.Add(new SuffixChoice((byte)value, text));
+            }
+        }
+        finally { _binding = previous; }
     }
 
     private void WireLayoutEvents()
@@ -967,7 +1008,22 @@ public sealed partial class EngineEffectDetailPanel : UserControl
                 _suffixCombo.SelectedIndex = index;
                 return;
             }
-        _suffixCombo.SelectedIndex = -1;
+        if (value is < 0 or > byte.MaxValue)
+        {
+            _suffixCombo.SelectedIndex = -1;
+            return;
+        }
+        // Historical slots can hold a code outside the base's verified range
+        // (6.5 id 254 stores 0x64). Keep it visible but do not add it as a new choice.
+        var previous = _binding;
+        _binding = true;
+        try
+        {
+            _suffixCombo.Items.Add(new SuffixChoice((byte)value,
+                $"{EngineEffectSuffixLabels.Label(_suffixVersion, value)}（当前槽原始值）"));
+            _suffixCombo.SelectedIndex = _suffixCombo.Items.Count - 1;
+        }
+        finally { _binding = previous; }
     }
 
     private void SelectEntry(uint target)

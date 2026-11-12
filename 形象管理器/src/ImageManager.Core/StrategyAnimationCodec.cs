@@ -112,6 +112,14 @@ public sealed class StrategyAnimationPackageCodec : IStrategyAnimationPackageCod
     public static string Probe(byte[] bytes) => Describe(Inspect(bytes), bytes.Length);
     public static string ProbeFile(string path) => Probe(File.ReadAllBytes(path));
 
+    /// <summary>Preflight playback without allocating all planes or playback surfaces.</summary>
+    public static StrategyPlaybackInfo InspectPlayback(byte[] bytes, CancellationToken cancellationToken = default)
+    {
+        var layout = Inspect(bytes, cancellationToken);
+        var canvas = PlaybackCanvas(bytes.AsSpan(0, layout.RecordLength).ToArray(), layout, cancellationToken);
+        return new(layout.RecordCount - 1, layout.Interval, canvas.Width, canvas.Height);
+    }
+
     /// <summary>Decodes one playback step, preserving the same common canvas as full playback.</summary>
     public Bitmap DecodePreviewFrame(ProjectProfile project, byte[] bytes, int frameIndex = 0,
         CancellationToken cancellationToken = default)
@@ -130,11 +138,18 @@ public sealed class StrategyAnimationPackageCodec : IStrategyAnimationPackageCod
         Bitmap source;
         if (layout.Standard)
         {
-            using var strip = ImageRendering.DecodeStandardImage(bytes.AsSpan(layout.RecordLength, layout.PayloadLength).ToArray());
+            var payload = bytes.AsSpan(layout.RecordLength, layout.PayloadLength).ToArray();
+            using var direct = BmpPayloadService.TryDecodeRows(payload, reference * layout.Height, layout.Height);
             cancellationToken.ThrowIfCancellationRequested();
-            using var cropped = ImageRendering.Crop(strip,
-                new Rectangle(0, reference * layout.Height, layout.Width, layout.Height));
-            source = ImageRendering.ApplyKeyTransparency(cropped, false);
+            if (direct != null) source = ImageRendering.ApplyKeyTransparency(direct, false);
+            else
+            {
+                using var strip = ImageRendering.DecodeStandardImage(payload);
+                cancellationToken.ThrowIfCancellationRequested();
+                using var cropped = ImageRendering.Crop(strip,
+                    new Rectangle(0, reference * layout.Height, layout.Width, layout.Height));
+                source = ImageRendering.ApplyKeyTransparency(cropped, false);
+            }
         }
         else
         {
@@ -349,3 +364,5 @@ public static class StrategyAnimationDecoder
     private static readonly StrategyAnimationPackageCodec Codec = new();
     public static StrategyAnimationData Decode(ProjectProfile project, byte[] bytes) => Codec.Decode(project, bytes);
 }
+
+public sealed record StrategyPlaybackInfo(int FrameCount, int IntervalMs, int Width, int Height);

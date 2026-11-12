@@ -720,14 +720,33 @@
           "kind": "FixedString"
         },
         {
-          "names": [
-            "策略类型",
-            "施展对象",
-            "施法范围",
-            "穿透范围",
-            "策略消耗"
-          ],
+          "name": "策略类型",
           "offset": 11,
+          "size": 1,
+          "kind": "UInt8"
+        },
+        {
+          "name": "施展对象",
+          "offset": 12,
+          "size": 1,
+          "kind": "UInt8",
+          "maximum": 2
+        },
+        {
+          "name": "施法范围",
+          "offset": 13,
+          "size": 1,
+          "kind": "UInt8"
+        },
+        {
+          "name": "穿透范围",
+          "offset": 14,
+          "size": 1,
+          "kind": "UInt8"
+        },
+        {
+          "name": "策略消耗",
+          "offset": 15,
           "size": 1,
           "kind": "UInt8"
         },
@@ -799,7 +818,8 @@
           "name": "内容",
           "offset": 0,
           "size": 1,
-          "kind": "UInt8"
+          "kind": "UInt8",
+          "maximum": 4
         }
       ]
     },
@@ -875,7 +895,8 @@
           "name": "内容",
           "offset": 0,
           "size": 1,
-          "kind": "UInt8"
+          "kind": "UInt8",
+          "maximum": 15
         }
       ]
     },
@@ -894,7 +915,8 @@
           "name": "内容",
           "offset": 0,
           "size": 1,
-          "kind": "UInt8"
+          "kind": "UInt8",
+          "maximum": 15
         }
       ]
     },

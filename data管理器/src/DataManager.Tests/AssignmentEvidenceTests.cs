@@ -110,10 +110,14 @@ internal static class AssignmentEvidenceTests
         {
             var workspace = new ProjectWorkspace();
             workspace.Open(root);
-            AssertCapability(workspace, TableCapability.Editable, "已知 SHA 的核心文件副本不需要图片资源或 INI 即可沿用已验证几何");
+            AssertCapability(workspace, TableCapability.Editable, "已验证样本的核心文件副本不需要图片资源或 INI 即可开放已验证几何");
             var layout = workspace.ActiveProfile.LayoutRevision;
             var executable = ProjectFileLocator.Resolve(root, "Ekd5.exe");
             var before = File.ReadAllBytes(executable);
+            var baselineHash = HashService.Sha256(before);
+            var knownExecutable = workspace.ActiveProfile.Profile.Variants.SelectMany(variant => variant.Fingerprints)
+                .Any(fingerprint => fingerprint.Sha256.TryGetValue("Ekd5.exe", out var hash) &&
+                    hash.Equals(baselineHash, StringComparison.OrdinalIgnoreCase));
             var animation = workspace.GetDocument("strategy-small-animation");
             animation.Data.Rows[0]["动画ID"] = (Convert.ToInt32(animation.Data.Rows[0]["动画ID"]) + 1) % 256;
             TestSupport.Assert(workspace.Save().Saved, "证据连续性测试的 EXE 数据保存失败");
@@ -121,8 +125,24 @@ internal static class AssignmentEvidenceTests
             workspace.Open(root);
             AssertCapability(workspace, TableCapability.Editable, "已验证历史快照没有保留 EXE 数据保存后的 R/S 能力");
             TestSupport.Assert(workspace.ActiveProfile.LayoutRevision == layout, "保存后的 SHA 变化导致布局身份变化");
-            TestSupport.Assert(workspace.GetDocument("person-r-assign").Definition.CapabilityEvidence.Contains("保存历史", StringComparison.Ordinal),
-                "改变 SHA 后没有说明历史回溯证据");
+            if (knownExecutable)
+                TestSupport.Assert(workspace.GetDocument("person-r-assign").Definition.CapabilityEvidence.Contains("保存历史", StringComparison.Ordinal),
+                    "从已知 EXE 保存后改变 SHA 未说明经过校验的历史回溯证据");
+            else
+            {
+                // A managed patch can keep complete independent consumers while
+                // changing the full EXE fingerprint. Its journal proves this
+                // save, but cannot manufacture a missing known-sample baseline.
+                var consumers = EmbeddedEngineLayoutProbe.InspectAssignments65(File.ReadAllBytes(executable));
+                foreach (var (key, consumer) in new[] { ("person-r-assign", consumers.R), ("person-s-assign", consumers.S) })
+                {
+                    var definition = workspace.GetDocument(key).Definition;
+                    TestSupport.Assert(consumer.Verified && definition.DataOffset == consumer.Offset &&
+                        definition.CapabilityEvidence.Contains(consumer.Evidence, StringComparison.Ordinal),
+                        "未知 SHA 保存后没有保持本项目严格 PE 消费者证据：" + key);
+                }
+                Console.WriteLine("ASSIGNMENT_SOURCE_EVIDENCE strict-PE-consumers/save-undo-redo; source EXE is not an embedded fingerprint");
+            }
             TestSupport.Assert(workspace.UndoSaved().Success && File.ReadAllBytes(executable).SequenceEqual(before), "证据门破坏了保存后撤回");
             TestSupport.Assert(workspace.RedoSaved().Success, "证据门破坏了保存后重做");
             var r = workspace.GetDocument("person-r-assign");

@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using DataManager.Core.Editing;
 using DataManager.Core.Scanner;
 using ImageManager.App;
@@ -50,7 +50,14 @@ public sealed class EngineBattleFormulaPanel : UserControl
     public event EventHandler? PendingChangesChanged;
     public event EventHandler<EngineConstantStatusEventArgs>? StatusChanged;
 
+    internal Func<bool>? CommitAllRequested { get; set; }
+    internal IReadOnlyList<EngineConstantEdit> PendingConstantEdits => PendingEdits().Select(edit => new EngineConstantEdit(edit.ConstantId, edit.Value, null)).ToArray();
     public bool HasPendingChanges => _pending.Count > 0;
+    internal Action CaptureDraftRecovery()
+    {
+        var pending = _pending.ToArray();
+        return () => { _pending.Clear(); foreach (var pair in pending) _pending.Add(pair.Key, pair.Value); ApplyPendingToGrid(); UpdateButtons(); };
+    }
     public string? CurrentFormulaId => _currentFormulaId;
 
     public void Bind(ProjectWorkspace? workspace, string formulaId)
@@ -125,6 +132,7 @@ public sealed class EngineBattleFormulaPanel : UserControl
         if (!PreparePendingEdits()) { message = "当前输入尚未通过校验。"; return false; }
         if (_pending.Count == 0) { message = "没有需要写入的修改。"; return true; }
 
+        if (CommitAllRequested != null) { var saved = CommitAllRequested(); message = saved ? "公式与工作区草稿已统一保存。" : "保存未完成，草稿已保留。"; return saved; }
         var edits = PendingEdits();
         var issues = _service.ValidateEdits(_workspace, edits);
         if (issues.Any(item => item.Severity == BattleFormulaIssueSeverity.Error))

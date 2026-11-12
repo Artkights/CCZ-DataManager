@@ -1,4 +1,4 @@
-using System.Buffers.Binary;
+﻿using System.Buffers.Binary;
 using System.Collections.Concurrent;
 
 namespace ImageManager.Core;
@@ -15,7 +15,34 @@ public sealed class E5Archive
     private const int LsHeaderLength = 16;
     private const int LsDictionaryLength = 256;
     private readonly byte[] _bytes;
-    private static readonly ConcurrentDictionary<string, CachedArchive> Cache = new(StringComparer.OrdinalIgnoreCase);
+    public const long MaximumCacheBytes = 128L * 1024 * 1024;
+    private static readonly object CacheGate = new();
+    private static readonly Dictionary<string, CachedArchive> Cache = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<string, Lazy<E5Archive>> Inflight = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly LinkedList<string> CacheLru = new();
+    private static long _cacheBytes, _hits, _misses, _reads, _readBytes, _generation;
+    private static string? _activeRoot;
+    public static E5CacheStatistics CacheStatistics
+    {
+        get { lock (CacheGate) return new(_cacheBytes, MaximumCacheBytes, Cache.Count, Inflight.Count, _hits, _misses, _reads, _readBytes); }
+    }
+    public static void RetainRoot(string rootPath)
+    {
+        var root = System.IO.Path.GetFullPath(rootPath).TrimEnd(System.IO.Path.DirectorySeparatorChar) + System.IO.Path.DirectorySeparatorChar;
+        lock (CacheGate)
+        {
+            if (string.Equals(_activeRoot, root, StringComparison.OrdinalIgnoreCase)) return;
+            _activeRoot = root; _generation++;
+            foreach (var path in Cache.Keys.Where(path => !path.StartsWith(root, StringComparison.OrdinalIgnoreCase)).ToArray()) RemoveCached(path);
+        }
+    }
+    public static void ClearCache()
+    { lock (CacheGate) { Cache.Clear(); CacheLru.Clear(); _cacheBytes = 0; _activeRoot = null; _generation++; } }
+    private static void RemoveCached(string path)
+    {
+        if (!Cache.Remove(path, out var old)) return;
+        CacheLru.Remove(old.Node); _cacheBytes -= old.Archive._bytes.LongLength;
+    }
 
     private E5Archive(string path, byte[] bytes, IReadOnlyList<E5Entry> entries, int trailerLength)
     {
@@ -29,16 +56,48 @@ public sealed class E5Archive
     public IReadOnlyList<E5Entry> Entries { get; }
     public int DirectoryTrailerLength { get; }
 
-    public static E5Archive Open(string path)
+    public static E5Archive Open(string path) => OpenCached(path, false);
+
+    private static E5Archive OpenCached(string path, bool meff)
     {
         var fullPath = System.IO.Path.GetFullPath(path);
-        if (!ShouldCache(fullPath)) return Parse(fullPath, ReadSnapshot(fullPath));
+        if (!meff && !ShouldCache(fullPath)) return Parse(fullPath, ReadSnapshot(fullPath));
         var info = new FileInfo(fullPath);
-        if (Cache.TryGetValue(fullPath, out var cached) && cached.Length == info.Length && cached.LastWriteUtc == info.LastWriteTimeUtc)
-            return cached.Archive;
-        var archive = Parse(fullPath, ReadSnapshot(fullPath));
-        Cache[fullPath] = new CachedArchive(info.Length, info.LastWriteTimeUtc, archive);
-        return archive;
+        var length = info.Length; var modified = info.LastWriteTimeUtc;
+        Lazy<E5Archive> pending; long generation; string flightKey;
+        lock (CacheGate)
+        {
+            generation = _generation;
+            if (Cache.TryGetValue(fullPath, out var cached) && cached.Length == length && cached.LastWriteUtc == modified)
+            {
+                CacheLru.Remove(cached.Node); CacheLru.AddFirst(cached.Node); _hits++;
+                return cached.Archive;
+            }
+            _misses++;
+            RemoveCached(fullPath);
+            flightKey = fullPath + "|" + length + "|" + modified.Ticks + "|" + generation + "|" + meff;
+            if (!Inflight.TryGetValue(flightKey, out pending!))
+                Inflight[flightKey] = pending = new Lazy<E5Archive>(() => Parse(fullPath, ReadSnapshot(fullPath), meff),
+                    LazyThreadSafetyMode.ExecutionAndPublication);
+        }
+        try
+        {
+            var archive = pending.Value;
+            lock (CacheGate)
+            {
+                if (generation == _generation && archive._bytes.LongLength <= MaximumCacheBytes &&
+                    (_activeRoot == null || fullPath.StartsWith(_activeRoot, StringComparison.OrdinalIgnoreCase)))
+                {
+                    RemoveCached(fullPath);
+                    var node = CacheLru.AddFirst(fullPath);
+                    Cache[fullPath] = new(length, modified, archive, node);
+                    _cacheBytes += archive._bytes.LongLength;
+                    while (_cacheBytes > MaximumCacheBytes && CacheLru.Last != null) RemoveCached(CacheLru.Last.Value);
+                }
+            }
+            return archive;
+        }
+        finally { lock (CacheGate) if (Inflight.TryGetValue(flightKey, out var current) && ReferenceEquals(current, pending)) Inflight.Remove(flightKey); }
     }
 
     /// <summary>
@@ -50,6 +109,8 @@ public sealed class E5Archive
     /// </summary>
     public static E5Archive OpenMeff(string path)
     {
+        // Native-plane editing also uses this legacy reader. Keep its original fresh-snapshot
+        // semantics, including same-length/same-timestamp external edits and nonzero trailers.
         var fullPath = System.IO.Path.GetFullPath(path);
         return Parse(fullPath, ReadSnapshot(fullPath), allowNonZeroDirectoryTrailer: true);
     }
@@ -71,7 +132,8 @@ public sealed class E5Archive
             try { stream.ReadExactly(bytes); }
             catch (EndOfStreamException) { continue; }
             var after = new FileInfo(path);
-            if (stream.Length == length && after.Length == length && after.LastWriteTimeUtc == modified) return bytes;
+            if (stream.Length == length && after.Length == length && after.LastWriteTimeUtc == modified)
+            { lock (CacheGate) { _reads++; _readBytes += bytes.LongLength; } return bytes; }
         }
         throw new IOException("读取期间资源文件发生变化，请等待游戏或其他工具完成写入后重试。");
     }
@@ -108,7 +170,8 @@ public sealed class E5Archive
         }
     }
 
-    public static void Invalidate(string path) => Cache.TryRemove(System.IO.Path.GetFullPath(path), out _);
+    public static void Invalidate(string path)
+    { lock (CacheGate) { RemoveCached(System.IO.Path.GetFullPath(path)); _generation++; } }
 
     public static E5Archive Parse(string logicalPath, byte[] bytes)
         => Parse(logicalPath, bytes, allowNonZeroDirectoryTrailer: false);
@@ -331,5 +394,7 @@ public sealed class E5Archive
                name.Equals("Spalet.e5", StringComparison.OrdinalIgnoreCase);
     }
 
-    private sealed record CachedArchive(long Length, DateTime LastWriteUtc, E5Archive Archive);
+    private sealed record CachedArchive(long Length, DateTime LastWriteUtc, E5Archive Archive, LinkedListNode<string> Node);
 }
+
+public sealed record E5CacheStatistics(long RetainedBytes, long MaximumBytes, int Archives, int Inflight, long Hits, long Misses, long FileReads, long FileReadBytes);

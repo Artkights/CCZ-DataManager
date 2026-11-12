@@ -1,6 +1,7 @@
 using System.Data;
 using System.Globalization;
 using DataManager.Core.Binary;
+using DataManager.Core.Domain;
 using DataManager.Core.Editing;
 using DataManager.Core.Models;
 
@@ -92,6 +93,33 @@ internal sealed class BatchDialog : Form
         _preview.Text = $"Profile：{_profile.Profile.DisplayName}\n布局：{_profile.Variant.DisplayName}\n目标：{_document.Definition.FileName}\n" +
                         $"将检查 {_rows.Count} 行、{selected.Count} 字段；越界值 {outOfRange} 项，无效引用 {invalidReferences} 项。\n" +
                         $"示例 ID={_document.Data.Rows[_rows[0]]["ID"]} / {columnName}: {old} -> {result}";
+        if (_document.Definition.Key == StrategyEffectClassService.TableKey && outOfRange == 0)
+        {
+            var warnings = new List<string>();
+            foreach (var rowIndex in _rows)
+            {
+                var value = Convert.ToInt32(_document.Data.Rows[rowIndex][StrategyEffectClassService.FieldName], CultureInfo.InvariantCulture);
+                if (!int.TryParse(input, NumberStyles.Integer, CultureInfo.InvariantCulture, out var inputValue) && operation != "将首行复制到选中行") continue;
+                var candidate = operation switch
+                {
+                    "统一赋值" => inputValue,
+                    "数值增加" => (long)value + inputValue,
+                    "数值减少" => (long)value - inputValue,
+                    "将首行复制到选中行" => Convert.ToInt32(first, CultureInfo.InvariantCulture),
+                    _ => value
+                };
+                if (candidate is < 0 or > 255) continue;
+                try
+                {
+                    _workspace.ValidateCellValue(_document, rowIndex, StrategyEffectClassService.FieldName, (int)candidate);
+                    var warning = StrategyEffectClassService.GetCompatibilityWarning(_workspace, rowIndex, (int)candidate);
+                    if (!string.IsNullOrEmpty(warning)) warnings.Add(warning);
+                }
+                catch (Exception ex) when (ex is InvalidDataException or ArgumentException or InvalidOperationException)
+                { warnings.Add(ex.Message); }
+            }
+            if (warnings.Count > 0) _preview.Text += $"\n效果切换提示 {warnings.Count} 项：{warnings[0]}";
+        }
     }
 
     private (int OutOfRange, int InvalidReferences) CountPreviewErrors(IReadOnlyList<string> columns, string operation, string input)

@@ -1,0 +1,16 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWindowsForms>true</UseWindowsForms>
+    <RootNamespace>RangeManager.App</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\DataManager.Core\DataManager.Core.csproj" />
+    <Compile Include="..\SharedUi\ManagerUiStyle.cs" Link="SharedUi\ManagerUiStyle.cs" />
+    <EmbeddedResource Include="Assets\Range\*" LogicalName="RangeManager.App.Assets.Range.%(Filename)%(Extension)" />
+    <InternalsVisibleTo Include="攻击穿透范围管理器" />
+    <InternalsVisibleTo Include="DataManager.Tests" />
+  </ItemGroup>
+</Project>

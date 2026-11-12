@@ -19,12 +19,14 @@ public sealed class ProfileAugmentationService
     private const int AssignmentRows = 1024;
     private const int AssignmentWidth = 2;
 
-    public ResolvedProfile Apply(string root, ResolvedProfile profile) => ApplyCore(root, profile, false);
+    public ResolvedProfile Apply(string root, ResolvedProfile profile) => ApplyCore(root, profile, false, true);
+
+    internal ResolvedProfile ApplyPreStrategyEffects(string root, ResolvedProfile profile) => ApplyCore(root, profile, false, false);
 
     // Only used to reproduce the frozen, shipped 6.4 CSV/history identity.
-    internal ResolvedProfile ApplyPreConfiguration64(string root, ResolvedProfile profile) => ApplyCore(root, profile, true);
+    internal ResolvedProfile ApplyPreConfiguration64(string root, ResolvedProfile profile) => ApplyCore(root, profile, true, false);
 
-    private ResolvedProfile ApplyCore(string root, ResolvedProfile profile, bool preConfiguration64)
+    private ResolvedProfile ApplyCore(string root, ResolvedProfile profile, bool preConfiguration64, bool includeStrategyEffects)
     {
         if (string.IsNullOrWhiteSpace(root)) return profile;
         var path = ProjectFileLocator.Resolve(root, "Ekd5.exe");
@@ -99,9 +101,14 @@ public sealed class ProfileAugmentationService
         var equipmentTables = EquipmentTypeCatalogService.BuildTables(executable);
         tables = tables.Where(item => !equipmentTables.Any(equipment => equipment.Key == item.Key)).Concat(equipmentTables).ToArray();
         tables = TextConsumerEvidence.Apply(tables, executable).ToArray();
+        if (includeStrategyEffects)
+            tables = tables.Where(item => item.Key != StrategyEffectClassService.TableKey)
+                .Append(StrategyEffectClassService.BuildTable(executable)).ToArray();
         var modules = profile.Modules.Select(module => module.Key == "人物"
             ? module with { TableKeys = module.TableKeys.Where(key => key != table.Key).Append(table.Key).ToArray() }
             : module.Key == "宝物" ? module with { TableKeys = module.TableKeys.Concat(equipmentTables.Select(item => item.Key)).Distinct().ToArray() }
+            : includeStrategyEffects && module.Key == "策略" ? module with
+                { TableKeys = module.TableKeys.Where(key => key != StrategyEffectClassService.TableKey).Append(StrategyEffectClassService.TableKey).ToArray() }
             : module).ToArray();
         // Evidence text/SHA changes after a valid save. Only capability and geometry
         // affect the layout identity, so a checked history chain keeps undo/redo valid.
@@ -109,6 +116,11 @@ public sealed class ProfileAugmentationService
             .OrderBy(item => item.Key).Select(item => $"{item.Key}:{item.Capability}:{item.DataOffset}:{item.RowCount}:{item.RowSize}"));
         if (configuration64 is not null)
             geometry += $"|64-configuration:{configuration64.RetreatQuotes}:{configuration64.PersonDefaults}:{configuration64.EquipmentPermissions}:{configuration64.SpecialCriticalMap}";
+        if (includeStrategyEffects)
+        {
+            var strategyEffects = tables.Single(item => item.Key == StrategyEffectClassService.TableKey);
+            geometry += $"|strategy-effects:{strategyEffects.Capability}:{strategyEffects.DataOffset}:{strategyEffects.RowCount}:{strategyEffects.RowSize}";
+        }
         // Keep existing history identities when extension geometry is unchanged.
         // Actual short/long, complete physical files get their own layout identity.
         var extensionChanges = tables.Where(item => IsExtension(item.Key) && profile.Tables.Any(original =>
@@ -224,11 +236,12 @@ public sealed class ProfileAugmentationService
     private static bool TryRecoverVerifiedExecutable(string root, ResolvedProfile profile, byte[] executable, IReadOnlySet<string> knownHashes, out string evidence)
     {
         evidence = string.Empty;
-        var history = new HistoryStore().Load(root).Where(entry => entry.SchemaVersion == "2.0" &&
+        var store = new HistoryStore();
+        var history = store.ListMetadata(root).Where(entry => entry.SchemaVersion == "2.0" &&
                 entry.ProfileId.Equals(profile.ProfileId, StringComparison.OrdinalIgnoreCase) && entry.VariantId.Equals(profile.VariantId, StringComparison.OrdinalIgnoreCase) &&
                 entry.Status is HistoryStatus.Active or HistoryStatus.Reverted)
-            .OrderByDescending(entry => entry.CreatedAt).SelectMany(entry => entry.Files)
-            .Where(file => Path.GetFileName(file.RelativePath).Equals("Ekd5.exe", StringComparison.OrdinalIgnoreCase)).ToArray();
+            .OrderByDescending(entry => entry.CreatedAt).SelectMany(entry => entry.Files.Select(file => (entry.OperationId, File: file)))
+            .Where(item => Path.GetFileName(item.File.RelativePath).Equals("Ekd5.exe", StringComparison.OrdinalIgnoreCase)).ToArray();
         var current = executable;
         var currentHash = HashService.Sha256(current);
         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { currentHash };
@@ -236,8 +249,9 @@ public sealed class ProfileAugmentationService
         {
             byte[]? prior = null;
             string? priorHash = null;
-            foreach (var file in history.Where(file => file.FileLength == current.LongLength && file.AfterHash.Equals(currentHash, StringComparison.OrdinalIgnoreCase)))
+            foreach (var item in history.Where(item => item.File.FileLength == current.LongLength && item.File.AfterHash.Equals(currentHash, StringComparison.OrdinalIgnoreCase)))
             {
+                var file = store.LoadOperation(root, item.OperationId).Files.Single(file => file.RelativePath.Equals(item.File.RelativePath, StringComparison.OrdinalIgnoreCase));
                 var candidate = current.ToArray();
                 var valid = true;
                 long previousEnd = -1;

@@ -13,6 +13,7 @@ public sealed partial class ExtendDataEditorPanel : UserControl
     private readonly ExtendDataService _service;
     private readonly TabControl _tabs = new() { Dock = DockStyle.Fill, Name = "ExtendDataCategories" };
     private readonly Dictionary<ExtendDataCategory, CategoryState> _states = new();
+    private readonly Dictionary<ExtendDataCategory, (IReadOnlyList<CoreIdNameOption> Source, IReadOnlyList<IdNameOption> Options)> _entityOptions = [];
     private List<FieldBinding> _fields => State.Fields;
     private readonly ErrorProvider _errors = new() { BlinkStyle = ErrorBlinkStyle.NeverBlink };
     private readonly ToolTip _tips = new();
@@ -65,7 +66,14 @@ public sealed partial class ExtendDataEditorPanel : UserControl
     public string SearchText { get => State.SearchText; set => State.SearchText = value ?? string.Empty; }
     private CategoryState State => _states[Category];
 
-    public IReadOnlyList<IdNameOption> GetEntityOptions() => _service.GetEntityOptions(Category).Select(option => new IdNameOption(option.Id, option.Name)).ToArray();
+    public IReadOnlyList<IdNameOption> GetEntityOptions()
+    {
+        var source = _service.GetEntityOptions(Category);
+        if (_entityOptions.TryGetValue(Category, out var cached) && ReferenceEquals(cached.Source, source)) return cached.Options;
+        var options = source.Select(option => new IdNameOption(option.Id, option.Name)).ToArray();
+        _entityOptions[Category] = (source, options);
+        return options;
+    }
 
     public bool BindEntity(int id)
     {
@@ -129,6 +137,7 @@ public sealed partial class ExtendDataEditorPanel : UserControl
     /// <summary>Rebinds after undo, save or reload without submitting obsolete editor text.</summary>
     public void RefreshFromWorkspace()
     {
+        State.BindingRevision = -1;
         RenderCurrent();
     }
 
@@ -137,6 +146,7 @@ public sealed partial class ExtendDataEditorPanel : UserControl
         _binding = true;
         try
         {
+            _entityOptions.Clear();
             foreach (var state in _states.Values)
             {
                 state.ClearView();
@@ -151,6 +161,11 @@ public sealed partial class ExtendDataEditorPanel : UserControl
 
     private void RenderCurrent()
     {
+        // A shell refresh can select the same entity several times. Validation
+        // still runs in BindEntity before this reuse check; unchanged data does
+        // not need to reset forty controls and relayout the ten visible slots.
+        if (State.Built && State.Available && State.BoundId == CurrentId && State.BoundPage == State.Page &&
+            State.BindingRevision == _service.GetBindingRevision(Category)) return;
         _binding = true;
         SuspendLayout();
         State.Tab.SuspendLayout();
@@ -172,6 +187,7 @@ public sealed partial class ExtendDataEditorPanel : UserControl
             body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             scroll.Controls.Add(body); State.Tab.Controls.Add(scroll);
             State.Scroll = scroll;
+            State.Body = body;
             var viewState = State;
             scroll.Scroll += (_, _) => viewState.ScrollPosition = new Point(-scroll.AutoScrollPosition.X, -scroll.AutoScrollPosition.Y);
             void FitBodyWidth()
@@ -235,12 +251,26 @@ public sealed partial class ExtendDataEditorPanel : UserControl
     private void ReloadCurrent()
     {
         if (!State.Available) return;
-        var options = GetEntityOptions();
-        if (!options.Any(option => option.Id == CurrentId)) State.Id = options.FirstOrDefault()?.Id ?? 0;
-        if (State.Title != null) State.Title.Text = $"{CurrentId}：{options.FirstOrDefault(option => option.Id == CurrentId)?.Name ?? "未命名"}";
-        foreach (var reload in State.Rebinders) reload();
-        foreach (var field in _fields) field.Reload();
-        RefreshDiagnostics();
+        var layouts = new Control?[] { State.Scroll, State.Body }.Concat(State.Grids).OfType<Control>().ToArray();
+        foreach (var layout in layouts) layout.SuspendLayout();
+        try
+        {
+            var options = GetEntityOptions();
+            if (!options.Any(option => option.Id == CurrentId)) State.Id = options.FirstOrDefault()?.Id ?? 0;
+            if (State.Title != null) State.Title.Text = $"{CurrentId}：{options.FirstOrDefault(option => option.Id == CurrentId)?.Name ?? "未命名"}";
+            foreach (var reload in State.Rebinders) reload();
+            foreach (var field in _fields) field.Reload();
+            RefreshDiagnostics();
+            RecordBinding();
+        }
+        finally { foreach (var layout in layouts.Reverse()) layout.ResumeLayout(true); }
+    }
+
+    private void RecordBinding()
+    {
+        State.BindingRevision = _service.GetBindingRevision(Category);
+        State.BoundId = CurrentId;
+        State.BoundPage = State.Page;
     }
 
     private void BuildEffects(TableLayoutPanel body)
@@ -271,7 +301,6 @@ public sealed partial class ExtendDataEditorPanel : UserControl
             }
             finally { grid.ResumeLayout(true); }
         }
-        var choices = _service.GetEffectOptions();
         for (var index = 0; index < 10; index++)
         {
             var visibleIndex = index;
@@ -279,7 +308,7 @@ public sealed partial class ExtendDataEditorPanel : UserControl
             var row = index + 1;
             var label = SlotLabel(Slot());
             grid.Controls.Add(label, 0, row);
-            grid.Controls.Add(IdInput(() => $"槽{Slot()}特效号", choices, 255, $"ExtendEffectId{index}", () => Slot() < 256), 1, row);
+            grid.Controls.Add(IdInput(() => $"槽{Slot()}特效号", _service.GetEffectOptions, 255, $"ExtendEffectId{index}", () => Slot() < 256), 1, row);
             grid.Controls.Add(NumberInput(() => $"槽{Slot()}特效值", 0, 255, $"ExtendEffectValue{index}", () => Slot() < 256), 2, row);
             grid.Controls.Add(NumberInput(() => $"槽{Slot()}经验", 0, 255, $"ExtendEffectExperience{index}", () => Slot() < 256), 3, row);
             var turns = NumberInput(() => $"槽{Slot()}剩余回合", 0, 255, $"ExtendEffectTurns{index}", () => Slot() < 256);
@@ -292,7 +321,7 @@ public sealed partial class ExtendDataEditorPanel : UserControl
             {
                 label.Text = (Slot() + 1).ToString("D3", CultureInfo.InvariantCulture);
                 foreach (Control control in grid.Controls)
-                    if (grid.GetRow(control) == row) control.Visible = Slot() < 256;
+                    if (grid.GetRow(control) == row) control.Visible = Slot() < 256 && (grid.GetColumn(control) is not (3 or 4) || State.Advanced);
             });
         }
         State.Rebinders.Add(() => { advanced.Checked = State.Advanced; UpdateAdvancedColumns(); });
@@ -305,7 +334,6 @@ public sealed partial class ExtendDataEditorPanel : UserControl
         AddBlock(body, new Label { Text = "次数 255 表示无限；已有次数原样保留，主动新增时默认 255。", AutoSize = true, ForeColor = Color.DimGray, Padding = new Padding(3, 0, 3, 7) });
         var grid = SlotGrid([52, 0, 120, 50]);
         AddHeaders(grid, ["槽位", "策略（输入名称或 ID 搜索）", "次数 / 原始值", ""]);
-        var choices = _service.GetStrategyOptions();
         for (var index = 0; index < 8; index++)
         {
             var visibleIndex = index;
@@ -313,7 +341,7 @@ public sealed partial class ExtendDataEditorPanel : UserControl
             var label = SlotLabel(Slot());
             grid.Controls.Add(label, 0, index + 1);
             State.Rebinders.Add(() => label.Text = (Slot() + 1).ToString("D3", CultureInfo.InvariantCulture));
-            grid.Controls.Add(IdInput(() => $"策略{Slot()}ID", choices, 255, $"ExtendStrategyId{index}"), 1, index + 1);
+            grid.Controls.Add(IdInput(() => $"策略{Slot()}ID", _service.GetStrategyOptions, 255, $"ExtendStrategyId{index}"), 1, index + 1);
             var count = NumberInput(() => $"策略{Slot()}次数", 0, 255, $"ExtendStrategyCount{index}");
             _tips.SetToolTip(count, "新增策略默认 255；已有策略的原始次数不会因切换选择而重置。");
             grid.Controls.Add(count, 2, index + 1);
@@ -364,7 +392,7 @@ public sealed partial class ExtendDataEditorPanel : UserControl
         var toolbar = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, WrapContents = true, Margin = new Padding(0, 0, 0, 5) };
         var previous = SmallButton("上一页", "ExtendPreviousPage");
         var next = SmallButton("下一页", "ExtendNextPage");
-        var combo = new ComboBox { Name = "ExtendPage", DropDownStyle = ComboBoxStyle.DropDownList, Width = ScaleWidth(260), IntegralHeight = false, MaxDropDownItems = 15, Margin = new Padding(3) };
+        var combo = new PagerComboBox { Name = "ExtendPage", DropDownStyle = ComboBoxStyle.DropDownList, Width = ScaleWidth(260), IntegralHeight = false, MaxDropDownItems = 15, Margin = new Padding(3) };
         State.Page = Math.Clamp(State.Page, 0, pages - 1);
         for (var page = 0; page < pages; page++) combo.Items.Add($"第 {page + 1} / {pages} 页    槽位 {page * pageSize + 1}–{Math.Min((page + 1) * pageSize, total)}");
         combo.SelectedIndex = State.Page;
@@ -403,24 +431,31 @@ public sealed partial class ExtendDataEditorPanel : UserControl
         PendingChangesChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    private SearchableIdComboBox IdInput(string field, IReadOnlyList<CoreIdNameOption> options, long maximum, string name)
+    private SearchableIdComboBox IdInput(string field, Func<IReadOnlyList<CoreIdNameOption>> options, long maximum, string name)
         => IdInput(() => field, options, maximum, name);
 
-    private SearchableIdComboBox IdInput(Func<string> field, IReadOnlyList<CoreIdNameOption> options, long maximum, string name, Func<bool>? active = null)
+    private SearchableIdComboBox IdInput(Func<string> field, Func<IReadOnlyList<CoreIdNameOption>> options, long maximum, string name, Func<bool>? active = null)
     {
         var combo = new SearchableIdComboBox { Dock = DockStyle.Fill, Name = name, Margin = new Padding(4, 5, 14, 5), MinimumSize = new Size(120, 0) };
         var current = active?.Invoke() == false ? 255 : _service.ReadInt(Category, CurrentId, field());
-        var choices = options.Select(option => new IdNameOption(option.Id, option.Name)).ToList();
-        if (!choices.Any(option => option.Id == current)) choices.Add(new IdNameOption(current, maximum == ushort.MaxValue && (current & 255) == 255 ? "无（保留原值）" : "未确认"));
-        combo.SetOptions(choices);
+        IReadOnlyList<CoreIdNameOption>? source = null;
+        var choices = new Dictionary<int, IdNameOption>();
         string Display(int id)
         {
-            if (!choices.Any(option => option.Id == id))
+            var updated = options();
+            var changed = !ReferenceEquals(source, updated);
+            if (changed)
             {
-                choices.Add(new IdNameOption(id, maximum == ushort.MaxValue && (id & 255) == 255 ? "无（保留原值）" : "未确认"));
-                combo.SetOptions(choices);
+                source = updated;
+                choices = updated.ToDictionary(option => option.Id, option => new IdNameOption(option.Id, option.Name));
             }
-            return choices.First(option => option.Id == id).Display;
+            if (!choices.ContainsKey(id))
+            {
+                choices[id] = new IdNameOption(id, maximum == ushort.MaxValue && (id & 255) == 255 ? "无（保留原值）" : "未确认");
+                changed = true;
+            }
+            if (changed) combo.SetOptions(choices.Values, preserveEditSelection: true);
+            return choices[id].Display;
         }
         combo.SetBoundValue(Display(current));
         var binding = Register(field, combo, () => combo.Text, () =>
@@ -546,6 +581,7 @@ public sealed partial class ExtendDataEditorPanel : UserControl
     private TableLayoutPanel SlotGrid(float[] widths)
     {
         var grid = new TableLayoutPanel { ColumnCount = widths.Length, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Dock = DockStyle.Top, Margin = new Padding(0), Name = "ExtendSlotGrid" };
+        State.Grids.Add(grid);
         var scale = Font.Size / (SystemFonts.MessageBoxFont ?? SystemFonts.DefaultFont).Size;
         foreach (var width in widths) grid.ColumnStyles.Add(new ColumnStyle(width == 0 ? SizeType.Percent : SizeType.Absolute, width == 0 ? 100 : width * scale));
         return grid;
@@ -580,7 +616,12 @@ public sealed partial class ExtendDataEditorPanel : UserControl
         public bool Built { get; set; }
         public bool Available { get; set; }
         public TableDocument? SourceDocument { get; set; }
+        public long BindingRevision { get; set; } = -1;
+        public int BoundId { get; set; } = -1;
+        public int BoundPage { get; set; } = -1;
         public Panel? Scroll { get; set; }
+        public TableLayoutPanel? Body { get; set; }
+        public List<TableLayoutPanel> Grids { get; } = [];
         public Point ScrollPosition { get; set; }
         public Label? Title { get; set; }
         public List<FieldBinding> Fields { get; } = [];
@@ -597,9 +638,9 @@ public sealed partial class ExtendDataEditorPanel : UserControl
             foreach (Control control in Tab.Controls.Cast<Control>().ToArray()) control.Dispose();
             if (!Message.IsDisposed) Message.Dispose();
             Message = NewMessage();
-            Fields.Clear(); Rebinders.Clear(); ForgeRows.Clear();
+            Fields.Clear(); Rebinders.Clear(); ForgeRows.Clear(); Grids.Clear();
             RawEvidence = null; MaterialCount = null; Scroll = null; Title = null;
-            SourceDocument = null; Built = false; EvidenceDirty = true;
+            Body = null; SourceDocument = null; Built = false; EvidenceDirty = true; BindingRevision = -1;
         }
 
         private static Label NewMessage() => new() { AutoSize = true, MaximumSize = new Size(1000, 0), ForeColor = Color.DimGray, Padding = new Padding(3, 5, 3, 5), Name = "ExtendDataMessage" };
@@ -622,6 +663,18 @@ public sealed partial class ExtendDataEditorPanel : UserControl
     {
         public BufferedScrollPanel() { DoubleBuffered = true; ResizeRedraw = true; }
     }
+
+    private sealed class PagerComboBox : ComboBox
+    {
+        protected override void Dispose(bool disposing)
+        {
+            // Native UIA providers may outlive this control. Deliver the normal
+            // Disposed notification before releasing handlers that capture the page.
+            try { base.Dispose(disposing); }
+            finally { if (disposing) Events.Dispose(); }
+        }
+    }
+
     protected override void Dispose(bool disposing)
     {
         if (disposing) { _errors.Dispose(); _tips.Dispose(); }

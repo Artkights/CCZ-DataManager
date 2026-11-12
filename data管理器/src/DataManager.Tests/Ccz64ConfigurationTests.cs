@@ -121,9 +121,11 @@ internal static class Ccz64ConfigurationTests
     {
         var workspace = Open(root);
         var revisions = LayoutRevisionCompatibility.GetLegacyRevisions(root, "ccz-6.4", "64-xisui-v1");
-        TestSupport.Assert(revisions.Count == 1 && revisions[0] != workspace.ActiveProfile.LayoutRevision,
-            "未严格复现已发布的上一版6.4布局");
-        TestSupport.Assert(LayoutRevisionCompatibility.IsCompatible(root, "ccz-6.4", "64-xisui-v1", revisions[0], workspace.ActiveProfile.LayoutRevision) &&
+        var beforeEffects = StrategyEffectClassTests.PreviousLayoutRevision(workspace);
+        var beforeConfiguration = revisions.Single(revision => revision != beforeEffects);
+        TestSupport.Assert(revisions.Contains(beforeEffects) && beforeConfiguration != workspace.ActiveProfile.LayoutRevision,
+            "未严格复现已发布的策略效果表升级前和配置升级前6.4布局");
+        TestSupport.Assert(revisions.All(revision => LayoutRevisionCompatibility.IsCompatible(root, "ccz-6.4", "64-xisui-v1", revision, workspace.ActiveProfile.LayoutRevision)) &&
             !LayoutRevisionCompatibility.IsCompatible(root, "ccz-6.4", "64-xisui-v1", "DEADBEEF", workspace.ActiveProfile.LayoutRevision),
             "上一版布局白名单边界错误");
         var oldPower = Convert.ToInt32(workspace.GetDocument("persons").Data.Rows[0]["武力"]);
@@ -131,14 +133,14 @@ internal static class Ccz64ConfigurationTests
         workspace.ApplyCompositeTransaction("上一版人物字段历史", [new("persons", 0, "武力", value)]);
         TestSupport.Assert(workspace.Save().Saved, "旧字段历史准备失败");
         var store = new HistoryStore(); var history = store.Load(root).Last(entry => entry.Status == HistoryStatus.Active);
-        history.LayoutRevision = revisions[0]; store.Update(root, history);
+        history.LayoutRevision = beforeConfiguration; store.Update(root, history);
         var reopened = Open(root);
         TestSupport.Assert(reopened.UndoSaved().Success && Convert.ToInt32(reopened.GetDocument("persons").Data.Rows[0]["武力"]) == oldPower,
             "严格冻结的上一版人物字段历史无法撤回");
         TestSupport.Assert(reopened.RedoSaved().Success && reopened.UndoSaved().Success, "上一版历史重做失败");
         var csv = Path.Combine(root, "prior-person-fields.csv");
         CsvService.WriteRecords(csv, [
-            new[] { "#DataManagerCSV", "1", "ccz-6.4", "64-xisui-v1", "persons", revisions[0] },
+            new[] { "#DataManagerCSV", "1", "ccz-6.4", "64-xisui-v1", "persons", beforeConfiguration },
             new[] { "ID", "武力" }, new[] { "0", oldPower.ToString() }]);
         TestSupport.Assert(reopened.ImportCsv(reopened.GetDocument("persons"), csv).ChangedCells == 0 && !reopened.IsDirty,
             "上一版相同物理字段CSV不兼容");

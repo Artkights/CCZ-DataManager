@@ -55,12 +55,11 @@ public sealed partial class ExtendDataEditorPanel
         });
         var grid = SlotGrid([60, 0, 100, 120]);
         AddHeaders(grid, ["用途", "物品（输入名称或 ID 搜索）", "等级 / 数量", "等级条件"]);
-        var choices = _service.GetItemOptions();
         for (var slot = 0; slot < 8; slot++)
         {
             var index = slot;
             var prefix = $"材料{slot + 1}";
-            var id = IdInput(prefix + "ID", choices, ushort.MaxValue, $"ExtendForgeItem{slot}");
+            var id = IdInput(prefix + "ID", _service.GetItemOptions, ushort.MaxValue, $"ExtendForgeItem{slot}");
             var amount = new TextBox { Name = $"ExtendForgeAmount{slot}", Dock = DockStyle.Fill, Margin = new Padding(4, 5, 14, 5) };
             var exact = new CheckBox { Name = $"ExtendForgeExact{slot}", Text = "精确等级", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(4, 5, 4, 5) };
             var role = new Label { AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(4, 7, 4, 7), Name = $"ExtendForgeRole{slot}" };

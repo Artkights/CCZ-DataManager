@@ -1,0 +1,19 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <AssemblyName>攻击穿透范围管理器</AssemblyName>
+    <RootNamespace>RangeManager.App</RootNamespace>
+    <ApplicationIcon>..\DataManager.App\Assets\About\Doro-white.ico</ApplicationIcon>
+    <Version>1.2026.1111.1</Version>
+    <InformationalVersion>1.2026.1111.1</InformationalVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="..\DataManager.App\Assets\About\Doro-white.ico" LogicalName="RangeManager.App.Doro-white.ico" />
+    <ProjectReference Include="..\RangeManager.Components\RangeManager.Components.csproj" />
+  </ItemGroup>
+</Project>

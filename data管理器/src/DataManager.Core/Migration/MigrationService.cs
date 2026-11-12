@@ -63,6 +63,12 @@ public sealed class MigrationService
         {
             cancellationToken.ThrowIfCancellationRequested();
             progress?.Report(new("比较数据表", key, completedTables++, keys.Length));
+            if (key == StrategyEffectClassService.TableKey && source.ActiveProfile.ProfileId != target.ActiveProfile.ProfileId)
+            {
+                changes.Add(new MigrationChange(key, "策略效果索引", string.Empty, 0, null, null,
+                    MigrationChangeKind.Ignored, "效果类编号与引擎处理器绑定，跨版本迁移保留目标值。"));
+                continue;
+            }
             // These native pools/groups are compared by their dedicated parsers below.
             if (key is "effect-names" or "item-effect-names-low" or "item-effect-names-high" or "item-effect-names-66" or "job-series-accessory-groups") continue;
             var sourceHas = source.Documents.TryGetValue(key, out var sourceDocument);

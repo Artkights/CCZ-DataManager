@@ -86,8 +86,13 @@ public sealed partial class EngineEffectDetailPanel
     private bool ConfirmRiskyChanges(IWin32Window? owner)
     {
         var warnings = new List<string>();
-        if (_pendingSuffix is >= 7 and <= 0x14)
-            warnings.Add($"后缀改为 0x{_pendingSuffix:X2}（{EngineEffectSuffixLabels.Name(_pendingSuffix.Value)}，候选语义）。");
+        if (_pendingSuffix is { } suffix && suffix != 0)
+        {
+            var version = _report?.EngineVersion ?? _suffixVersion;
+            warnings.Add($"后缀改为 0x{suffix:X2}（{EngineEffectSuffixLabels.Name(version, suffix)}）。");
+            if (EngineEffectSuffixLabels.IsPatchExtension(version, suffix))
+                warnings.Add("0x0F 是 6.6xKF 补丁后缀（1=攻击、2=策略、3=ALL），不属于三基底通用后缀表。");
+        }
         foreach (var edit in _pendingCalls.Values)
         {
             var candidates = _row?.CallSiteDetails.Concat(_row.DerivedCallDetails)

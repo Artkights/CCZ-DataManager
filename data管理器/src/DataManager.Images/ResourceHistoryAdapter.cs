@@ -33,8 +33,8 @@ public sealed class ResourceHistoryAdapter(ResourceCatalogAdapter? resources = n
             if (profile.IsReadOnly) return new(false, "项目版本未确认，无法修改资源历史。");
             var service = ProjectImageHistory.PrepareForWrite(profile);
             profile = ProjectImageHistory.Canonicalize(profile);
-            var selected = service.List(profile).LastOrDefault(record => record.Id == operationId);
-            if (selected == null) return new(false, "找不到资源历史记录。");
+            Ccz.HistoryStorage.IHistoryRepository<ProjectProfile, HistoryRecord, HistoryRecord> repository = service;
+            var selected = repository.LoadOperation(profile, operationId);
             if (selected.Kind is MutationKind.Undo or MutationKind.Redo || selected.Targets.Count == 0 && selected.RenameTargets.Count == 0)
                 return new(false, "该记录是历史操作或没有文件快照，请选择原始资源修改记录。");
             ProjectImageHistory.ValidateRestore(profile, selected);

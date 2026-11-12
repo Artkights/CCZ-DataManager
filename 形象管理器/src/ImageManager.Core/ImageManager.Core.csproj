@@ -6,6 +6,7 @@
     <RootNamespace>ImageManager.Core</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\..\data管理器\src\HistoryStorage\HistoryStorage.csproj" />
     <Compile Include="..\Shared\SImageNumberingRules.cs" Link="Shared\SImageNumberingRules.cs" />
     <EmbeddedResource Include="Assets\Palettes\tsb" LogicalName="ImageManager.Core.Palettes.tsb" />
   </ItemGroup>

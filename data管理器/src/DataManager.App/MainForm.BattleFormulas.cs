@@ -1,4 +1,4 @@
-using DataManager.Core.Editing;
+﻿using DataManager.Core.Editing;
 using DataManager.Core.Scanner;
 
 namespace DataManager.App;
@@ -13,6 +13,7 @@ public sealed partial class MainForm
 
     private void InitializeBattleFormulaPanel()
     {
+        _battleFormulaPanel.CommitAllRequested = () => CommitPendingEdits().Saved;
         _battleFormulaPanel.StatusChanged += (_, e) => SetStatus(e.Message, e.Error);
         _battleFormulaPanel.PendingChangesChanged += (_, _) => RefreshDirtyState();
     }

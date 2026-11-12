@@ -1,13 +1,16 @@
-using System.Data;
+﻿using System.Data;
 using System.Globalization;
 using DataManager.Core.Domain;
 using DataManager.Core.Models;
+using Ccz.ManagerUi;
 
 namespace DataManager.App;
 
 public sealed partial class BusinessEditorPanel
 {
     private readonly List<Action> _entityRebinders = [];
+    private AbilityTierPanel? _tierEditor;
+    internal AbilityTierPanel? TierEditorForSmokeTest => _tierEditor is { IsDisposed: false } ? _tierEditor : null;
     private BusinessPageKind _compactLayoutKind;
     private string? _compactLayoutSignature;
     private IReadOnlyList<string> _compactTableKeys = [];
@@ -155,8 +158,6 @@ public sealed partial class BusinessEditorPanel
         content.Dock = DockStyle.None; content.Location = Point.Empty;
         viewport.Controls.Add(content); host.Controls.Add(viewport);
         var arranging = false;
-        var queued = false;
-        var handleGeneration = 0;
         bool IsReleasing()
         {
             if (content.IsDisposed || content.Disposing || viewport.IsDisposed || viewport.Disposing) return true;
@@ -171,7 +172,8 @@ public sealed partial class BusinessEditorPanel
             arranging = true;
             try
             {
-                var minimum = minimumSize();
+                var requested = minimumSize();
+                var minimum = new Size(Math.Max(requested.Width, MinimumContentWidth(content)), requested.Height);
                 // Solve both scrollbars from the borderless viewport's full
                 // bounds. Using its current ClientSize makes the content grow
                 // and shrink with a scrollbar while Windows is changing that
@@ -194,33 +196,69 @@ public sealed partial class BusinessEditorPanel
             }
             finally { arranging = false; }
         }
-        void QueueArrange()
+        var scheduler = new LayoutScheduler(viewport, Arrange);
+        content.FontChanged += (_, _) => scheduler.Request();
+        content.HandleCreated += (_, _) => scheduler.Request();
+        content.Layout += (_, args) =>
         {
-            if (queued || IsReleasing() || !viewport.IsHandleCreated) return;
-            queued = true;
-            var generation = handleGeneration;
-            viewport.BeginInvoke(() =>
+            if (args.AffectedProperty is "MinimumSize" or "Font" or "Parent") scheduler.Request();
+        };
+        return scheduler.Request;
+    }
+
+    // Percent columns must reserve their complete editors' width at the outer
+    // scroll viewport, rather than allowing an inner MinimumSize to overflow
+    // a narrower parent cell. This measures constraints, never current bounds.
+    private static int MinimumContentWidth(Control control)
+    {
+        if (control is RangePreviewPicker) return control.MinimumSize.Width;
+        var own = control.MinimumSize.Width;
+        if (control is NumericUpDown) return Math.Max(own, 64 * control.DeviceDpi / 96);
+        if (control is ComboBox or ByteTextEditor) return Math.Max(own, 96 * control.DeviceDpi / 96);
+        if (control.Controls.Count == 0 || control is TextBoxBase or ComboBox or NumericUpDown or ByteTextEditor)
+            return own;
+        if (control is TableLayoutPanel table && table.ColumnCount > 0)
+        {
+            var widths = new int[table.ColumnCount];
+            for (var column = 0; column < widths.Length; column++)
+                if (column < table.ColumnStyles.Count && table.ColumnStyles[column].SizeType == SizeType.Absolute)
+                    widths[column] = (int)Math.Ceiling(table.ColumnStyles[column].Width);
+            foreach (Control child in table.Controls)
             {
-                if (generation != handleGeneration) return;
-                queued = false;
-                if (IsReleasing() || !viewport.IsHandleCreated) return;
-                Arrange();
-            });
+                var column = table.GetColumn(child);
+                if (column < 0 || column >= widths.Length) continue;
+                var span = Math.Min(table.GetColumnSpan(child), widths.Length - column);
+                var needed = MinimumContentWidth(child) + child.Margin.Horizontal;
+                var present = widths.Skip(column).Take(span).Sum();
+                for (var offset = 0; needed > present && offset < span; offset++)
+                    widths[column + offset] += (needed - present + span - 1) / span;
+            }
+            var fixedWidth = Enumerable.Range(0, widths.Length).Where(column => column < table.ColumnStyles.Count &&
+                table.ColumnStyles[column].SizeType != SizeType.Percent).Sum(column => widths[column]);
+            var percentTotal = table.ColumnStyles.Cast<ColumnStyle>().Where(style => style.SizeType == SizeType.Percent).Sum(style => style.Width);
+            var required = widths.Sum();
+            for (var column = 0; column < widths.Length && column < table.ColumnStyles.Count; column++)
+            {
+                var style = table.ColumnStyles[column];
+                if (style.SizeType == SizeType.Percent && style.Width > 0)
+                    required = Math.Max(required, fixedWidth + (int)Math.Ceiling(widths[column] * percentTotal / style.Width));
+            }
+            return Math.Max(own, required + table.Padding.Horizontal);
         }
-        viewport.HandleDestroyed += (_, _) => { handleGeneration++; queued = false; };
-        viewport.SizeChanged += (_, _) => QueueArrange();
-        viewport.DpiChangedAfterParent += (_, _) => { Arrange(); QueueArrange(); };
-        content.FontChanged += (_, _) => { Arrange(); QueueArrange(); };
-        content.HandleCreated += (_, _) => { Arrange(); QueueArrange(); };
-        viewport.VisibleChanged += (_, _) => { if (viewport.Visible) { Arrange(); QueueArrange(); } };
-        Arrange();
-        return Arrange;
+        var children = control.Controls.Cast<Control>().Select(child => MinimumContentWidth(child) + child.Margin.Horizontal);
+        var width = control is FlowLayoutPanel { WrapContents: false } ? children.Sum() : children.DefaultIfEmpty(0).Max();
+        return Math.Max(own, width + control.Padding.Horizontal);
     }
 
     private static int[] FieldRowMinimums(TableLayoutPanel table) => Enumerable.Range(0, table.RowCount)
         .Select(row => Math.Max(Math.Max(table.Font.Height + 14, 30 * table.DeviceDpi / 96),
             table.Controls.Cast<Control>().Where(control => table.GetRow(control) == row)
-                .Select(control => control.MinimumSize.Height + control.Margin.Vertical).DefaultIfEmpty(0).Max())).ToArray();
+                .Select(control => Math.Max(control.MinimumSize.Height, control switch
+                {
+                    ComboBox combo => combo.PreferredHeight,
+                    NumericUpDown numeric => numeric.PreferredHeight,
+                    _ => 0
+                }) + control.Margin.Vertical).DefaultIfEmpty(0).Max())).ToArray();
 
     private static void FitFieldRows(TableLayoutPanel table)
     {
@@ -274,6 +312,8 @@ public sealed partial class BusinessEditorPanel
                 }
                 foreach (var fit in editorFitters) fit();
                 var editorMinimum = TextRenderer.MeasureText("255：空物品槽", form.Font, Size.Empty, TextFormatFlags.SingleLine | TextFormatFlags.NoPadding).Width + SystemInformation.VerticalScrollBarWidth + 12;
+                editorMinimum = Math.Max(editorMinimum, form.Controls.Cast<Control>().Where(control => form.GetColumn(control) == 1)
+                    .Select(control => MinimumContentWidth(control) + control.Margin.Horizontal).DefaultIfEmpty(0).Max());
                 columnMinimums[columnIndex] = new Size((int)form.ColumnStyles[0].Width + editorMinimum + form.Margin.Horizontal + 8,
                     FieldRowMinimums(form).Sum());
                 FitFieldRows(form);
@@ -281,10 +321,11 @@ public sealed partial class BusinessEditorPanel
                 }
                 finally { fitting = false; }
             }
-            form.SizeChanged += (_, _) => FitLabelColumn();
-            form.FontChanged += (_, _) => FitLabelColumn();
-            form.HandleCreated += (_, _) => FitLabelColumn();
-            form.VisibleChanged += (_, _) => { if (form.Visible) FitLabelColumn(); };
+            // Final row measurement must run after TableLayoutPanel has
+            // finished changing bounds. Measuring synchronously in
+            // SizeChanged leaves its previous stretched row cached.
+            var fieldLayouts = new LayoutScheduler(form, FitLabelColumn);
+            RegisterViewLayout(form, fieldLayouts.Request);
             body.Controls.Add(form, column, 0);
             for (var index = 0; index < perColumn; index++)
             {
@@ -322,13 +363,40 @@ public sealed partial class BusinessEditorPanel
                     AutoSize = false, Margin = new Padding(0, 0, 5, 0) };
                 editor.Margin = new Padding(0, 3, 3, 3);
                 form.Controls.Add(label, 0, index); form.Controls.Add(editor, 1, index);
-                if (editor is ByteTextEditor) editor.SizeChanged += (_, _) => FitLabelColumn();
+                if (editor is ByteTextEditor) editor.SizeChanged += (_, _) => fieldLayouts.Request();
                 if (!binding.Document.Definition.IsWriteSupported)
                     _diagnosticTips.SetToolTip(editor, "只读：" + binding.Document.Definition.CapabilityEvidence);
             }
-            FitLabelColumn();
+            fieldLayouts.Request();
         }
         return group;
+    }
+
+    private sealed class AlignedFieldsGrid : TableLayoutPanel
+    {
+        private bool _centering;
+
+        protected override void OnLayout(LayoutEventArgs e)
+        {
+            base.OnLayout(e);
+            if (_centering) return;
+            _centering = true;
+            SuspendLayout();
+            try
+            {
+                var heights = GetRowHeights();
+                foreach (Control editor in Controls)
+                {
+                    if (editor is Label || editor.Dock != DockStyle.None) continue;
+                    var row = GetRow(editor);
+                    if (row < 0 || row >= heights.Length) continue;
+                    var top = heights.Take(row).Sum() + editor.Margin.Top +
+                        Math.Max(0, (heights[row] - editor.Margin.Vertical - editor.Height) / 2);
+                    if (editor.Top != top) editor.Top = top;
+                }
+            }
+            finally { ResumeLayout(false); _centering = false; }
+        }
     }
 
     /// <summary>
@@ -337,10 +405,10 @@ public sealed partial class BusinessEditorPanel
     /// labels in a predictable left-to-right order instead.
     /// </summary>
     private Control FieldsGridBlock(string title, IReadOnlyList<(FieldBinding? Left, FieldBinding? Right)> rows,
-        int labelWidth = 88, int textHeight = 64)
+        int labelWidth = 88, int textHeight = 64, bool stretchRows = true)
     {
         var group = SectionContainer(title);
-        var body = new TableLayoutPanel
+        var body = new AlignedFieldsGrid
         {
             Dock = DockStyle.Fill,
             ColumnCount = 4,
@@ -354,10 +422,9 @@ public sealed partial class BusinessEditorPanel
         body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         for (var row = 0; row < Math.Max(1, rows.Count); row++)
             body.RowStyles.Add(new RowStyle(SizeType.Percent, 100f / Math.Max(1, rows.Count)));
-        var arrangeRows = AttachScrollableContent(group, body, () => new Size((int)(body.ColumnStyles[0].Width + body.ColumnStyles[2].Width) +
-            2 * (TextRenderer.MeasureText("255：九宫", body.Font, Size.Empty, TextFormatFlags.SingleLine | TextFormatFlags.NoPadding).Width + SystemInformation.VerticalScrollBarWidth + 12),
-            FieldRowMinimums(body).Sum()));
-        body.SizeChanged += (_, _) => FitFieldRows(body);
+        var arrangeRows = AttachScrollableContent(group, body, () => new Size(MinimumContentWidth(body), FieldRowMinimums(body).Sum()));
+        var editorFitters = new List<Action>();
+        var fitting = false;
 
         var leftLabels = rows.Select(row => row.Left == null ? string.Empty : row.Left.Label ??
             ItemFieldLabel(row.Left.Document, row.Left.RowIndex, row.Left.Field.Name) ??
@@ -368,16 +435,61 @@ public sealed partial class BusinessEditorPanel
 
         void FitLabels()
         {
+            if (fitting || body.IsDisposed || body.Disposing) return;
+            fitting = true;
+            try
+            {
             var leftWidth = leftLabels.Where(label => label.Length > 0)
                 .Select(label => TextRenderer.MeasureText(label, body.Font, Size.Empty, TextFormatFlags.SingleLine).Width + 8)
                 .DefaultIfEmpty(labelWidth).Max();
             var rightWidth = rightLabels.Where(label => label.Length > 0)
                 .Select(label => TextRenderer.MeasureText(label, body.Font, Size.Empty, TextFormatFlags.SingleLine).Width + 8)
                 .DefaultIfEmpty(labelWidth).Max();
-            body.ColumnStyles[0].Width = Math.Max(labelWidth * body.DeviceDpi / 96f, leftWidth);
-            body.ColumnStyles[2].Width = Math.Max(labelWidth * body.DeviceDpi / 96f, rightWidth);
-            FitFieldRows(body);
+            var desiredLeft = Math.Max(labelWidth * body.DeviceDpi / 96f, leftWidth);
+            var desiredRight = Math.Max(labelWidth * body.DeviceDpi / 96f, rightWidth);
+            if (body.ColumnStyles[0].Width != desiredLeft) body.ColumnStyles[0].Width = desiredLeft;
+            if (body.ColumnStyles[2].Width != desiredRight) body.ColumnStyles[2].Width = desiredRight;
+            foreach (var fit in editorFitters) fit();
+            for (var row = 0; row < body.RowCount; row++)
+            {
+                var first = body.GetControlFromPosition(1, row);
+                var second = body.GetControlFromPosition(3, row);
+                if (first == null || second == null || ReferenceEquals(first, second)) continue;
+                static int HintHeight(Control editor) => editor is ByteTextEditor bytes
+                    ? Math.Max(0, editor.Height - bytes.Editor.PreferredHeight) : 0;
+                var hint = Math.Max(HintHeight(first), HintHeight(second));
+                foreach (var (editor, labelColumn) in new[] { (first, 0), (second, 2) })
+                {
+                    var margin = new Padding(0, 3, 3, 3 + hint - HintHeight(editor));
+                    if (editor.Margin != margin) editor.Margin = margin;
+                    if (body.GetControlFromPosition(labelColumn, row) is Label label && label.Padding.Bottom != hint)
+                        label.Padding = new Padding(0, 0, 0, hint);
+                }
+            }
+            var minimums = FieldRowMinimums(body);
+            var spare = stretchRows ? Math.Max(0, body.ClientSize.Height - minimums.Sum()) : 0;
+            for (var row = 0; row < minimums.Length; row++)
+            {
+                var height = minimums[row] + spare / minimums.Length + (row < spare % minimums.Length ? 1 : 0);
+                if (body.RowStyles[row].SizeType != SizeType.Absolute) body.RowStyles[row].SizeType = SizeType.Absolute;
+                if (body.RowStyles[row].Height != height) body.RowStyles[row].Height = height;
+            }
+            body.PerformLayout();
+            if (!stretchRows)
+            {
+                var minimum = new Size(0, minimums.Sum() + group.Padding.Vertical);
+                if (group.MinimumSize != minimum) group.MinimumSize = minimum;
+            }
+            arrangeRows();
+            }
+            finally { fitting = false; }
         }
+
+        // Native row/column assignment, inherited fonts and ByteTextEditor's
+        // byte-budget layout settle after SizeChanged. Measure them together
+        // on the next message instead of changing RowStyles inside that event.
+        var fieldLayouts = new LayoutScheduler(body, FitLabels);
+        RegisterViewLayout(body, fieldLayouts.Request);
 
         void AddField(FieldBinding? binding, string labelText, int labelColumn, int editorColumn, int row)
         {
@@ -398,7 +510,9 @@ public sealed partial class BusinessEditorPanel
                     editor.Height = textHeight;
                 }
             }
-            editor.Dock = DockStyle.Fill;
+            var multiline = text is { Multiline: true };
+            editor.Dock = multiline || editor is RangePreviewPicker ? DockStyle.Fill : DockStyle.None;
+            if (editor.Dock == DockStyle.None) editor.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             editor.Margin = new Padding(0, 3, 3, 3);
             var label = new Label
             {
@@ -410,7 +524,55 @@ public sealed partial class BusinessEditorPanel
             };
             body.Controls.Add(label, labelColumn, row);
             body.Controls.Add(editor, editorColumn, row);
-            if (editor is ByteTextEditor) editor.SizeChanged += (_, _) => { FitFieldRows(body); arrangeRows(); };
+            void FitEditor()
+            {
+                if (editor.IsDisposed) return;
+                if (editor is ByteTextEditor bytes && !multiline)
+                {
+                    editor.Height = bytes.GetPreferredSize(new Size(Math.Max(1, editor.Width), 0)).Height;
+                    // The caption belongs to the text entry, while the byte
+                    // and encoding hints sit beneath the entry.
+                    var bottom = Math.Max(0, editor.Height - bytes.Editor.PreferredHeight);
+                    if (label.Padding.Bottom != bottom) label.Padding = new Padding(0, 0, 0, bottom);
+                }
+                else if (editor is FlowLayoutPanel flags)
+                {
+                    flags.AutoSize = false;
+                    // Measure against the final grid cell, not the stale control
+                    // width from before the label columns were fitted. Otherwise
+                    // a wrapped flag row can be one line short and clip its
+                    // second line at some window widths.
+                    var cell = body.GetCellPosition(flags);
+                    var width = body.GetColumnWidths().Skip(cell.Column)
+                        .Take(body.GetColumnSpan(flags)).Sum() - flags.Margin.Horizontal;
+                    var height = Math.Max(flags.Font.Height + 8,
+                        flags.GetPreferredSize(new Size(Math.Max(1, width), 0)).Height);
+                    if (flags.Height != height) flags.Height = height;
+                    if (flags.MinimumSize.Height != height) flags.MinimumSize = new Size(0, height);
+                }
+                else if (editor is NumericUpDown numeric)
+                {
+                    var minimum = new Size(numeric.MinimumSize.Width, numeric.PreferredHeight);
+                    if (numeric.MinimumSize != minimum) numeric.MinimumSize = minimum;
+                    editor.Height = numeric.PreferredHeight;
+                }
+                else if (editor is ComboBox combo)
+                {
+                    // TableLayoutPanel asks GetPreferredSize, whose cached
+                    // result can be smaller than ComboBox's native height.
+                    // Reserve that native height in the cell as well.
+                    var minimum = new Size(combo.MinimumSize.Width, combo.PreferredHeight);
+                    if (combo.MinimumSize != minimum) combo.MinimumSize = minimum;
+                    editor.Height = combo.PreferredHeight;
+                }
+            }
+            editorFitters.Add(FitEditor);
+            editor.FontChanged += (_, _) => fieldLayouts.Request();
+            editor.SizeChanged += (_, _) => fieldLayouts.Request();
+            editor.Layout += (_, args) =>
+            {
+                if (args.AffectedProperty == "MinimumSize") fieldLayouts.Request();
+            };
             if (!binding.Document.Definition.IsWriteSupported)
                 _diagnosticTips.SetToolTip(editor, "只读：" + binding.Document.Definition.CapabilityEvidence);
         }
@@ -432,11 +594,7 @@ public sealed partial class BusinessEditorPanel
                 AddField(rows[row].Right, rightLabels[row], 2, 3, row);
             }
         }
-        body.FontChanged += (_, _) => FitLabels();
-        FitFieldRows(body);
-        body.HandleCreated += (_, _) => FitLabels();
-        body.VisibleChanged += (_, _) => { if (body.Visible) FitLabels(); };
-        FitLabels();
+        fieldLayouts.Request();
         return group;
     }
 
@@ -445,8 +603,11 @@ public sealed partial class BusinessEditorPanel
         var page = DetailPage("人物详情");
         var root = Rows((SizeType.Percent, 43), (SizeType.Percent, 57));
         root.Name = "PersonPageContent";
-        AttachScrollableContent(page, root, () => new Size(0,
-            Math.Max(450 * root.DeviceDpi / 96, (root.Font.Height + 14) * 15)));
+        var stacked = false;
+        var stackedTopHeight = 0;
+        var requestExtent = AttachScrollableContent(page, root, () => new Size(0, stacked
+            ? stackedTopHeight + Math.Max(200 * root.DeviceDpi / 96, (root.Font.Height + 12) * 6)
+            : Math.Max(450 * root.DeviceDpi / 96, (root.Font.Height + 14) * 15)));
         var top = Columns(58, 42);
         root.Controls.Add(top, 0, 0);
         var hidden = new HashSet<string>(["Army", "暴击台词", "撤退台词", "级别", "经验", "头像"], StringComparer.Ordinal);
@@ -459,6 +620,62 @@ public sealed partial class BusinessEditorPanel
         top.Controls.Add(basic, 0, 0);
         var previews = CreateCompactPreviewSurface();
         top.Controls.Add(previews, 1, 0);
+        // At smaller windows, keep all three image selectors visible in one
+        // row above the basic fields. Measure the viewport, not the scrollable
+        // content whose previous minimum width may already be wider than it.
+        void ArrangePersonColumns()
+        {
+            if (top.IsDisposed || top.Disposing || _disposingDetailPages || _releaseCompleted) return;
+            var available = root.Parent?.ClientSize.Width ?? root.ClientSize.Width;
+            var wideMinimum = Math.Max((int)Math.Ceiling(MinimumContentWidth(basic) / .58),
+                (int)Math.Ceiling(MinimumContentWidth(previews) / .42));
+            var nextStacked = available < wideMinimum;
+            var previewHeight = Math.Max(170 * root.DeviceDpi / 96, root.Font.Height * 2 + 100 * root.DeviceDpi / 96);
+            var basicHeight = Math.Max(220 * root.DeviceDpi / 96, (root.Font.Height + 12) * 6 + root.Font.Height * 2);
+            stackedTopHeight = previewHeight + basicHeight;
+            if (stacked != nextStacked || top.ColumnCount != (nextStacked ? 1 : 2))
+            {
+                top.SuspendLayout(); root.SuspendLayout();
+                try
+                {
+                    stacked = nextStacked;
+                    top.ColumnStyles.Clear(); top.RowStyles.Clear();
+                    top.ColumnCount = stacked ? 1 : 2; top.RowCount = stacked ? 2 : 1;
+                    top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, stacked ? 100 : 58));
+                    if (stacked)
+                    {
+                        top.RowStyles.Add(new RowStyle(SizeType.Absolute, previewHeight));
+                        top.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+                        top.SetCellPosition(previews, new TableLayoutPanelCellPosition(0, 0));
+                        top.SetCellPosition(basic, new TableLayoutPanelCellPosition(0, 1));
+                    }
+                    else
+                    {
+                        top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42));
+                        top.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+                        top.SetCellPosition(basic, new TableLayoutPanelCellPosition(0, 0));
+                        top.SetCellPosition(previews, new TableLayoutPanelCellPosition(1, 0));
+                    }
+                    root.RowStyles[0].SizeType = stacked ? SizeType.Absolute : SizeType.Percent;
+                    root.RowStyles[1].SizeType = SizeType.Percent;
+                    root.RowStyles[1].Height = stacked ? 100 : 57;
+                }
+                finally { root.ResumeLayout(true); top.ResumeLayout(true); }
+            }
+            if (stacked)
+            {
+                if (root.RowStyles[0].Height != stackedTopHeight) root.RowStyles[0].Height = stackedTopHeight;
+                if (top.RowStyles[0].Height != previewHeight) top.RowStyles[0].Height = previewHeight;
+            }
+            else if (root.RowStyles[0].Height != 43) root.RowStyles[0].Height = 43;
+            requestExtent();
+        }
+        var personColumnsLayout = new LayoutScheduler(top, ArrangePersonColumns);
+        root.Parent!.ClientSizeChanged += (_, _) => personColumnsLayout.Request();
+        root.FontChanged += (_, _) => personColumnsLayout.Request();
+        root.DpiChangedAfterParent += (_, _) => personColumnsLayout.Request();
+        top.HandleCreated += (_, _) => personColumnsLayout.Request();
+        personColumnsLayout.Request();
         var lower = Columns(45, 55);
         root.Controls.Add(lower, 0, 1);
         var biography = FieldsBlock(string.Empty, Fields("person-biography").Select(binding => binding with { Label = "列传" }), 1, 42, 125);
@@ -509,8 +726,10 @@ public sealed partial class BusinessEditorPanel
     private void BuildJobPage()
     {
         var page = DetailPage("兵种详情");
-        var columns = Columns(68, 32);
-        AttachScrollableContent(page, columns, () => new Size(0, (columns.Font.Height + 14) * 17));
+        var columns = Columns(60, 40);
+        // Each existing field section owns its scrollbars. Keep the global
+        // learning/tier column inside the visible page at every window size.
+        page.Controls.Add(columns);
         var leftBody = Columns(80, 20);
         columns.Controls.Add(leftBody, 0, 0);
         var left = Rows((SizeType.Percent, 45), (SizeType.Percent, 16), (SizeType.Percent, 39));
@@ -536,8 +755,17 @@ public sealed partial class BusinessEditorPanel
         left.Controls.Add(FieldsBlock(string.Empty, Fields("detailed-job-description").Select(binding => binding with { Label = "介绍" }), 1, 42, 34), 0, 1);
         left.Controls.Add(EquipmentChecks(), 0, 2);
         var learning = SectionContainer("习得策略");
-        columns.Controls.Add(learning, 1, 0);
+        var right = GrowthEditorLayout.TwoEqualRows();
+        right.Name = "JobLearningAndTiers";
+        columns.Controls.Add(right, 1, 0);
+        right.Controls.Add(learning, 0, 0);
         AddJobLearningTab(_id, learning);
+        _tierEditor = new AbilityTierPanel();
+        _tierEditor.PendingChangesChanged += (_, _) => NotifyPendingChanges();
+        _tierEditor.Bind(EngineGrowthDraftService.For(_workspace));
+        right.Controls.Add(_tierEditor, 0, 1);
+        _flushers.Add(_tierEditor.Flush);
+        _pendingChecks.Add(() => _tierEditor is { IsDisposed: false, HasPendingInput: true });
     }
 
     private Control EquipmentChecks()
@@ -709,17 +937,39 @@ public sealed partial class BusinessEditorPanel
     {
         var page = DetailPage("策略详情");
         var columns = Columns(76, 24);
-        AttachScrollableContent(page, columns, () => new Size(0, (columns.Font.Height + 14) * 18));
-        var left = Rows((SizeType.Percent, 60), (SizeType.Percent, 22), (SizeType.Percent, 18)); columns.Controls.Add(left, 0, 0);
+        columns.Name = "StrategyPageContent";
+        var left = Rows((SizeType.Absolute, 0), (SizeType.Absolute, 0), (SizeType.Absolute, 0),
+            (SizeType.Absolute, 0), (SizeType.Percent, 100));
+        left.Name = "StrategyContentRows";
+        columns.Controls.Add(left, 0, 0);
+        var arrangeStrategy = AttachScrollableContent(page, columns, () => new Size(0,
+            left.Controls.Cast<Control>().Sum(control => control.MinimumSize.Height + control.Margin.Vertical) + left.Padding.Vertical));
+        void FitStrategySections()
+        {
+            for (var row = 0; row < 4; row++)
+            {
+                var section = left.GetControlFromPosition(0, row);
+                var height = section == null ? 0 : section.MinimumSize.Height + section.Margin.Vertical;
+                if (left.RowStyles[row].Height != height) left.RowStyles[row].Height = height;
+            }
+            arrangeStrategy();
+        }
+        var strategyLayouts = new LayoutScheduler(left, FitStrategySections);
+        left.Layout += (_, args) =>
+        {
+            if (args.AffectedProperty is "MinimumSize" or "Font" or "Parent") strategyLayouts.Request();
+        };
+        RegisterViewLayout(left, strategyLayouts.Request);
         var keys = _business.GetAvailableTableKeys(BusinessPageKind.Strategies)
             .Where(key => key is not ("strategy-description" or "strategy-terrain-availability"));
         var fields = keys.SelectMany(Fields).Where(binding => !IsLearningField(binding.Field.Name))
             .Select(binding => binding.Field.Name == "动画ID" ? binding with { Label = binding.Document.Definition.Key == "strategy-big-animation" ? "大动画" : "小动画" } : binding);
         var allFields = fields.ToArray();
-        var settings = allFields.Where(binding => GetFlags(binding.Document.Definition.Key, binding.Field.Name) == null).ToArray();
+        var effectClass = allFields.FirstOrDefault(binding => binding.Document.Definition.Key == "strategy-effect-class");
+        var settings = allFields.Where(binding => binding.Document.Definition.Key != "strategy-effect-class" &&
+            GetFlags(binding.Document.Definition.Key, binding.Field.Name) == null).ToArray();
         var rangeFields = settings.Where(binding => binding.Field.Name is "施法范围" or "穿透范围").ToArray();
         var otherSettings = settings.Where(binding => binding.Field.Name is not ("施法范围" or "穿透范围")).ToArray();
-        var strategyTop = Rows((SizeType.Percent, 24), (SizeType.Percent, 76));
         var rangePair = new (FieldBinding? Left, FieldBinding? Right)[]
         {
             (rangeFields.FirstOrDefault(binding => binding.Field.Name == "施法范围"),
@@ -734,11 +984,66 @@ public sealed partial class BusinessEditorPanel
                 return (pair.ElementAtOrDefault(0), pair.ElementAtOrDefault(1));
             })
             .ToArray();
-        strategyTop.Controls.Add(FieldsGridBlock("施展范围", rangePair, 88), 0, 0);
-        strategyTop.Controls.Add(FieldsGridBlock("策略设定", settingRows, 88), 0, 1);
-        left.Controls.Add(strategyTop, 0, 0);
-        left.Controls.Add(FieldsBlock("效果与拓展", allFields.Where(binding => GetFlags(binding.Document.Definition.Key, binding.Field.Name) != null), 1, 88), 0, 1);
-        left.Controls.Add(FieldsBlock("策略说明", Fields("strategy-description").Select(binding => binding with { Label = "说明" }), 1, 42, 90), 0, 2);
+        var ranges = FieldsGridBlock("施展范围", rangePair, 88, stretchRows: false);
+        ranges.Name = "StrategyRangeFields";
+        left.Controls.Add(ranges, 0, 0);
+        var configuration = FieldsGridBlock("策略设定", settingRows, 88, stretchRows: false);
+        configuration.Name = "StrategyConfigurationFields";
+        left.Controls.Add(configuration, 0, 1);
+        var flags = allFields.Where(binding => GetFlags(binding.Document.Definition.Key, binding.Field.Name) != null)
+            .Select(binding => ((FieldBinding?)binding, (FieldBinding?)null)).ToArray();
+        var flagFields = FieldsGridBlock("效果与拓展", flags, 88, stretchRows: false);
+        flagFields.Name = "StrategyTypeAndExtensionFields";
+        left.Controls.Add(flagFields, 0, 2);
+        if (effectClass != null)
+        {
+            var effectFields = FieldsGridBlock(string.Empty,
+                [(effectClass with { Label = "效果索引" }, null)], 88, stretchRows: false);
+            effectFields.Name = "StrategyEffectClassField";
+            left.Controls.Add(effectFields, 0, 3);
+        }
+        else
+        {
+            var effectFields = SectionContainer(string.Empty);
+            effectFields.Name = "StrategyEffectClassField";
+            var body = new AlignedFieldsGrid { ColumnCount = 4, RowCount = 1, Margin = Padding.Empty, Padding = Padding.Empty };
+            body.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 88));
+            body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            body.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 88));
+            body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            body.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+            var label = new Label { Text = "效果索引", Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft,
+                Margin = new Padding(0, 0, 5, 0) };
+            var combo = new ComboBox { Enabled = false, DropDownStyle = ComboBoxStyle.DropDownList,
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right, Margin = new Padding(0, 3, 3, 3) };
+            body.Controls.Add(label, 0, 0); body.Controls.Add(combo, 1, 0); body.SetColumnSpan(combo, 3);
+            var arrange = AttachScrollableContent(effectFields, body, () => new Size(MinimumContentWidth(body), FieldRowMinimums(body).Sum()));
+            var layouts = new LayoutScheduler(body, () =>
+            {
+                var inputMinimum = new Size(combo.MinimumSize.Width, combo.PreferredHeight);
+                if (combo.MinimumSize != inputMinimum) combo.MinimumSize = inputMinimum;
+                var width = Math.Max(88 * body.DeviceDpi / 96f, TextRenderer.MeasureText(label.Text, body.Font).Width + 8);
+                if (body.ColumnStyles[0].Width != width) body.ColumnStyles[0].Width = width;
+                var height = FieldRowMinimums(body)[0];
+                if (body.RowStyles[0].Height != height) body.RowStyles[0].Height = height;
+                var minimum = new Size(0, height + effectFields.Padding.Vertical);
+                if (effectFields.MinimumSize != minimum) effectFields.MinimumSize = minimum;
+                arrange();
+            });
+            RegisterViewLayout(body, layouts.Request);
+            left.Controls.Add(effectFields, 0, 3);
+        }
+        var description = FieldsBlock("策略说明", Fields("strategy-description").Select(binding => binding with { Label = "说明" }), 1, 42, 90);
+        description.Name = "StrategyDescriptionField";
+        void MeasureDescription()
+        {
+            var minimum = new Size(0, Math.Max(120 * description.DeviceDpi / 96, (description.Font.Height + 14) * 4));
+            if (description.MinimumSize != minimum) description.MinimumSize = minimum;
+            arrangeStrategy();
+        }
+        var descriptionLayouts = new LayoutScheduler(description, MeasureDescription);
+        RegisterViewLayout(description, descriptionLayouts.Request);
+        left.Controls.Add(description, 0, 4);
         columns.Controls.Add(CreateCompactPreviewSurface(), 1, 0);
         var learning = DetailPage("兵种学习等级");
         var learningColumns = Columns(25, 25, 25, 25); learning.Controls.Add(learningColumns);
@@ -776,22 +1081,51 @@ public sealed partial class BusinessEditorPanel
 
     private static string TerrainName(int index) => index < TerrainNames.Count ? TerrainNames[index] : "未确认";
     private static string TerrainLabel(int index) => $"{index}：{TerrainName(index)}";
-    private static IReadOnlyList<IdNameOption>? JobAttributeOptions(int attribute) => attribute switch
+    private IReadOnlyList<IdNameOption>? JobAttributeOptions(TableDocument document, int attribute,
+        TableFieldDefinition field)
     {
-        0 => [new(0, "马蹄声"), new(1, "车轮声"), new(2, "脚步声"), new(3, "无声"), new(4, "引擎声"), new(5, "预设1"), new(6, "预设2")],
-        1 => [new(0, "快速"), new(1, "慢速")],
-        2 => [new(0, "剑"), new(1, "其他"), new(2, "爆炸1"), new(3, "爆炸2"), new(4, "火箭筒"), new(5, "枪声（连射）"), new(6, "枪声（点射）"), new(7, "火焰喷射"), new(8, "毒气喷射")],
-        3 => [new(0, "否"), new(1, "是")],
-        4 => [new(0, "无延迟"), new(1, "有延迟")],
-        5 => [new(0, "全能"), new(1, "文官"), new(2, "武将")],
-        7 => [new(0, "不参与"), new(1, "参与")],
-        _ => null
-    };
+        var choices = attribute switch
+        {
+            0 => new[] { new IdNameOption(0, "马蹄声"), new IdNameOption(1, "车轮声"), new IdNameOption(2, "脚步声"), new IdNameOption(3, "无声"), new IdNameOption(4, "引擎声"), new IdNameOption(5, "预设1"), new IdNameOption(6, "预设2") },
+            1 => new[] { new IdNameOption(0, "快速"), new IdNameOption(1, "慢速") },
+            2 => new[] { new IdNameOption(0, "剑"), new IdNameOption(1, "其他"), new IdNameOption(2, "爆炸1"), new IdNameOption(3, "爆炸2"), new IdNameOption(4, "火箭筒"), new IdNameOption(5, "枪声（连射）"), new IdNameOption(6, "枪声（点射）"), new IdNameOption(7, "火焰喷射"), new IdNameOption(8, "毒气喷射") },
+            3 => new[] { new IdNameOption(0, "否"), new IdNameOption(1, "是") },
+            4 => new[] { new IdNameOption(0, "无延迟"), new IdNameOption(1, "有延迟") },
+            5 => new[] { new IdNameOption(0, "全能"), new IdNameOption(1, "文官"), new IdNameOption(2, "武将") },
+            7 => new[] { new IdNameOption(0, "不参与"), new IdNameOption(1, "参与") },
+            _ => []
+        };
+        var minimum = field.Minimum;
+        var maximum = field.Maximum;
+        var result = choices.Where(option => option.Id >= minimum && option.Id <= maximum).ToList();
+        if (TryReadInt(document, attribute, field.Name) is { } current &&
+            current >= minimum && current <= maximum && result.All(option => option.Id != current))
+            result.Add(new IdNameOption(current, $"基底属性值 {current}（未确认）"));
+        return result.Count == 0 && TryReadInt(document, attribute, field.Name) == null ? null : result;
+    }
 
-    private IReadOnlyList<IdNameOption> ItemEffectOptions()
+    private IReadOnlyList<IdNameOption> ItemEffectOptions(TableDocument? document = null, TableFieldDefinition? field = null)
     {
-        try { return new EffectNamePoolService().Read(_workspace, EffectNameChannel.Item).Where(item => item.EffectId != 255)
-            .Select(item => new IdNameOption(item.EffectId, item.Name)).Append(new IdNameOption(255, "无")).ToArray(); }
-        catch { return [new(255, "无")]; }
+        var options = new List<IdNameOption>();
+        try
+        {
+            options.AddRange(new EffectNamePoolService().Read(_workspace, EffectNameChannel.Item)
+                .Where(item => item.EffectId != 255)
+                .Select(item => new IdNameOption(item.EffectId, item.Name)));
+        }
+        catch { }
+        if (field == null || field.Minimum <= 255 && field.Maximum >= 255)
+            options.Add(new IdNameOption(255, "无"));
+        if (document != null && field != null && document.Data.Columns.Contains(field.Name))
+        {
+            var known = options.Select(option => option.Id).ToHashSet();
+            foreach (DataRow row in document.Data.Rows)
+            {
+                if (row.RowState == DataRowState.Deleted || !int.TryParse(Convert.ToString(row[field.Name], CultureInfo.InvariantCulture), out var value) ||
+                    value < field.Minimum || value > field.Maximum || !known.Add(value)) continue;
+                options.Add(new IdNameOption(value, $"基底特效 {value}（未确认）"));
+            }
+        }
+        return options.OrderBy(option => option.Id).ToArray();
     }
 }

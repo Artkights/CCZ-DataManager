@@ -6,6 +6,7 @@ public sealed record WorkbookCellChange(string Sheet, string Cell, string Id, st
 public sealed class PageWorkbookImportPreview
 {
     public IReadOnlyList<WorkbookCellChange> Changes { get; internal init; } = [];
+    public IReadOnlyList<string> Warnings { get; internal init; } = [];
     public int ChangedCells => Changes.Count;
     internal string ProjectIdentity { get; init; } = "";
     internal DataManager.Core.Domain.BusinessPageKind Page { get; init; }

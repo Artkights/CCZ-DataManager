@@ -98,13 +98,14 @@ internal static class CreationHistoryTests
             var change = ExistenceChange($"journal-{create}-{redo}.e5", create);
             var entry = Entry([change]); entry.Status = redo ? HistoryStatus.Reverted : HistoryStatus.Active;
             PutState(root, change, after: !redo); store.Append(root, entry);
-            // FileShare.Read allows Load but denies the final atomic manifest replacement.
-            using (var locked = new FileStream(Path.Combine(store.GetRoot(root), "manifest.jsonl"), FileMode.Open, FileAccess.Read, FileShare.Read))
+            // The Prepare is durable first; lock the real ledger only at final state commit.
+            using (HistoryV3TestSupport.LockAtAppend("RestoreCommit"))
             {
                 var result = redo ? Redo(store, root, entry) : Undo(store, root, entry);
                 TestSupport.Assert(!result.Success, "历史持久化占用未触发失败");
                 AssertState(root, change, after: !redo, "历史持久化失败回滚");
             }
+            store.Recover(root);
         }
     });
 

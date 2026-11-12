@@ -21,14 +21,16 @@ public static class ProjectImageHistory
     }
 
     public static HistoryService Create(ProjectProfile profile)
-        => new(ProjectHistoryPaths.GetImageRoot(profile.RootPath));
+        => new(ProjectHistoryPaths.GetImageRoot(profile.RootPath),
+            Path.Combine(ProjectHistoryPaths.GetProjectStorageRoot(profile.RootPath), "history-v3", "blobs"));
 
     public static IReadOnlyList<HistoryRecord> List(ProjectProfile profile)
     {
         var canonical = Canonicalize(profile);
         var service = Create(canonical);
         var current = Path.Combine(service.BackupRoot(canonical), "History", "history.jsonl");
-        if (File.Exists(current)) return service.List(canonical);
+        Ccz.HistoryStorage.IHistoryRepository<ProjectProfile, HistoryRecord, HistoryRecord> repository = service;
+        if (service.HasHistory(canonical)) return repository.ListMetadata(canonical);
         return LegacyRecords(profile).Select(item => item.Record).ToArray();
     }
 
@@ -48,7 +50,7 @@ public static class ProjectImageHistory
         var journal = Path.Combine(destination, "History", "history.jsonl");
         lock (Gate)
         {
-            if (File.Exists(journal)) return service;
+            if (service.HasHistory(canonical)) return service;
             var records = LegacyRecords(profile).ToArray();
             if (records.Length == 0) return service;
             var temporary = destination + ".import-" + Guid.NewGuid().ToString("N");
@@ -119,7 +121,7 @@ public static class ProjectImageHistory
         {
             var canonical = Canonicalize(profile);
             var root = Create(canonical).BackupRoot(canonical);
-            var current = File.Exists(Path.Combine(root, "History", "history.jsonl"));
+            var current = Create(canonical).HasHistory(canonical);
             ValidateTargets(profile, record, current ? root : null);
             return true;
         }

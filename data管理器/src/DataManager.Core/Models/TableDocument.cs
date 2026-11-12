@@ -10,6 +10,9 @@ public sealed class TableDocument
     private Dictionary<string, object?[]> _originalValues = new(StringComparer.Ordinal);
     private bool? _dirtyCache;
     private bool _observingChanges;
+    private long _revision;
+    public long Revision => _revision;
+    private void InvalidateDataVersion() { _dirtyCache = null; _revision++; }
 
     public required TableDefinition Definition { get; init; }
     public required string FilePath { get; init; }
@@ -29,11 +32,11 @@ public sealed class TableDocument
             // Pending text and layout notifications do not mutate the table.
             // Invalidate only when data changes, rather than rescanning the
             // million cells in Effect.e5 on every UI notification.
-            Data.ColumnChanged += (_, _) => _dirtyCache = null;
-            Data.RowChanged += (_, _) => _dirtyCache = null;
-            Data.RowDeleted += (_, _) => _dirtyCache = null;
-            Data.TableCleared += (_, _) => _dirtyCache = null;
-            Data.Columns.CollectionChanged += (_, _) => _dirtyCache = null;
+            Data.ColumnChanged += (_, _) => InvalidateDataVersion();
+            Data.RowChanged += (_, _) => InvalidateDataVersion();
+            Data.RowDeleted += (_, _) => InvalidateDataVersion();
+            Data.TableCleared += (_, _) => InvalidateDataVersion();
+            Data.Columns.CollectionChanged += (_, _) => InvalidateDataVersion();
             _observingChanges = true;
         }
         var originals = new Dictionary<string, object?[]>(StringComparer.Ordinal);
@@ -52,6 +55,7 @@ public sealed class TableDocument
         Data.AcceptChanges();
         _originalValues = originals;
         _dirtyCache = false;
+        _revision++;
     }
 
     public object? GetOriginal(int rowIndex, string fieldName)
