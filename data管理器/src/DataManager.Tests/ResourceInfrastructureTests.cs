@@ -24,6 +24,15 @@ internal static class ResourceInfrastructureTests
             TestSupport.Assert(ReferenceEquals(first, adapter.Scan(root)), "未变化的资源目录没有复用项目快照");
             var assets = adapter.ReadAssets(root, "Hitarea.e5");
             TestSupport.Assert(ReferenceEquals(assets, adapter.ReadAssets(root, "Hitarea.e5")), "逻辑资源索引没有复用缓存");
+            var beforeLookups = adapter.CacheStatistics;
+            for (var lookup = 0; lookup < 20; lookup++)
+                TestSupport.Assert(ReferenceEquals(assets, adapter.ReadAssets(root, "Hitarea.e5")), "连续预览查询重复构建目录");
+            var afterLookups = adapter.CacheStatistics;
+            TestSupport.Assert(afterLookups.CacheHits - beforeLookups.CacheHits == 20 &&
+                afterLookups.FreshnessChecks - beforeLookups.FreshnessChecks < 10,
+                "同一批预览查询未合并文件信息检查");
+            VerifyExternalCatalogChange(root, adapter);
+            VerifyPaletteCatalogChange(root);
             AssertRange(adapter, root, true, 0, 1, 33);
             AssertRange(adapter, root, true, 32, 33, 33);
             AssertRange(adapter, root, false, 0, 1, 12);
@@ -114,6 +123,110 @@ internal static class ResourceInfrastructureTests
                 throw new InvalidOperationException("测试目录清理范围无效。");
             Directory.Delete(resolved, true);
         }
+    }
+
+    private static void VerifyExternalCatalogChange(string root, ResourceCatalogAdapter adapter)
+    {
+        var first = adapter.Scan(root);
+        var revision = adapter.Revision;
+        var path = Path.Combine(root, "Logo.e5");
+        var original = File.ReadAllBytes(path);
+        var changed = BuildArchive([Png(Color.Purple), Png(Color.Cyan)]);
+        File.WriteAllBytes(path, changed);
+        var timer = System.Diagnostics.Stopwatch.StartNew();
+        while (adapter.Revision == revision && timer.Elapsed < TimeSpan.FromSeconds(5)) Thread.Sleep(5);
+        TestSupport.Assert(adapter.Revision > revision, "资源外部变更未主动使目录版本失效");
+        var next = adapter.Scan(root);
+        TestSupport.Assert(!ReferenceEquals(first, next) && next.Resources.Single(resource => resource.Key == "Logo.e5").EntryCount == 2,
+            "外部档案修改后仍使用过期目录");
+        File.WriteAllBytes(path, original);
+        // Explicit scanning verifies disk immediately even before a watcher
+        // notification is delivered, preserving the refresh command contract.
+        var restored = adapter.Scan(root);
+        TestSupport.Assert(restored.Resources.Single(resource => resource.Key == "Logo.e5").EntryCount == 1,
+            "显式刷新未立即发现外部档案恢复");
+    }
+
+    private static void VerifyPaletteCatalogChange(string ownerRoot)
+    {
+        var root = Path.Combine(ownerRoot, "palette-project");
+        Directory.CreateDirectory(root);
+        var path = Path.Combine(root, "tsb");
+        var projectPalette = Path.Combine(root, "Assets", "Palettes", "tsb");
+        File.WriteAllBytes(Path.Combine(root, "Hitarea.e5"), BuildArchive([Enumerable.Repeat((byte)1, 64 * 64).ToArray()]));
+        File.WriteAllBytes(path, Palette(Color.Red));
+        using var adapter = new ResourceCatalogAdapter();
+        using var host = new Form { StartPosition = FormStartPosition.Manual, Location = new(-32000, -32000),
+            ShowInTaskbar = false, Size = new(900, 650) };
+        using var panel = new IntegratedResourcePanel(adapter);
+        host.Controls.Add(panel); host.Show(); panel.LoadProject(root, "AttackRange");
+        WaitForPaletteUi(() => panel.LoadingTask.IsCompleted && DescendantPictures(panel).Any(picture => picture.Image != null),
+            "RAW调色板测试图库没有完成加载");
+        panel.LoadingTask.GetAwaiter().GetResult();
+        var firstPicture = DescendantPictures(panel).First(picture => picture.Image != null);
+        var firstImage = (Bitmap)firstPicture.Image!;
+        TestSupport.Assert(firstImage.GetPixel(0, 0).ToArgb() == Color.Red.ToArgb(), "RAW图库未使用根目录tsb");
+        host.Hide();
+        var revision = adapter.Revision;
+        var stamp = File.GetLastWriteTimeUtc(path);
+        File.WriteAllBytes(path, Palette(Color.Blue));
+        File.SetLastWriteTimeUtc(path, stamp);
+        WaitForPaletteUi(() => adapter.Revision > revision, "同长度/时间戳的根目录tsb修改没有主动失效");
+        panel.LoadProject(root, "AttackRange"); host.Show();
+        WaitForPaletteUi(() => panel.LoadingTask.IsCompleted && firstPicture.IsDisposed &&
+            DescendantPictures(panel).Any(picture => picture.Image is Bitmap image && image.GetPixel(0, 0).ToArgb() == Color.Blue.ToArgb()),
+            "返回图库时复用了调色板变化前的完成小图");
+
+        revision = adapter.Revision;
+        Directory.CreateDirectory(Path.GetDirectoryName(projectPalette)!);
+        File.WriteAllBytes(projectPalette, Palette(Color.Green));
+        File.Delete(path);
+        WaitForPaletteUi(() => adapter.Revision > revision, "创建Assets/Palettes/tsb或删除高优先级tsb没有主动失效");
+        var fallback = adapter.Scan(root);
+        using (var image = adapter.DecodeRangeNativeFrameAsync(root, true, 0).GetAwaiter().GetResult())
+            TestSupport.Assert(image?.GetPixel(0, 0).ToArgb() == Color.Green.ToArgb(), "缺少根目录tsb时没有使用项目Assets/Palettes/tsb");
+        revision = adapter.Revision;
+        stamp = File.GetLastWriteTimeUtc(projectPalette);
+        File.WriteAllBytes(projectPalette, Palette(Color.Yellow));
+        File.SetLastWriteTimeUtc(projectPalette, stamp);
+        WaitForPaletteUi(() => adapter.Revision > revision, "嵌套fallback tsb修改没有主动失效");
+        TestSupport.Assert(!ReferenceEquals(fallback, adapter.Scan(root)), "嵌套fallback修改仍命中旧目录快照");
+        using (var image = adapter.DecodeRangeNativeFrameAsync(root, true, 0).GetAwaiter().GetResult())
+            TestSupport.Assert(image?.GetPixel(0, 0).ToArgb() == Color.Yellow.ToArgb(), "嵌套fallback修改没有刷新RAW预览颜色");
+
+        // A read-only probe verifies monitoring of the installed fallback,
+        // without changing the executable's own shared palette during tests.
+        var cache = (System.Collections.IDictionary)typeof(ResourceCatalogAdapter)
+            .GetField("_catalogCache", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(adapter)!;
+        var entry = cache[root]!;
+        var files = (System.Collections.IEnumerable)entry.GetType().GetProperty("Files")!.GetValue(entry)!;
+        var installedPalette = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "Assets", "Palettes", "tsb"));
+        TestSupport.Assert(files.Cast<object>().Any(file => string.Equals((string)file.GetType().GetProperty("Path")!.GetValue(file)!,
+                installedPalette, StringComparison.OrdinalIgnoreCase)), "目录元信息没有包含程序侧fallback tsb（包括缺失状态）");
+        var watchers = (IEnumerable<FileSystemWatcher>)entry.GetType()
+            .GetField("_watchers", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(entry)!;
+        TestSupport.Assert(watchers.Any(watcher => installedPalette.StartsWith(
+                Path.GetFullPath(watcher.Path).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)),
+            "程序侧fallback tsb没有活动目录监听");
+        Console.WriteLine("RESOURCE_PALETTE_INVALIDATION_OK root/nested-tsb=same-size-and-time content-change watcher-installed-fallback=covered completed-thumbnail=replaced");
+    }
+
+    private static byte[] Palette(Color color)
+    {
+        var bytes = new byte[1024];
+        bytes[4] = color.B; bytes[5] = color.G; bytes[6] = color.R;
+        return bytes;
+    }
+
+    private static IEnumerable<PictureBox> DescendantPictures(Control root)
+        => root.Controls.Cast<Control>().SelectMany(child => (child is PictureBox picture ? new[] { picture } : [])
+            .Concat(DescendantPictures(child)));
+
+    private static void WaitForPaletteUi(Func<bool> condition, string failure)
+    {
+        var timer = System.Diagnostics.Stopwatch.StartNew();
+        while (!condition() && timer.Elapsed < TimeSpan.FromSeconds(10)) { Application.DoEvents(); Thread.Sleep(5); }
+        TestSupport.Assert(condition(), failure);
     }
 
     private static void TestResourceHistory(string root, ResourceCatalogAdapter adapter)

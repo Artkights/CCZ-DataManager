@@ -678,10 +678,12 @@ internal static class ResourcePreviewTests
         s.Data.Rows[1]["S形象ID"] = 1;
         var method = typeof(MainForm).GetMethod("GetVerifiedUsedImageIds", flags)!;
         var used = method.Invoke(form, ["S"]) as IReadOnlySet<int>;
+        TestSupport.Assert(ReferenceEquals(used, method.Invoke(form, ["S"])), "未变化的人物形象引用没有复用工作区目录");
         TestSupport.Assert(used != null && used.SetEquals(new[] { 238, 239, 240, 241, 242, 243, 337 }),
             $"主界面S引用没有从当前草稿展开默认兵种三阵营及人物三转物理图号：used={(used == null ? "null" : string.Join(',', used.Order()))}；人物表={persons.Definition.Capability}/{persons.Definition.VerificationLevel}/{persons.Definition.CapabilityEvidence}");
         var referencesMethod = typeof(MainForm).GetMethod("GetCurrentSAssignmentReferences", flags)!;
         var references = referencesMethod.Invoke(form, null) as IReadOnlyList<SImageAssignmentReference>;
+        TestSupport.Assert(ReferenceEquals(references, referencesMethod.Invoke(form, null)), "未变化的人物S明细引用重复计算");
         var personId = s.Data.Columns.Contains("ID") ? Convert.ToInt32(s.Data.Rows[1]["ID"]) : s.Definition.BeginId + 1;
         var first = references?.Single(reference => reference.PersonId == personId);
         TestSupport.Assert(first != null && first.SId == 1 && first.PhysicalImageNumbers.SequenceEqual(new[] { 241, 242, 243 }),
@@ -697,6 +699,11 @@ internal static class ResourcePreviewTests
         var baseline = references!.Single(reference => reference.SId == 0);
         TestSupport.Assert(!warnings.Any(warning => warning.StartsWith($"人物 ID {baseline.PersonId} /", StringComparison.Ordinal)),
             "删除将领S错误列出了未受影响的默认兵种S人物");
+        persons.Data.Rows[1]["名称"] = "草稿名";
+        TestSupport.Assert(ReferenceEquals(used, method.Invoke(form, ["S"])), "仅人物名称变化重复建立物理形象占用目录");
+        var renamed = referencesMethod.Invoke(form, null) as IReadOnlyList<SImageAssignmentReference>;
+        TestSupport.Assert(!ReferenceEquals(references, renamed) && renamed!.Single(reference => reference.PersonId == personId).PersonName == "草稿名",
+            "人物名称草稿没有更新形象引用明细目录");
         s.Data.Rows[1]["S形象ID"] = 2;
         used = method.Invoke(form, ["S"]) as IReadOnlySet<int>;
         TestSupport.Assert(used != null && used.SetEquals(new[] { 238, 239, 240, 244, 245, 246, 337 }) && workspace.IsDirty,

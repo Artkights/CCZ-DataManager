@@ -1,6 +1,7 @@
 using System.Data;
 using System.Globalization;
 using DataManager.Core.Models;
+using DataManager.Core.Domain;
 using ImageManager.App;
 using ImageManager.Core;
 
@@ -43,6 +44,15 @@ public sealed partial class MainForm
     }
 
     private IReadOnlyList<SImageAssignmentReference>? GetCurrentSAssignmentReferences()
+        => WorkspaceReadCache.For(_workspace).GetOrCreateData("image-s-references",
+            [new("person-s-assign", "ID"), new("person-s-assign", "S形象ID"),
+                new("persons", "ID"), new("persons", "名称"), new("persons", "兵种")],
+            () => new SImageReferences(ReadCurrentSAssignmentReferences()),
+            value => 64L + (value.Values?.Sum(reference => 96L + reference.PersonName.Length * 2L + reference.PhysicalImageNumbers.Count * 4L) ?? 0)).Values;
+
+    private sealed record SImageReferences(IReadOnlyList<SImageAssignmentReference>? Values);
+
+    private IReadOnlyList<SImageAssignmentReference>? ReadCurrentSAssignmentReferences()
     {
         // Reuse the same evidence gate as the physical idle filter without changing its policy.
         if (GetVerifiedUsedImageIds("S") == null ||

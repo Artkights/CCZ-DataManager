@@ -46,7 +46,7 @@ internal static class BusinessPreviewOwnerLifecycleTests
             FilePath = string.Empty, Data = data, OriginalFileBytes = [5], OriginalFileHash = string.Empty
         };
         var range = (RangePreviewPicker)typeof(BusinessEditorPanel).GetMethod("CreateEditor", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .Invoke(panel, [document, data.Rows[0], 0, field])!;
+            .Invoke(panel, [document, data.Rows[0], 0, field, null])!;
         var tab = new TabPage("范围"); tab.Controls.Add(range); panel.DetailTabs.TabPages.Add(tab);
         var combo = range.Combo;
         var observer = new DisposeObserver();
@@ -73,7 +73,7 @@ internal static class BusinessPreviewOwnerLifecycleTests
             FilePath = string.Empty, Data = data, OriginalFileBytes = [5], OriginalFileHash = string.Empty
         };
         var range = (RangePreviewPicker)typeof(BusinessEditorPanel).GetMethod("CreateEditor", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .Invoke(panel, [document, data.Rows[0], 0, field])!;
+            .Invoke(panel, [document, data.Rows[0], 0, field, null])!;
         TestSupport.Assert(!Field<bool>(range, "_previewActive") && !Field<bool>(range.Combo, "_previewActive") &&
             Field<object?>(range, "_loader") != null && Field<int?>(range, "_requestedId") == null,
             "失活业务页构造新范围编辑器时在挂载前发起了预览");

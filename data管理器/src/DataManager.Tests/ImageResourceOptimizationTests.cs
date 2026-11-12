@@ -430,32 +430,88 @@ internal static class ImageResourceOptimizationTests
             gallery.VisibleChanged += (_, _) => visibilityEvents.Add($"gallery:{gallery.Visible}");
             parent.VisibleChanged += (_, _) => visibilityEvents.Add($"parent:{parent.Visible}");
             parent.Visible = false;
-            TestSupport.Assert(!page.Visible && gallery.RealizedCount == 0 && oldCards.All(card => card.IsDisposed) &&
+            TestSupport.Assert(!page.Visible && gallery.RealizedCount == oldCards.Length && oldCards.All(card => !card.IsDisposed) &&
                 hiddenLate.Token.IsCancellationRequested && resumedLate.Token.IsCancellationRequested,
-                $"父级模块隐藏未回收图库卡片或取消待完成缩略图: pageVisible={page.Visible}, cards={gallery.RealizedCount}, disposed={oldCards.Count(card => card.IsDisposed)}/{oldCards.Length}, cancel={hiddenLate.Token.IsCancellationRequested}/{resumedLate.Token.IsCancellationRequested}, active={GalleryField<bool>(gallery, "_active")}, events={string.Join(',', visibilityEvents)}");
-            TestSupport.Assert(retained.All(BitmapReleased) &&
-                GalleryField<Dictionary<PictureBox, ImageResourceCoordinator.PixelLease>>(page, "_thumbnailLeases").Count == 0,
-                "父级模块隐藏仍保留缩略图像素或计费租约");
+                $"父级模块隐藏未复用当前viewport或取消待完成缩略图: pageVisible={page.Visible}, cards={gallery.RealizedCount}, disposed={oldCards.Count(card => card.IsDisposed)}/{oldCards.Length}, cancel={hiddenLate.Token.IsCancellationRequested}/{resumedLate.Token.IsCancellationRequested}, active={GalleryField<bool>(gallery, "_active")}, events={string.Join(',', visibilityEvents)}");
+            TestSupport.Assert(retained.All(bitmap => !BitmapReleased(bitmap)) &&
+                GalleryField<Dictionary<PictureBox, ImageResourceCoordinator.PixelLease>>(page, "_thumbnailLeases").Count == retained.Length,
+                "父级模块隐藏未保留已完成小图或丢失了共享预算计费");
             var hiddenCalls = previews.Calls.Count;
             gallery.RefreshViewport(); form.Width++; form.Width--; DrainGalleryEvents();
             hiddenLate.Complete(Color.Red);
             WaitUntil(() => hiddenLate.Result != null && BitmapReleased(hiddenLate.Result));
-            TestSupport.Assert(gallery.RealizedCount == 0 && previews.Calls.Count == hiddenCalls,
+            TestSupport.Assert(gallery.RealizedCount == oldCards.Length && previews.Calls.Count == hiddenCalls,
                 "隐藏模块的布局/迟到结果重新建卡或启动新缩略图请求");
 
             parent.Visible = true;
             WaitUntil(() => gallery.RealizedCount > 0 && previews.Calls.Count > hiddenCalls);
             var resumedCalls = previews.Calls.Where(call => !call.Token.IsCancellationRequested && !call.IsCompleted).ToArray();
-            TestSupport.Assert(resumedCalls.Length > 0, "显示父级没有重新读取已回收的缩略图");
+            TestSupport.Assert(resumedCalls.Length > 0 && resumedCalls.Length < GalleryPictures(gallery).Count &&
+                gallery.RealizedControls.All(card => oldCards.Contains(card)),
+                "显示父级重建了viewport卡片、重复请求已完成小图，或没有重新请求被取消的缩略图");
             foreach (var call in resumedCalls) call.Complete(Color.Lime);
             WaitUntil(() => GalleryPictures(gallery).Count > 0 && GalleryPictures(gallery).All(box => box.Image != null));
             resumedLate.Complete(Color.Red);
             WaitUntil(() => resumedLate.Result != null && BitmapReleased(resumedLate.Result));
-            TestSupport.Assert(GalleryPictures(gallery).All(box => ((Bitmap)box.Image!).GetPixel(0, 0).ToArgb() == Color.Lime.ToArgb()) &&
+            TestSupport.Assert(GalleryPictures(gallery).All(box => ((Bitmap)box.Image!).GetPixel(0, 0).ToArgb() ==
+                    (retained.Any(bitmap => ReferenceEquals(bitmap, box.Image)) ? Color.Blue : Color.Lime).ToArgb()) &&
                 gallery.SelectedItems.Single().StablePhysicalId == selected.StablePhysicalId && gallery.FocusedAssetId == selected.StablePhysicalId &&
                 -gallery.AutoScrollPosition.Y == scroll,
                 "显示恢复后图片、选择、焦点或滚动未恢复，或旧请求覆盖了新缩略图");
-            Console.WriteLine("HIDDEN_GALLERY_LIFECYCLE_OK parent-hide=cards0/pending-cancel/pixels-release late-hidden/late-resumed=disposed show=image/selection/focus/scroll-restored");
+
+            // Hidden thumbnails remain evictable under the shared budget. The
+            // simulated pressure owns accounting only, avoiding a 96 MiB test bitmap.
+            parent.Visible = false;
+            var completedImages = GalleryPictures(gallery).Select(box => (Bitmap)box.Image!).ToArray();
+            var beforePressure = previews.Calls.Count;
+            ImageResourceCoordinator.PixelLease? pressure = null;
+            try
+            {
+                pressure = ImageResourceCoordinator.Shared.RegisterPixels(ImageResourceCoordinator.DefaultPixelBudget,
+                    "test-hidden-gallery-pressure", () => pressure?.Dispose());
+                ImageResourceCoordinator.Shared.TrimPixels();
+                WaitUntil(() => GalleryPictures(gallery).All(box => box.Image == null));
+                TestSupport.Assert(gallery.RealizedCount == oldCards.Length && oldCards.All(card => !card.IsDisposed) &&
+                    completedImages.All(BitmapReleased) && previews.Calls.Count == beforePressure &&
+                    GalleryField<Dictionary<PictureBox, ImageResourceCoordinator.PixelLease>>(page, "_thumbnailLeases").Count == 0,
+                    "隐藏缩略图预算回收销毁了viewport、未释放像素/租约，或重新发起隐藏请求");
+            }
+            finally { pressure?.Dispose(); }
+            parent.Visible = true;
+            WaitUntil(() => previews.Calls.Count > beforePressure);
+            foreach (var call in previews.Calls.Where(call => !call.Token.IsCancellationRequested && !call.IsCompleted)) call.Complete(Color.Green);
+            WaitUntil(() => GalleryPictures(gallery).All(box => box.Image != null));
+            TestSupport.Assert(gallery.RealizedControls.All(card => oldCards.Contains(card)), "预算淘汰后返回模块重建了原生卡片");
+
+            // Explicitly leaving a category while the module is already hidden
+            // must release its controls, keeping only one category's viewport.
+            parent.Visible = false;
+            page.SetActive(false);
+            TestSupport.Assert(gallery.RealizedCount == 0 && oldCards.All(card => card.IsDisposed) &&
+                GalleryField<Dictionary<PictureBox, ImageResourceCoordinator.PixelLease>>(page, "_thumbnailLeases").Count == 0 &&
+                GalleryField<Dictionary<PictureBox, Action<bool>>>(page, "_thumbnailActivity").Count == 0,
+                "隐藏后显式切离分类没有回收原生卡片、请求或像素租约");
+            var beforeExplicitResume = previews.Calls.Count;
+            parent.Visible = true; DrainGalleryEvents();
+            TestSupport.Assert(gallery.RealizedCount == 0 && previews.Calls.Count == beforeExplicitResume,
+                "显式失活分类随父级显示意外恢复");
+            page.SetActive(true);
+            WaitUntil(() => gallery.RealizedCount > 0 && previews.Calls.Count > beforeExplicitResume);
+            foreach (var call in previews.Calls.Where(call => !call.Token.IsCancellationRequested && !call.IsCompleted)) call.Complete(Color.Purple);
+            WaitUntil(() => GalleryPictures(gallery).All(box => box.Image != null));
+
+            parent.Visible = false;
+            var invalidatedCards = gallery.RealizedControls.ToArray();
+            var invalidatedImages = GalleryPictures(gallery).Select(box => (Bitmap)box.Image!).ToArray();
+            page.InvalidateResources([path]);
+            WaitUntil(() => page.LoadingTask.IsCompleted);
+            page.LoadingTask.GetAwaiter().GetResult();
+            TestSupport.Assert(gallery.RealizedCount == 0 && invalidatedCards.All(card => card.IsDisposed) &&
+                invalidatedImages.All(BitmapReleased), "隐藏模块资源失效后仍保留旧卡片或旧像素");
+            parent.Visible = true;
+            WaitUntil(() => gallery.RealizedCount > 0);
+            TestSupport.Assert(gallery.RealizedControls.All(card => !invalidatedCards.Contains(card)), "外部资源失效后复用了旧原生卡片");
+            Console.WriteLine("HIDDEN_GALLERY_LIFECYCLE_OK parent-hide=viewport-reused/pending-cancel/small-pixels-budgeted late-results=disposed budget-eviction=reload-without-new-cards explicit-category-leave=cards0 hidden-invalidation=old-pixels-released");
             owned.Complete();
         }
         catch (Exception error) { RetainFailure(owned, error); throw; }

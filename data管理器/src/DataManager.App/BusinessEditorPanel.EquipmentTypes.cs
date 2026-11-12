@@ -8,12 +8,17 @@ namespace DataManager.App;
 public sealed partial class BusinessEditorPanel
 {
     private readonly List<(Control Owner, Action Refresh)> _equipmentTypeBindings = [];
+    private string? _equipmentTypeBindingVersion;
 
     private string EquipmentPermissionDisplayName(string storageColumn)
-        => new EquipmentTypeCatalogService().GetPermissionDisplayName(_workspace, storageColumn);
+    {
+        var slot = ItemTypeService.EquipmentColumns.ToList().IndexOf(storageColumn);
+        return slot < 0 ? storageColumn : EquipmentTypeQueryName(slot);
+    }
 
     private void RegisterEquipmentTypeBinding(Control owner, Action refresh)
     {
+        _equipmentTypeBindingVersion = null;
         _equipmentTypeBindings.Add((owner, refresh));
         owner.Disposed += (_, _) => _equipmentTypeBindings.RemoveAll(binding => ReferenceEquals(binding.Owner, owner));
     }
@@ -23,8 +28,14 @@ public sealed partial class BusinessEditorPanel
         var before = _binding; _binding = true;
         try
         {
-            _equipmentTypeBindings.RemoveAll(binding => binding.Owner.IsDisposed);
-            foreach (var binding in _equipmentTypeBindings.ToArray()) binding.Refresh();
+            var version = ReadCache.GetVersion([new(EquipmentTypeCatalogService.NamesTableKey, "名称"),
+                new(EquipmentTypeCatalogService.DisplayTableKey, "显示值")]);
+            if (_equipmentTypeBindingVersion != version)
+            {
+                _equipmentTypeBindings.RemoveAll(binding => binding.Owner.IsDisposed);
+                foreach (var binding in _equipmentTypeBindings.ToArray()) binding.Refresh();
+                _equipmentTypeBindingVersion = version;
+            }
             _refreshItemPermissions?.Invoke();
         }
         finally { _binding = before; }
@@ -166,7 +177,6 @@ public sealed partial class BusinessEditorPanel
         void PendingTextChanged(object? sender, EventArgs args) => NotifyPendingChanges();
         _flushers.Add(Save);
         _pendingChecks.Add(() => !grid.IsDisposed && (grid.IsCurrentCellDirty || Signature() != submitted));
-        _entityRebinders.Add(Refresh);
         RegisterEquipmentTypeBinding(grid, Refresh);
         Refresh();
         return grid;

@@ -14,7 +14,7 @@ public sealed class ProfileDetector
         _registry = registry;
     }
 
-    public ProfileMatchResult Detect(string rootPath)
+    public ProfileMatchResult Detect(string rootPath, SourceFileReadSession? sourceSession = null)
     {
         var evidence = new List<string>();
         var conflicts = new List<string>();
@@ -23,14 +23,14 @@ public sealed class ProfileDetector
         var missing = new List<string>();
         foreach (var name in CoreFiles)
         {
-            var path = ProjectFileLocator.Resolve(rootPath, name);
-            if (!File.Exists(path))
+            var path = sourceSession?.Resolve(rootPath, name) ?? ProjectFileLocator.Resolve(rootPath, name);
+            if (!(sourceSession?.GetMetadata(path).Exists ?? File.Exists(path)))
             {
                 missing.Add(name);
                 continue;
             }
-            lengths[name] = new FileInfo(path).Length;
-            hashes[name] = HashService.Sha256(path);
+            lengths[name] = sourceSession?.GetMetadata(path).Length ?? new FileInfo(path).Length;
+            hashes[name] = sourceSession?.Read(path).Hash ?? HashService.Sha256(path);
         }
 
         var candidates = AllCandidates().ToArray();
@@ -57,7 +57,7 @@ public sealed class ProfileDetector
         }
 
         int privatePart = 0;
-        var exePath = ProjectFileLocator.Resolve(rootPath, "Ekd5.exe");
+        var exePath = sourceSession?.Resolve(rootPath, "Ekd5.exe") ?? ProjectFileLocator.Resolve(rootPath, "Ekd5.exe");
         if (File.Exists(exePath))
         {
             try
@@ -80,7 +80,7 @@ public sealed class ProfileDetector
         {
             var profileId = $"ccz-6.{privatePart}";
             var profile = _registry.GetProfile(profileId);
-            selected = new Candidate(profile, SelectVariantByLayoutEvidence(profile, exePath, lengths, evidence), new ProfileFingerprint { SampleId = "PE 版本资源" });
+            selected = new Candidate(profile, SelectVariantByLayoutEvidence(profile, exePath, lengths, evidence, sourceSession), new ProfileFingerprint { SampleId = "PE 版本资源" });
             selectionMethod = "PE 版本资源";
         }
 
@@ -107,7 +107,7 @@ public sealed class ProfileDetector
 
         if (selected == null && File.Exists(exePath))
         {
-            var anchor = DetectItemAnchor(exePath);
+            var anchor = DetectItemAnchor(exePath, sourceSession);
             if (anchor != null)
             {
                 var profile = _registry.GetProfile("ccz-6.6");
@@ -116,7 +116,7 @@ public sealed class ProfileDetector
                 selectionMethod = "离线机器码锚点";
                 evidence.Add(anchor == "15" ? "离线机器码包含物品基址 0x49F820（15 字节名称布局）" : "离线机器码包含物品基址 0x4A1140（17 字节名称布局）");
             }
-            else if (DetectEffectShape(exePath) == "16")
+            else if (DetectEffectShape(exePath, sourceSession) == "16")
             {
                 var profile = _registry.GetProfile("ccz-6.6");
                 selected = new Candidate(profile, profile.Variants.Single(variant => variant.Id == "66-standard-v1"), new ProfileFingerprint { SampleId = "0xD9000 表形态" });
@@ -158,12 +158,12 @@ public sealed class ProfileDetector
         };
     }
 
-    private ProfileVariant SelectVariantByLayoutEvidence(DataProfile profile, string exePath, IReadOnlyDictionary<string, long> lengths, List<string> evidence)
+    private ProfileVariant SelectVariantByLayoutEvidence(DataProfile profile, string exePath, IReadOnlyDictionary<string, long> lengths, List<string> evidence, SourceFileReadSession? sourceSession)
     {
         if (profile.Id == "ccz-6.4")
             evidence.Add("6.4 使用洗隋兼容布局；EXE 内嵌表仍须通过当前项目的独立消费者与边界校验，缺失区域不自动创建。");
         if (profile.Id != "ccz-6.6") return profile.Variants.Single(variant => variant.Id == profile.DefaultVariantId);
-        var anchor = DetectItemAnchor(exePath);
+        var anchor = DetectItemAnchor(exePath, sourceSession);
         if (anchor != null)
         {
             evidence.Add(anchor == "15" ? "离线物品索引锚点选择 15 字节名称布局。" : "离线物品索引锚点选择 17 字节名称布局。");
@@ -177,7 +177,7 @@ public sealed class ProfileDetector
             evidence.Add($"文件长度组合选择布局：{lengthMatch[0].DisplayName}");
             return lengthMatch[0];
         }
-        var shape = DetectEffectShape(exePath);
+        var shape = DetectEffectShape(exePath, sourceSession);
         if (shape != null)
         {
             evidence.Add(shape == "16" ? "0xD9000 表形态选择 16 字节兵种特效布局。" : "0xD9000 表形态选择 8 字节兵种特效布局。");
@@ -187,19 +187,19 @@ public sealed class ProfileDetector
         return profile.Variants.Single(variant => variant.Id == profile.DefaultVariantId);
     }
 
-    private static string? DetectItemAnchor(string exePath)
+    private static string? DetectItemAnchor(string exePath, SourceFileReadSession? sourceSession)
     {
-        var bytes = File.ReadAllBytes(exePath);
+        var bytes = sourceSession?.Read(exePath).Bytes ?? File.ReadAllBytes(exePath);
         var has15 = Contains(bytes, BitConverter.GetBytes(0x49F820));
         var has17 = Contains(bytes, BitConverter.GetBytes(0x4A1140));
         return has15 == has17 ? null : has15 ? "15" : "17";
     }
 
-    private static string? DetectEffectShape(string exePath)
+    private static string? DetectEffectShape(string exePath, SourceFileReadSession? sourceSession)
     {
         const int offset = 0xD9000;
         const int rows = 255;
-        var bytes = File.ReadAllBytes(exePath);
+        var bytes = sourceSession?.Read(exePath).Bytes ?? File.ReadAllBytes(exePath);
         if (bytes.Length < offset + rows * 16) return null;
         var nonEmpty8 = 0;
         var nonEmpty16 = 0;

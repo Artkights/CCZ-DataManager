@@ -47,6 +47,7 @@ public sealed class ProjectWorkspace
     public IReadOnlyList<TableDefinition> Definitions => _definitions.Values.ToArray();
     public IReadOnlyList<ModuleDefinition> Modules => _modules.Values.ToArray();
     public ScanReport? LastScan { get; private set; }
+    public SourceFileReadStatistics LastSourceReadStatistics { get; private set; } = new(0, 0, 0, 0, 0, 0);
     public ProfileMatchResult? ProfileMatch { get; private set; }
     public ResolvedProfile ActiveProfile { get; private set; }
     public IReadOnlyList<DataProfile> AvailableProfiles => _profiles.Profiles;
@@ -77,17 +78,17 @@ public sealed class ProjectWorkspace
         _history.Recover(RootPath);
         _documents.Clear();
         _csvImportedValues.Clear();
-        var detected = _detector.Detect(RootPath);
+        var sourceFiles = new SourceFileReadSession();
+        var detected = _detector.Detect(RootPath, sourceFiles);
         cancellationToken.ThrowIfCancellationRequested();
         ProfileMatch = string.IsNullOrWhiteSpace(profileId)
             ? detected
             : _detector.Force(detected, profileId, variantId ?? _profiles.GetProfile(profileId).DefaultVariantId);
         ActiveProfile = _profiles.Resolve(ProfileMatch.ProfileId, ProfileMatch.VariantId);
-        ApplyResolvedProfile(ActiveProfile);
+        ApplyResolvedProfile(ActiveProfile, sourceFiles);
         var scanner = new BaseScanner(_profiles);
-        LastScan = scanner.Scan(RootPath, ActiveProfile, ProfileMatch);
+        LastScan = scanner.Scan(RootPath, ActiveProfile, ProfileMatch, sourceFiles);
         cancellationToken.ThrowIfCancellationRequested();
-        var sourceFiles = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
         foreach (var definition in Definitions)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -104,6 +105,7 @@ public sealed class ProjectWorkspace
         AppendTextDecodeDiagnostics(LastScan);
         AddParentReferenceNames();
         AddDerivedItemFields();
+        LastSourceReadStatistics = sourceFiles.Statistics;
         cancellationToken.ThrowIfCancellationRequested();
         Commands.Clear();
         return LastScan;
@@ -112,7 +114,8 @@ public sealed class ProjectWorkspace
     public ScanReport Rescan()
     {
         if (string.IsNullOrWhiteSpace(RootPath)) throw new InvalidOperationException("尚未打开项目。");
-        var detected = _detector.Detect(RootPath);
+        var sourceFiles = new SourceFileReadSession();
+        var detected = _detector.Detect(RootPath, sourceFiles);
         ProfileMatch = ProfileMatch?.IsManualOverride == true
             ? _detector.Force(detected, ActiveProfile.ProfileId, ActiveProfile.VariantId)
             : detected;
@@ -121,10 +124,11 @@ public sealed class ProjectWorkspace
              !ProfileMatch.VariantId.Equals(ActiveProfile.VariantId, StringComparison.OrdinalIgnoreCase)))
         {
             ActiveProfile = _profiles.Resolve(ProfileMatch.ProfileId, ProfileMatch.VariantId);
-            ApplyResolvedProfile(ActiveProfile);
-            ReloadAllDocuments();
+            ApplyResolvedProfile(ActiveProfile, sourceFiles);
+            ReloadAllDocuments(sourceFiles);
         }
-        LastScan = new BaseScanner(_profiles).Scan(RootPath, ActiveProfile, ProfileMatch);
+        LastScan = new BaseScanner(_profiles).Scan(RootPath, ActiveProfile, ProfileMatch, sourceFiles);
+        LastSourceReadStatistics = sourceFiles.Statistics;
         AppendTextDecodeDiagnostics(LastScan);
         return LastScan;
     }
@@ -136,9 +140,9 @@ public sealed class ProjectWorkspace
                 report.Diagnostics.AddRange(warnings);
     }
 
-    private void ApplyResolvedProfile(ResolvedProfile resolved)
+    private void ApplyResolvedProfile(ResolvedProfile resolved, SourceFileReadSession? sourceSession = null)
     {
-        resolved = new ProfileAugmentationService().Apply(RootPath, resolved);
+        resolved = new ProfileAugmentationService().Apply(RootPath, resolved, sourceSession);
         ActiveProfile = resolved;
         _definitions.Clear();
         foreach (var definition in resolved.Tables) _definitions.Add(definition.Key, definition);
@@ -796,8 +800,9 @@ public sealed class ProjectWorkspace
                     VerifyAppliedPatches(file.Key, bytes, ordinaryPatchesByFile[file.Key]);
                     transform.CandidateVerifier?.Invoke((byte[])bytes.Clone());
                 }
+                var verifiedSource = new SourceFileReadSession.SourceFileSnapshot(file.Key, bytes, HashService.Sha256(bytes));
                 foreach (var document in _documents.Values.Where(document => Path.GetFullPath(document.FilePath).Equals(file.Key, StringComparison.OrdinalIgnoreCase)))
-                    verifiedDocuments[document.Definition.Key] = _reader.ReadBytes(file.Key, document.Definition, bytes);
+                    verifiedDocuments[document.Definition.Key] = _reader.ReadSnapshot(document.Definition, verifiedSource);
             }
             if (appearanceSync != null)
             {
@@ -953,7 +958,7 @@ public sealed class ProjectWorkspace
     {
         _csvImportedValues.Clear();
         var keys = _documents.Keys.ToArray();
-        var sourceFiles = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
+        var sourceFiles = new SourceFileReadSession();
         foreach (var key in keys)
         {
             if (!_definitions.TryGetValue(key, out var definition)) continue;
@@ -962,15 +967,16 @@ public sealed class ProjectWorkspace
         }
         AddParentReferenceNames();
         AddDerivedItemFields();
+        LastSourceReadStatistics = sourceFiles.Statistics;
         DiscardNativeDrafts();
         Commands.Clear();
     }
 
-    private void ReloadAllDocuments()
+    private void ReloadAllDocuments(SourceFileReadSession? sourceSession = null)
     {
         _csvImportedValues.Clear();
         _documents.Clear();
-        var sourceFiles = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
+        var sourceFiles = sourceSession ?? new SourceFileReadSession();
         foreach (var definition in Definitions)
         {
             try { _documents[definition.Key] = ReadSharedSource(definition, sourceFiles); }
@@ -978,20 +984,16 @@ public sealed class ProjectWorkspace
         }
         AddParentReferenceNames();
         AddDerivedItemFields();
+        LastSourceReadStatistics = sourceFiles.Statistics;
         DiscardNativeDrafts();
         Commands.Clear();
     }
 
-    private TableDocument ReadSharedSource(TableDefinition definition, IDictionary<string, byte[]> sourceFiles)
+    private TableDocument ReadSharedSource(TableDefinition definition, SourceFileReadSession sourceFiles)
     {
-        var validation = _reader.Validate(RootPath, definition);
-        if (!validation.IsUsable)
-            throw new InvalidDataException($"{definition.DisplayName}：{validation.Message}（{definition.FileName}）");
-        if (!sourceFiles.TryGetValue(validation.Path, out var bytes))
-            sourceFiles[validation.Path] = bytes = File.ReadAllBytes(validation.Path);
         // Documents never mutate their saved source bytes. Sharing one read
         // also prevents a large, appended EXE being retained once per table.
-        return _reader.ReadBytes(validation.Path, definition, bytes);
+        return _reader.Read(RootPath, definition, sourceFiles);
     }
 
     private Dictionary<string, string> CaptureCoreFileFingerprints()

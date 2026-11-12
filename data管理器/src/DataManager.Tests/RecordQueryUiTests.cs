@@ -1,5 +1,7 @@
 using System.Data;
+using System.Diagnostics;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using DataManager.App;
 using DataManager.Core.Domain;
 using DataManager.Core.Models;
@@ -39,18 +41,19 @@ internal static class RecordQueryUiTests
                 .SetById("person-s-assign", b, "S形象ID", 12)
                 .SetById("person-s-assign", c, "S形象ID", 22).Apply();
             TestSupport.PumpUi(); ClearQuery(form);
+            CheckQueryChoiceBehavior(form, "初始人物属性");
             CheckAttributeConditions(form, id, a, b);
             CheckExplicitExecution(form, id, a, b);
             CheckDetailPageState(form, id);
 
-            TestSupport.Assert(form.QueryForSmokeTest("'[]*"), "字面关键词查询失败");
+            TestSupport.Assert(Query(form, "'[]*"), "字面关键词查询失败");
             AssertVisibleQueryIds(form, [id], "姓名特殊字符没有按字面匹配");
             TestSupport.Assert(form.BusinessEditorForSmokeTest.CurrentId == id, "查询没有绑定真实人物 ID");
             TestSupport.Assert(form.QuerySummaryForSmokeTest.Contains("匹配 1 /"), "没有查询结果数量");
-            form.SelectModuleForSmokeTest("策略");
-            TestSupport.Assert(form.QueryForSmokeTest("__没有匹配的测试内容__") && form.EmptyQueryForSmokeTest,
+            SelectModule(form, "策略");
+            TestSupport.Assert(Query(form, "__没有匹配的测试内容__") && form.EmptyQueryForSmokeTest,
                 "零结果没有显示空详情状态");
-            form.SelectModuleForSmokeTest("人物");
+            SelectModule(form, "人物");
             AssertVisibleQueryIds(form, [id], "返回业务页丢失独立查询状态");
             form.QuickLocateForSmokeTest(id + 1);
             TestSupport.Assert(form.BusinessEditorForSmokeTest.CurrentId == id + 1 && form.EntityListForSmokeTest.Items.Count == persons.Data.Rows.Count,
@@ -61,9 +64,9 @@ internal static class RecordQueryUiTests
             var nameEditor = Descendants(form.BusinessEditorForSmokeTest).OfType<ByteTextEditor>()
                 .Single(editor => editor.Editor.Text == "查'[]*验");
             nameEditor.Editor.Focus(); nameEditor.Editor.Text = "未失焦查询";
-            TestSupport.Assert(form.QueryForSmokeTest("未失焦查询") && SelectedId(form) == id &&
+            TestSupport.Assert(Query(form, "未失焦查询") && SelectedId(form) == id &&
                 Convert.ToString(persons.Data.Rows[42]["名称"]) == "未失焦查询", "查询丢失未失焦输入或读取了提交前名称");
-            form.UndoDraftForSmokeTest(); TestSupport.PumpUi();
+            form.UndoDraftForSmokeTest(); WaitForQueryIdle(form);
             TestSupport.Assert(form.EntityListForSmokeTest.Items.Count == 0 && form.EmptyQueryForSmokeTest, "撤回后没有重新计算查询");
             ClearQuery(form);
 
@@ -76,12 +79,19 @@ internal static class RecordQueryUiTests
             }
             CheckRemovedRememberedField(form, id);
             // Pending and applied conditions are memory-only and reset on project reopen.
-            TestSupport.Assert(form.QueryForSmokeTest("__重开前零结果__"), "重开前测试条件失败");
+            TestSupport.Assert(Query(form, "__重开前零结果__"), "重开前测试条件失败");
             form.LoadProjectForSmokeTest(copy); TestSupport.PumpUi();
             TestSupport.Assert(form.QueryInputsForSmokeTest.All(input => input.Text.Length == 0) &&
                 form.QueryFieldsForSmokeTest.All(field => field.SelectedIndex <= 0) && !form.EmptyQueryForSmokeTest,
                 "重新打开项目仍保留旧查询条件");
-            Console.WriteLine($"RECORD_QUERY_UI_TESTS_OK tables={checkedTables} three-group-AND/word-AND/whitespace/all-attributes/R-S/biography/literal/case/explicit-enter-button/clear/subpage-state/zero-tab-navigation/draft/undo/invalid-edit/external-filter/quick-locate/physical-ID/csv-import-undo-redo-save-refresh/missing-remembered-field-warning/reopen/layout");
+            Console.WriteLine($"RECORD_QUERY_UI_TESTS_OK tables={checkedTables} three-group-AND/word-AND/whitespace/all-attributes/R-S/biography/literal/case/explicit-enter-button/clear/subpage-state/zero-tab-navigation/draft/undo/invalid-edit/external-filter/quick-locate/physical-ID/csv-import-undo-redo-save-refresh/missing-remembered-field-warning/reopen/layout/non-integral-dropdown-height/native-last-item/independent-selections");
+        }
+        catch (Exception error)
+        {
+            // Preserve the functional failure even if native-control teardown also reports
+            // an exception while unwinding the offscreen integration window.
+            Console.Error.WriteLine("RECORD_QUERY_UI_PRIMARY_FAILURE " + error);
+            throw;
         }
         finally { form.Dispose(); Directory.Delete(copy, true); }
     }
@@ -127,7 +137,8 @@ internal static class RecordQueryUiTests
         Apply(form, new RecordQueryCondition(null, "仅详情唯一词"));
         AssertVisibleQueryIds(form, [id], "全部属性没有覆盖完整列传正文");
         Apply(form, new RecordQueryCondition(identity, " 　"), new RecordQueryCondition(r, ""), new RecordQueryCondition(s, "   "));
-        TestSupport.Assert(form.EntityListForSmokeTest.Items.Count == rows.Count(), "全空输入条件没有恢复全体记录");
+        TestSupport.Assert(form.EntityListForSmokeTest.Items.Count == rows.Count(),
+            "全空输入条件没有恢复全体记录；" + QueryDiagnostics(form, rows.Select(row => Convert.ToInt32(row["ID"]))));
         ClearQuery(form);
     }
 
@@ -156,7 +167,7 @@ internal static class RecordQueryUiTests
 
     private static void CheckDetailPageState(MainForm form, int personId)
     {
-        form.SelectModuleForSmokeTest("策略"); ClearQuery(form);
+        SelectModule(form, "策略"); ClearQuery(form);
         SelectDetailPage(form, "策略详情");
         var firstScope = form.QueryScopeForSmokeTest.Key;
         Apply(form, new RecordQueryCondition(FieldKey(form, "ID：名称"), "__详情条件__"));
@@ -179,26 +190,26 @@ internal static class RecordQueryUiTests
             "切回子页没有保存尚未执行的输入");
         AssertVisibleQueryIds(form, appliedIds, "恢复子页时错误应用了尚未执行的输入");
         ClearQuery(form); SelectDetailPage(form, "策略详情"); ClearQuery(form);
-        form.SelectModuleForSmokeTest("人物"); ClearQuery(form); form.QuickLocateForSmokeTest(personId);
+        SelectModule(form, "人物"); ClearQuery(form); form.QuickLocateForSmokeTest(personId);
     }
 
     private static void CheckPhysicalDraftAndValidation(MainForm form, int id)
     {
         var persons = form.WorkspaceForSmokeTest.GetDocument("persons");
-        form.ShowPhysicalTableForSmokeTest("persons");
-        TestSupport.Assert(form.QueryForSmokeTest("'[]*"), "物理表查询失败");
+        ShowPhysicalTable(form, "persons");
+        TestSupport.Assert(Query(form, "'[]*"), "物理表查询失败");
         var grid = form.PhysicalGridForSmokeTest;
         TestSupport.Assert(grid.RowCount == 1 && Convert.ToInt32(((DataRowView)grid.Rows[0].DataBoundItem)["ID"]) == id && SelectedId(form) == id,
             "物理表筛选或导航的真实 ID 不一致");
-        TestSupport.Assert(form.QueryForSmokeTest("仅详情唯一词") && grid.RowCount == 0, "物理表查询混入关联列传正文");
-        TestSupport.Assert(form.QueryForSmokeTest("60001") && VisibleQueryIds(form).Contains(id), "物理表没有查询实际展示的初始 HP 列");
+        TestSupport.Assert(Query(form, "仅详情唯一词") && grid.RowCount == 0, "物理表查询混入关联列传正文");
+        TestSupport.Assert(Query(form, "60001") && VisibleQueryIds(form).Contains(id), "物理表没有查询实际展示的初始 HP 列");
         Apply(form, new RecordQueryCondition(FieldKey(form, "ID：名称"), "60001"));
         AssertVisibleQueryIds(form, [], "物理表明确身份条件仍匹配初始 HP");
-        form.QueryForSmokeTest("'[]*");
+        Query(form, "'[]*");
         var before = persons.Data.Rows[42]["武力"];
         grid.CurrentCell = grid.Rows[0].Cells["武力"];
         grid.BeginEdit(true); ((TextBox)grid.EditingControl!).Text = Convert.ToInt32(before) == 99 ? "98" : "99";
-        TestSupport.Assert(form.QueryForSmokeTest(string.Empty), "当前表格编辑阻止正常查询");
+        TestSupport.Assert(Query(form, string.Empty), "当前表格编辑阻止正常查询");
         TestSupport.Assert(Convert.ToInt32(persons.Data.Rows[42]["武力"]) != Convert.ToInt32(before), "筛选后编辑没有提交真实源行");
         form.QuickLocateForSmokeTest(id + 1);
         TestSupport.Assert(SelectedId(form) == id + 1 && Convert.ToInt32(((DataRowView)grid.CurrentRow!.DataBoundItem)["ID"]) == id + 1,
@@ -207,30 +218,30 @@ internal static class RecordQueryUiTests
         ((TextBox)grid.EditingControl!).Text = "9999999";
         var previousSummary = form.QuerySummaryForSmokeTest;
         var previousIds = VisibleQueryIds(form);
-        var invalidQueryAccepted = form.QueryForSmokeTest("无效查询不得应用");
+        var invalidQueryAccepted = Query(form, "无效查询不得应用");
         TestSupport.Assert(!invalidQueryAccepted && form.QuerySummaryForSmokeTest == previousSummary && grid.IsCurrentCellInEditMode &&
             form.QueryInputsForSmokeTest[0].Text == "无效查询不得应用", "无效编辑没有保留旧结果、错误单元格和查询输入");
         AssertVisibleQueryIds(form, previousIds, "验证失败仍改变了结果");
         var hideEmpty = (CheckBox)typeof(MainForm).GetField("_hideEmpty", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)!;
         hideEmpty.Checked = true;
         TestSupport.Assert(!hideEmpty.Checked && grid.IsCurrentCellInEditMode, "无效输入后隐藏空白行未恢复勾选状态");
-        grid.CancelEdit(); form.QueryForSmokeTest("'[]*");
+        grid.CancelEdit(); Query(form, "'[]*");
         grid.CurrentCell = grid.Rows[0].Cells["名称"];
         typeof(MainForm).GetMethod("GridKeyDown", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, [grid, new KeyEventArgs(Keys.Delete)]);
-        TestSupport.PumpUi();
+        WaitForQueryIdle(form);
         TestSupport.Assert(form.EmptyQueryForSmokeTest, "清空字段后没有更新查询结果");
         form.UndoDraftForSmokeTest(); TestSupport.PumpUi();
         AssertVisibleQueryIds(form, [id], "撤回清空字段没有恢复查询记录");
         ClearQuery(form);
 
         persons.Data.DefaultView.RowFilter = $"[ID] >= {id} AND [ID] <= {id + 2}";
-        form.QueryForSmokeTest("'[]*"); AssertVisibleQueryIds(form, [id], "属性查询没有与外部 RowFilter 交集");
+        Query(form, "'[]*"); AssertVisibleQueryIds(form, [id], "属性查询没有与外部 RowFilter 交集");
         ClearQuery(form); AssertVisibleQueryIds(form, [id, id + 1, id + 2], "清空查询丢失外部 RowFilter");
         persons.Data.DefaultView.RowFilter = string.Empty; ClearQuery(form);
-        hideEmpty.Checked = true; TestSupport.PumpUi(); var hiddenIds = VisibleQueryIds(form);
-        form.QueryForSmokeTest("__隐藏空白行后零结果__"); ClearQuery(form);
+        hideEmpty.Checked = true; WaitForQueryIdle(form); var hiddenIds = VisibleQueryIds(form);
+        Query(form, "__隐藏空白行后零结果__"); ClearQuery(form);
         AssertVisibleQueryIds(form, hiddenIds, "清空查询没有继续遵守隐藏空白行");
-        hideEmpty.Checked = false; TestSupport.PumpUi();
+        hideEmpty.Checked = false; WaitForQueryIdle(form);
     }
 
     private static int CheckAllPhysicalTables(MainForm form)
@@ -239,10 +250,10 @@ internal static class RecordQueryUiTests
         var checkedTables = 0;
         foreach (var module in workspace.Modules)
         {
-            form.SelectModuleForSmokeTest(module.Key);
+            SelectModule(form, module.Key);
             foreach (var key in module.TableKeys.Where(workspace.Documents.ContainsKey).Where(key => key is not "person-r-assign" and not "person-s-assign"))
             {
-                form.ShowPhysicalTableForSmokeTest(key); ClearQuery(form);
+                ShowPhysicalTable(form, key); ClearQuery(form);
                 var records = new RecordPresentationService(workspace).GetTableRecords(workspace.GetDocument(key));
                 TestSupport.Assert(form.EntityListForSmokeTest.Items.Count == records.Count, key + " 导航记录数错误");
                 if (records.Count > 0)
@@ -296,11 +307,11 @@ internal static class RecordQueryUiTests
         Apply(form, new RecordQueryCondition(FieldKey(form, "ID：名称"), "导入刷新"), new RecordQueryCondition(rKey, rValue));
         AssertVisibleQueryIds(form, [id], "失效属性测试的原始已应用条件不正确");
         form.QueryInputsForSmokeTest[1].Text = "尚未执行的失效属性词";
-        form.SelectModuleForSmokeTest("策略"); TestSupport.PumpUi();
+        SelectModule(form, "策略");
         ((IDictionary<string, TableDocument>)workspace.Documents).Remove("person-r-assign");
         ShowPersonBusiness(form);
         typeof(MainForm).GetMethod("RefreshQueryNavigation", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(form, [true]);
-        TestSupport.PumpUi();
+        WaitForQueryIdle(form);
         TestSupport.Assert(form.QueryScopeForSmokeTest.Fields.All(field => field.Key != rKey) &&
             form.QueryFieldsForSmokeTest[1].SelectedIndex <= 0 && form.QueryInputsForSmokeTest[1].Text.Length == 0,
             "失效的记忆属性没有同时清除待执行输入和属性选择");
@@ -313,12 +324,12 @@ internal static class RecordQueryUiTests
 
     private static void ShowPersonBusiness(MainForm form)
     {
-        form.SelectModuleForSmokeTest("人物");
+        SelectModule(form, "人物");
         var selector = (ComboBox)typeof(MainForm).GetField("_tableSelector", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)!;
         var business = selector.Items.Cast<object>().Single(item =>
             Convert.ToString(item.GetType().GetProperty("Key")!.GetValue(item)) == "__business");
         if (!Equals(selector.SelectedItem, business)) selector.SelectedItem = business;
-        TestSupport.PumpUi();
+        WaitForQueryIdle(form);
     }
 
     internal static void CheckQueryLayout(MainForm form, string context)
@@ -345,8 +356,107 @@ internal static class RecordQueryUiTests
                     context + " 查询控件重叠：" + controls[i].Name + "/" + controls[j].Name);
     }
 
+    internal static void CheckQueryChoiceBehavior(MainForm form, string context)
+    {
+        var fields = form.QueryFieldsForSmokeTest.ToArray();
+        var original = fields.Select(field => field.SelectedIndex).ToArray();
+        var inputs = form.QueryInputsForSmokeTest.Select(input => input.Text).ToArray();
+        var summary = form.QuerySummaryForSmokeTest;
+        var ids = VisibleQueryIds(form);
+        var wasDirty = form.WorkspaceForSmokeTest.IsDirty;
+        var selector = (ComboBox)typeof(MainForm).GetField("_tableSelector", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(form)!;
+        TestSupport.Assert(!selector.IntegralHeight, context + " 表选择仍使用逐项插入缓慢的 IntegralHeight。");
+        try
+        {
+            foreach (var field in fields)
+            {
+                TestSupport.Assert(!field.IntegralHeight && field.DropDownStyle == ComboBoxStyle.DropDownList,
+                    context + " 属性下拉框丢失普通列表或关闭 IntegralHeight 的设置：" + field.Name);
+                var rows = Math.Max(1, Math.Min(field.MaxDropDownItems, field.Items.Count));
+                var expectedHeight = rows * field.ItemHeight + 2;
+                TestSupport.Assert(field.ItemHeight >= field.Font.Height && field.DropDownHeight == expectedHeight,
+                    context + $" 属性下拉高度未跟随字体/DPI：{field.Name} height={field.DropDownHeight} expected={expectedHeight} " +
+                    $"item={field.ItemHeight} font={field.Font.Height} actualDpi={field.DeviceDpi}。");
+                TestSupport.Assert(field.Items.Count > 0 &&
+                    (int)SendMessage(field.Handle, 0x0146, IntPtr.Zero, IntPtr.Zero) == field.Items.Count,
+                    context + " 原生属性下拉列表缺少候选：" + field.Name);
+                var last = field.Items.Count - 1;
+                field.SelectedIndex = last;
+                TestSupport.Assert(field.SelectedIndex == last &&
+                    (int)SendMessage(field.Handle, 0x0147, IntPtr.Zero, IntPtr.Zero) == last &&
+                    field.Text == field.GetItemText(field.Items[last]),
+                    context + " 属性末项无法选择或显示：" + field.Name);
+                field.DroppedDown = true;
+                TestSupport.PumpUi();
+                TestSupport.Assert(field.DroppedDown && field.SelectedIndex == last,
+                    context + " 打开原生下拉后末项选择丢失：" + field.Name);
+                field.DroppedDown = false;
+            }
+            var independent = fields.Select((field, index) => Math.Min(index + 1, field.Items.Count - 1)).ToArray();
+            for (var index = 0; index < fields.Length; index++) fields[index].SelectedIndex = independent[index];
+            TestSupport.Assert(fields.Select(field => field.SelectedIndex).SequenceEqual(independent),
+                context + " 三组属性下拉的选择相互联动。");
+            fields[0].SelectedIndex = 0;
+            TestSupport.Assert(fields[1].SelectedIndex == independent[1] && fields[2].SelectedIndex == independent[2],
+                context + " 修改第一组属性改变了其它组的选择。");
+        }
+        finally
+        {
+            for (var index = 0; index < fields.Length; index++)
+            {
+                fields[index].DroppedDown = false;
+                fields[index].SelectedIndex = original[index];
+            }
+            TestSupport.PumpUi();
+        }
+        TestSupport.Assert(form.QueryInputsForSmokeTest.Select(input => input.Text).SequenceEqual(inputs) &&
+            form.QuerySummaryForSmokeTest == summary && VisibleQueryIds(form).SequenceEqual(ids) &&
+            form.WorkspaceForSmokeTest.IsDirty == wasDirty,
+            context + " 选择属性或展开下拉时应用了查询、改变了输入或产生草稿。");
+    }
+
     private static void Apply(MainForm form, params RecordQueryCondition[] conditions)
-        => TestSupport.Assert(form.QueryConditionsForSmokeTest(conditions), "三组查询未执行：" + string.Join(";", conditions.Select(condition => condition.Text)));
+    {
+        TestSupport.PumpUi();
+        TestSupport.Assert(form.QueryConditionsForSmokeTest(conditions), "三组查询未执行：" + string.Join(";", conditions.Select(condition => condition.Text)));
+        WaitForQueryIdle(form);
+    }
+
+    private static bool Query(MainForm form, string text)
+    {
+        TestSupport.PumpUi();
+        var applied = form.QueryForSmokeTest(text);
+        WaitForQueryIdle(form);
+        return applied;
+    }
+
+    private static void SelectModule(MainForm form, string key)
+    {
+        TestSupport.PumpUi();
+        form.SelectModuleForSmokeTest(key);
+        WaitForQueryIdle(form);
+    }
+
+    private static void ShowPhysicalTable(MainForm form, string key)
+    {
+        TestSupport.PumpUi();
+        form.ShowPhysicalTableForSmokeTest(key);
+        WaitForQueryIdle(form);
+    }
+
+    private static void WaitForQueryIdle(MainForm form)
+    {
+        var timeout = Stopwatch.StartNew();
+        TestSupport.PumpUi();
+        while (form.QuerySummaryForSmokeTest.Contains("正在", StringComparison.Ordinal))
+        {
+            TestSupport.PumpUi();
+            Thread.Sleep(1);
+            if (timeout.Elapsed > TimeSpan.FromSeconds(30))
+                throw new TimeoutException("属性查询未完成；" + QueryDiagnostics(form, []));
+        }
+    }
     private static string FieldKey(MainForm form, string displayName)
         => form.QueryScopeForSmokeTest.Fields.Single(field => field.DisplayName == displayName).Key;
     private static void SetField(ComboBox combo, string displayName)
@@ -357,7 +467,9 @@ internal static class RecordQueryUiTests
         var tab = Descendants(form.BusinessEditorForSmokeTest).OfType<TabControl>()
             .Single(control => control.TabPages.Cast<TabPage>().Any(page => page.Text == text));
         TestSupport.Assert(tab.Enabled, "零结果停用了详情子页导航：" + text);
-        tab.SelectedTab = tab.TabPages.Cast<TabPage>().Single(page => page.Text == text); TestSupport.PumpUi();
+        TestSupport.PumpUi();
+        tab.SelectedTab = tab.TabPages.Cast<TabPage>().Single(page => page.Text == text);
+        WaitForQueryIdle(form);
     }
     private static int SelectedId(MainForm form) => Convert.ToInt32(form.EntityListForSmokeTest.SelectedItem!.GetType()
         .GetProperty("Id")!.GetValue(form.EntityListForSmokeTest.SelectedItem));
@@ -365,28 +477,56 @@ internal static class RecordQueryUiTests
         .Select(item => Convert.ToInt32(item.GetType().GetProperty("Id")!.GetValue(item))).Order().ToArray();
     private static void PressQueryEnter(TextBox input)
     {
-        typeof(Control).GetMethod("OnKeyDown", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(input, [new KeyEventArgs(Keys.Enter)]);
         TestSupport.PumpUi();
+        typeof(Control).GetMethod("OnKeyDown", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(input, [new KeyEventArgs(Keys.Enter)]);
+        WaitForQueryIdle((MainForm)input.FindForm()!);
     }
     private static void ClearQuery(MainForm form)
     {
         var button = (Button)typeof(MainForm).GetField("_clearQueryButton", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)!;
-        button.PerformClick(); TestSupport.PumpUi();
+        TestSupport.PumpUi();
+        button.PerformClick(); WaitForQueryIdle(form);
     }
     private static void ClickQuery(MainForm form)
     {
         var button = (Button)typeof(MainForm).GetField("_queryButton", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(form)!;
-        button.PerformClick(); TestSupport.PumpUi();
+        TestSupport.PumpUi();
+        button.PerformClick(); WaitForQueryIdle(form);
     }
     private static void AssertVisibleQueryIds(MainForm form, IEnumerable<int> expected, string message)
     {
+        WaitForQueryIdle(form);
         var expectedIds = expected.Order().ToArray(); var actualIds = VisibleQueryIds(form);
         TestSupport.Assert(actualIds.SequenceEqual(expectedIds),
             $"{message}；expected=[{string.Join(',', expectedIds)}] actual=[{string.Join(',', actualIds)}] inputs=[{string.Join(';', form.QueryInputsForSmokeTest.Select(input => input.Text))}] summary=[{form.QuerySummaryForSmokeTest}]");
+    }
+
+    private static string QueryDiagnostics(MainForm form, IEnumerable<int> expected)
+    {
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        var actualIds = VisibleQueryIds(form);
+        var expectedIds = expected.Order().ToArray();
+        var page = (RecordQueryContext?)typeof(MainForm).GetProperty("QueryPageKey", flags)!.GetValue(form);
+        var state = page == null ? null : (RecordQueryState?)typeof(MainForm).GetMethod("QueryState", flags)!.Invoke(form, [page]);
+        var hideEmpty = (CheckBox)typeof(MainForm).GetField("_hideEmpty", flags)!.GetValue(form)!;
+        var document = (TableDocument?)typeof(MainForm).GetField("_currentDocument", flags)!.GetValue(form);
+        var kind = (BusinessPageKind?)typeof(MainForm).GetField("_businessKind", flags)!.GetValue(form);
+        var cacheIds = kind is { } business ? WorkspaceReadCache.For(form.WorkspaceForSmokeTest).GetNavigationRecords(business)
+            .Select(record => record.Id).ToArray() : [];
+        return $"scope={form.QueryScopeForSmokeTest.Key} context={page} business={kind} physical={document?.Definition.Key} " +
+            $"actual={actualIds.Length} expected={expectedIds.Length} cachedNavigation={cacheIds.Length} " +
+            $"summary=[{form.QuerySummaryForSmokeTest}] hideEmpty={hideEmpty.Checked} " +
+            $"applied=[{string.Join(';', state?.Applied.Conditions.Select(condition => $"{condition.FieldKey}:[{condition.Text}]") ?? [])}] " +
+            $"inputs=[{string.Join(';', form.QueryInputsForSmokeTest.Select(input => $"[{input.Text}]"))}] " +
+            $"missing=[{string.Join(',', expectedIds.Except(actualIds).Take(20))}] " +
+            $"unexpected=[{string.Join(',', actualIds.Except(expectedIds).Take(20))}] " +
+            $"externalFilter=[{document?.Data.DefaultView.RowFilter}]";
     }
     private static IEnumerable<Control> Descendants(Control root)
     {
         foreach (Control child in root.Controls)
         { yield return child; foreach (var descendant in Descendants(child)) yield return descendant; }
     }
+    [DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr window, int message, IntPtr wParam, IntPtr lParam);
 }

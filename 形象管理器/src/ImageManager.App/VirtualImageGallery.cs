@@ -50,12 +50,14 @@ public sealed class VirtualImageGallery : UserControl
         }
     }
 
-    public void SetActive(bool active)
+    public void SetActive(bool active, bool retainViewport = false)
     {
+        // A hidden module may keep its bounded current viewport. An explicit
+        // category deactivation must still recycle it, even if already hidden.
+        if (!active && !retainViewport) RecycleAll();
         if (_active == active) return;
         _active = active;
-        if (!active) RecycleAll();
-        else if (IsHandleCreated && !IsDisposed) RealizeVisibleRows();
+        if (active && IsHandleCreated && !IsDisposed) RealizeVisibleRows();
     }
 
     public void RefreshViewport() { UpdateScrollExtent(); QueueRealize(); }
@@ -183,6 +185,7 @@ public sealed class VirtualImageGallery : UserControl
             foreach (var index in _realized.Keys.Where(index => index < firstIndex || index > lastIndex).ToArray()) Recycle(index);
             for (var index = firstIndex; index <= lastIndex; index++)
             {
+                if (!_active || !Visible) break;
                 var isNew = !_realized.TryGetValue(index, out var card);
                 var asset = _items[index];
                 if (isNew)

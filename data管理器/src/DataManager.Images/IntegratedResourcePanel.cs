@@ -60,6 +60,7 @@ public sealed class IntegratedResourcePanel : UserControl
         bool forceReload = false, Func<IReadOnlyList<SImageAssignmentReference>?>? sAssignmentReferencesProvider = null)
     {
         _sAssignmentReferencesProvider = sAssignmentReferencesProvider;
+        if (!forceReload && _project != null) _adapter.CheckForChanges(root);
         if (!forceReload && !_loadingTask.IsCompleted && string.Equals(_loadingRoot, Path.GetFullPath(root), StringComparison.OrdinalIgnoreCase))
         {
             _usedIdsProvider = usedIdsProvider;
@@ -82,11 +83,14 @@ public sealed class IntegratedResourcePanel : UserControl
                     entry.Page.Dispose();
                     _pages.Remove(key);
                 }
-                else entry.Page.UpdateUsedIds(ids);
+                else if (entry.UsedIds == null ? ids != null : ids == null || !entry.UsedIds.SetEquals(ids))
+                {
+                    entry.Page.UpdateUsedIds(ids);
+                    entry.UsedIds = ids?.ToHashSet();
+                }
             }
             ShowCategory(category);
             _loadingTask = _page?.LoadingTask ?? Task.CompletedTask;
-            CategoriesChanged?.Invoke();
             return;
         }
         _loadingTask = LoadProjectAsync(root, category, usedIdsProvider);
@@ -205,7 +209,9 @@ public sealed class IntegratedResourcePanel : UserControl
             ? "人物名和人物编号按当前草稿检索；S:1是人物紧凑S编号，Unit:242或S_242是物理图号。可用空格组合筛选。"
             : "输入编号或名称筛选资源";
         if (_project == null) { _category = category; return; }
-        if (_category == category && _page != null) { _page.ActivateGallery(); return; }
+        // Effective visibility already resumes the current gallery. Repeated
+        // category notifications must not reselect/restart its focused preview.
+        if (_category == category && _page != null) return;
         if (_page != null)
         {
             if (_pages.TryGetValue(_category, out var previous)) previous.Search = _search.Text;
@@ -286,7 +292,8 @@ public sealed class IntegratedResourcePanel : UserControl
         _page.LoadProject(_project, resources, usedIds);
         _page.ActivateGallery();
         _diagnostic.Text = $"{resources.Length} 组" + (_project.IsReadOnly ? " · 只读" : "") + referenceDiagnostic;
-        _pages[category] = new CachedPage(_page, _diagnostic.Text, usedIds != null) { LastActivated = ++_activationOrder };
+        _pages[category] = new CachedPage(_page, _diagnostic.Text, usedIds != null)
+            { LastActivated = ++_activationOrder, UsedIds = usedIds };
         EnforcePlaybackBudget();
     }
 
@@ -370,6 +377,7 @@ public sealed class IntegratedResourcePanel : UserControl
         public ImageGridPage Page { get; } = page;
         public string Diagnostic { get; } = diagnostic;
         public bool HasVerifiedReferences { get; } = hasVerifiedReferences;
+        public IReadOnlySet<int>? UsedIds { get; set; }
         public long LastActivated { get; set; }
         public string Search { get; set; } = string.Empty;
     }

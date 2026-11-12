@@ -54,7 +54,35 @@ internal static class ResourcePreviewCardTests
         queued.Dispose();
         Application.DoEvents();
         TestSupport.Assert(IsDisposed(queuedAnimation.Frames[0]), "已排队但尚未显示的解码在关闭时泄漏");
+        VerifySmallStaticReuse(form, tips);
         Console.WriteLine("RESOURCE_PREVIEW_CARD_TESTS_OK");
+    }
+
+    private static void VerifySmallStaticReuse(Form form, ToolTip tips)
+    {
+        using var still = new ResourcePreviewCard(tips);
+        form.Controls.Add(still); still.BringToFront(); Application.DoEvents();
+        var loads = 0;
+        var baselinePixels = ImageManager.Core.ImageResourceCoordinator.Shared.Statistics.PixelBytes;
+        var image = new Bitmap(16, 16);
+        var animation = new ResourcePreviewAnimation([image], 1000, "still");
+        still.Bind("still", "小型静态图片", _ => { loads++; return Task.FromResult(animation); }, false);
+        WaitUntil(() => still.HasLoadedResource, "小型静态预览没有载入");
+        var lease = Field<object?>(still, "_pixelLease");
+        TestSupport.Assert(ImageManager.Core.ImageResourceCoordinator.Shared.Statistics.PixelBytes == baselinePixels + 16 * 16 * 4,
+            "小型静态预览没有按真实像素计入共享预算");
+        still.SetPreviewActive(false);
+        TestSupport.Assert(lease != null && ReferenceEquals(lease, Field<object?>(still, "_pixelLease")) &&
+            !IsDisposed(image) && !Field<System.Windows.Forms.Timer>(still, "_timer").Enabled,
+            "小型静态预览失活时未保留受预算管理的像素，或仍在播放");
+        still.SetPreviewActive(true); Application.DoEvents();
+        TestSupport.Assert(loads == 1 && still.HasLoadedResource &&
+            ReferenceEquals(animation, Field<ResourcePreviewAnimation?>(still, "_animation")),
+            "返回页面没有复用小型静态预览");
+        still.SetPreviewActive(false);
+        still.Dispose();
+        TestSupport.Assert(IsDisposed(image) && ImageManager.Core.ImageResourceCoordinator.Shared.Statistics.PixelBytes == baselinePixels,
+            "失活后保留的静态预览未在释放控件时回收像素或预算租约");
     }
 
     private static ResourcePreviewAnimation Animation(Color color)

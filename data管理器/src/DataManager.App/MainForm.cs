@@ -21,7 +21,7 @@ public sealed partial class MainForm : Form
     private readonly TabControl _moduleTabs = new() { Dock = DockStyle.Fill, Height = 34 };
     private readonly ListBox _entityList = new();
     private readonly SearchableIdComboBox _quickLookup = new() { Width = 260, Visible = false };
-    private readonly ComboBox _tableSelector = new();
+    private readonly ComboBox _tableSelector = new() { IntegralHeight = false };
     private readonly ComboBox _profileSelector = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 180 };
     private readonly ComboBox _variantSelector = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 250 };
     private readonly DataGridView _grid = new BufferedDataGridView();
@@ -607,20 +607,32 @@ public sealed partial class MainForm : Form
 
     private void SelectModuleTab()
     {
+        using var timing = RuntimeTiming.Measure("MainForm.SelectModuleTab");
         if (_moduleTabs.SelectedTab?.Tag is not string key) return;
         if (_activeModuleKey == key) return;
         if (!PreparePendingEdits()) return;
+        CancelRecordQuery();
+        _quickLookupRecords = null;
         if (_activeModuleKey != null && _tableSelector.SelectedItem is TableChoice oldTable)
             _moduleTables[_activeModuleKey] = oldTable.Key;
         _activeModuleKey = key;
         RememberGridWidths();
         var layoutHost = _grid.Parent!;
+        var bindingModule = _bindingModule;
+        _bindingModule = true;
         SuspendLayout();
+        _responsiveHeader?.SuspendLayout();
         _navigationSplit?.SuspendLayout();
         layoutHost.SuspendLayout();
         try
         {
         _businessKind = null;
+        if (key.StartsWith("__", StringComparison.Ordinal) && !_grid.AutoGenerateColumns)
+        {
+            _grid.DataSource = null;
+            _grid.Columns.Clear();
+            _grid.AutoGenerateColumns = true;
+        }
         if (key != "__resources")
         {
             var oldPreview = _resourcePreview.Image;
@@ -701,7 +713,6 @@ public sealed partial class MainForm : Form
             _currentDocument = null;
             _tableSelector.Items.Clear();
             _tableSelector.Enabled = false;
-            _entityList.Items.Clear();
             ShowResourceView();
             return;
         }
@@ -723,13 +734,16 @@ public sealed partial class MainForm : Form
             _moduleTables.TryGetValue(key, out var savedTable);
             var selectedIndex = _tableSelector.Items.Cast<TableChoice>().ToList().FindIndex(choice => choice.Key == savedTable);
             _tableSelector.SelectedIndex = Math.Max(0, selectedIndex);
+            SelectTable();
         }
         else ShowNoTable();
         }
         finally
         {
+            _bindingModule = bindingModule;
             layoutHost.ResumeLayout(true);
             _navigationSplit?.ResumeLayout(true);
+            _responsiveHeader?.ResumeLayout(true);
             ResumeLayout(true);
             if (_businessEditor.Visible) _businessEditor.ActivateView();
         }
@@ -781,6 +795,7 @@ public sealed partial class MainForm : Form
 
     private void SelectTable()
     {
+        using var timing = RuntimeTiming.Measure("MainForm.SelectTable");
         if (_restoringTableSelection) return;
         if (!PreparePendingEdits())
         {
@@ -803,7 +818,6 @@ public sealed partial class MainForm : Form
         _businessKind = null;
         _businessEditor.Visible = false;
         _imageEditor.Visible = false;
-        _grid.Visible = true;
         if (_tableSelector.SelectedItem is TableChoice unavailableChoice &&
             _workspace.Definitions.FirstOrDefault(item => item.Key == unavailableChoice.Key) is { Capability: TableCapability.Unavailable } unavailable)
         {
@@ -825,10 +839,11 @@ public sealed partial class MainForm : Form
         _currentDocument = document;
         _historyFilter.Visible = false;
         _suppressGridEvents = true;
+        _grid.SuspendLayout();
         try
         {
             RememberGridWidths();
-            if (!ReferenceEquals(_grid.DataSource, document.Data)) _grid.DataSource = document.Data;
+            if (!ReferenceEquals(_grid.DataSource, document.Data)) BindPhysicalTableDataSource(document.Data);
             _grid.ReadOnly = false;
             ConfigureReferenceColumns(document);
             ConfigureProjectedColumns(document);
@@ -838,12 +853,13 @@ public sealed partial class MainForm : Form
                 idColumn.DefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.FromArgb(242, 245, 248), ForeColor = Color.DimGray };
                 idColumn.ReadOnly = true;
             }
-            PopulateEntityList(document);
-            PopulateQuickLookup(document);
-            ApplyEmptyFilter();
+            RefreshQueryNavigation(bindSelection: false);
             ApplyGridWidths(document.Definition.Key);
         }
-        finally { _suppressGridEvents = false; }
+        finally { _grid.ResumeLayout(); _suppressGridEvents = false; }
+        // Show the completed view once, rather than first displaying the previous
+        // table and recalculating its native rows before this binding is ready.
+        _grid.Visible = true;
         SetStatus($"已读取 {document.Definition.DisplayName}：{document.Data.Rows.Count} 行");
     }
 
@@ -954,106 +970,6 @@ public sealed partial class MainForm : Form
         _historyFilter.Visible = false;
         _grid.DataSource = null;
         SetStatus("当前模块没有可读取的表。", true);
-    }
-
-    private void ShowResourceView()
-    {
-        _businessEditor.Visible = false;
-        _grid.Visible = false;
-        _resourcePreview.Visible = false;
-        _imageEditor.Visible = true;
-        _historyFilter.Visible = false;
-        _currentDocument = null;
-        if (string.IsNullOrWhiteSpace(_workspace.RootPath)) return;
-        try
-        {
-            var category = (_entityList.SelectedItem as ResourceChoice)?.Key ?? _lastResourceCategory;
-            _imageEditor.LoadProject(_workspace.RootPath, category, usedIdsProvider: GetVerifiedUsedImageIds,
-                sAssignmentReferencesProvider: GetCurrentSAssignmentReferences);
-            RefreshResourceCategories();
-            _diagnosticBox.Text = "选择左侧资源分类。新增、替换、删除、导入导出与历史由原形象管理器控件处理。删除导致编号前移时不会自动修正其他文件引用。";
-            SetStatus("图片设定已载入。");
-        }
-        catch (Exception ex) { _diagnosticBox.Text = ex.Message; SetStatus("形象资源加载失败：" + ex.Message, true); }
-    }
-
-    private void RefreshResourceCategories()
-    {
-        if (!_resourceModule) return;
-        var selected = (_entityList.SelectedItem as ResourceChoice)?.Key ?? _lastResourceCategory;
-        _entityList.BeginUpdate();
-        _refreshingResourceCategories = true;
-        try
-        {
-            _entityList.Items.Clear();
-            foreach (var category in _imageEditor.ProjectCategories)
-                _entityList.Items.Add(new ResourceChoice(category.Key, category.Name));
-            var match = _entityList.Items.Cast<ResourceChoice>().Select((item, index) => (item, index))
-                .FirstOrDefault(pair => pair.item.Key == selected);
-            if (_entityList.Items.Count > 0) _entityList.SelectedIndex = match.item == null ? 0 : match.index;
-            if (_entityList.SelectedItem is ResourceChoice current) _lastResourceCategory = current.Key;
-        }
-        finally { _refreshingResourceCategories = false; _entityList.EndUpdate(); }
-        if (_entityList.SelectedItem is ResourceChoice active) _imageEditor.ShowCategory(active.Key);
-    }
-
-    private IReadOnlySet<int>? GetVerifiedUsedImageIds(string category)
-    {
-        var key = category switch { "R" => "person-r-assign", "S" => "person-s-assign", _ => null };
-        if (key == null || !_workspace.Documents.TryGetValue(key, out var document) ||
-            document.Definition.Capability != TableCapability.Editable ||
-            document.Definition.VerificationLevel == VerificationLevel.InheritedUnverified ||
-            string.IsNullOrWhiteSpace(document.Definition.CapabilityEvidence)) return null;
-        var name = category == "R" ? "R形象ID" : "S形象ID";
-        var field = document.Definition.Fields.FirstOrDefault(field => field.Name == name);
-        if (field == null || !document.Data.Columns.Contains(name) || document.Definition.DataOffset < 0 ||
-            document.Definition.EndOffsetExclusive > document.OriginalFileBytes.LongLength) return null;
-        if (category == "S")
-        {
-            // Gallery IDs are physical Unit numbers. Project the current draft's compact
-            // assignments here, before crossing into the resource editor.
-            var assignments = new List<ImageManager.Core.CharacterAssignment>();
-            Dictionary<int, int>? jobs = null;
-            foreach (DataRow row in document.Data.Rows)
-            {
-                if (!int.TryParse(Convert.ToString(row[name], CultureInfo.InvariantCulture), out var sId) ||
-                    sId < 0 || sId >= ushort.MaxValue) return null;
-                var personId = row.Table.Columns.Contains("ID") ? Convert.ToInt32(row["ID"], CultureInfo.InvariantCulture)
-                    : document.Definition.BeginId + document.Data.Rows.IndexOf(row);
-                var job = 0;
-                if (sId == 0)
-                {
-                    if (jobs == null)
-                    {
-                        if (!_workspace.Documents.TryGetValue("persons", out var persons) ||
-                            persons.Definition.Capability != TableCapability.Editable ||
-                            persons.Definition.VerificationLevel == VerificationLevel.InheritedUnverified ||
-                            (persons.Definition.VerificationLevel is not (VerificationLevel.BaselineVerified or VerificationLevel.VariantVerified) &&
-                                string.IsNullOrWhiteSpace(persons.Definition.CapabilityEvidence)) ||
-                            !persons.Data.Columns.Contains("兵种")) return null;
-                        jobs = new Dictionary<int, int>();
-                        for (var index = 0; index < persons.Data.Rows.Count; index++)
-                        {
-                            var person = persons.Data.Rows[index];
-                            var id = persons.Data.Columns.Contains("ID") ? Convert.ToInt32(person["ID"], CultureInfo.InvariantCulture)
-                                : persons.Definition.BeginId + index;
-                            if (int.TryParse(Convert.ToString(person["兵种"], CultureInfo.InvariantCulture), out var value)) jobs[id] = value;
-                        }
-                    }
-                    if (!jobs.TryGetValue(personId, out job) || job is < 0 or > 79) return null;
-                }
-                assignments.Add(new ImageManager.Core.CharacterAssignment(personId, string.Empty, job, 0, sId));
-            }
-            return new ImageManager.Core.SPhysicalMappingService().ResolveUsedPhysicalIds(assignments);
-        }
-        var result = new HashSet<int>();
-        foreach (DataRow row in document.Data.Rows)
-        {
-            if (int.TryParse(Convert.ToString(row[name], CultureInfo.InvariantCulture), NumberStyles.Integer,
-                    CultureInfo.InvariantCulture, out var id) && id >= Math.Max(0, field.Minimum) && id <= field.Maximum && id < ushort.MaxValue)
-                result.Add(id);
-        }
-        return result;
     }
 
     private UnifiedHistoryService CreateUnifiedHistory()
@@ -1186,6 +1102,7 @@ public sealed partial class MainForm : Form
     private string? _pendingEditError;
     private bool PreparePendingEdits(bool allowInvalidRanges = false)
     {
+        using var timing = RuntimeTiming.Measure("MainForm.PreparePendingEdits");
         _pendingEditError = null;
         if (string.IsNullOrWhiteSpace(_workspace.RootPath)) return true;
         try
@@ -1742,7 +1659,7 @@ public sealed partial class MainForm : Form
                 _grid.CancelEdit();
                 _editingValues.Clear();
                 _currentDocument = document;
-                _grid.DataSource = document.Data;
+                BindPhysicalTableDataSource(document.Data);
                 _grid.ReadOnly = false;
                 ConfigureReferenceColumns(document);
                 ApplyEmptyFilter();
@@ -1833,28 +1750,36 @@ public sealed partial class MainForm : Form
         }
     }
 
+    private bool _ownedResourcesDisposed;
+
     protected override void Dispose(bool disposing)
     {
-        if (disposing && !IsDisposed)
+        try
         {
-            ReleaseGridWidthSources();
-            CancelEngineScan();
-            ReleaseRangeWorkspace();
-            _rangeCatalog.DetailedChanged -= RangeCatalogChanged;
-            _rangeCatalog.Dispose();
-            foreach (var panel in _businessEditors.Values.Distinct()) panel.Dispose();
-            _businessEditors.Clear();
-            _imageEditor.Dispose();
-            _resourceAdapter?.Dispose();
-            _gridTextGuard?.Dispose();
-            _shellTips.Dispose();
-            ResetReferenceChoices();
-            _referenceLookup.Dispose();
-            _resourcePreview.Image?.Dispose();
-            _resourcePreview.Image = null;
-            _applicationIcon.Dispose();
+            if (disposing && !_ownedResourcesDisposed)
+            {
+                _ownedResourcesDisposed = true;
+                CancelRecordQuery();
+                WorkspaceReadCache.Reset(_workspace);
+                ReleaseGridWidthSources();
+                CancelEngineScan();
+                _rangeCatalog.DetailedChanged -= RangeCatalogChanged;
+                ReleaseRangeWorkspace();
+                _rangeCatalog.Dispose();
+                foreach (var panel in _businessEditors.Values.Distinct()) panel.Dispose();
+                _businessEditors.Clear();
+                _imageEditor.Dispose();
+                _resourceAdapter?.Dispose();
+                _gridTextGuard?.Dispose();
+                _shellTips.Dispose();
+                ResetReferenceChoices();
+                _referenceLookup.Dispose();
+                _resourcePreview.Image?.Dispose();
+                _resourcePreview.Image = null;
+                _applicationIcon.Dispose();
+            }
         }
-        base.Dispose(disposing);
+        finally { base.Dispose(disposing); }
     }
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)

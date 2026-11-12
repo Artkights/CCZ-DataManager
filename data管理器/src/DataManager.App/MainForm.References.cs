@@ -1,4 +1,4 @@
-using System.Data;
+﻿using System.Data;
 using System.Globalization;
 using System.ComponentModel;
 using DataManager.Core.Domain;
@@ -24,6 +24,7 @@ public sealed partial class MainForm
 
     private void ConfigureReferenceColumns(TableDocument document)
     {
+        using var timing = RuntimeTiming.Measure("MainForm.ConfigureReferenceColumns");
         var current = _workspace.Documents.Values.ToHashSet();
         _referenceLookup.Prune(current);
         foreach (var key in _referenceOptions.Keys.Where(key => !current.Contains(key.Document)).ToArray())
@@ -59,8 +60,12 @@ public sealed partial class MainForm
     private ReferenceChoice[] GetReferenceChoices(TableDocument document, TableFieldDefinition field)
     {
         if (document.Definition.Key == "persons" && PersonEquipmentService.CategoryForField(field.Name).HasValue)
-            return PersonEquipmentService.GetOptions(_workspace.Documents, field.Name, field.Minimum, field.Maximum)
-                .Select(option => new ReferenceChoice(option.Id, option.Display)).ToArray();
+            return WorkspaceReadCache.For(_workspace).GetOrCreateData(
+                $"physical-equipment:{field.Name}:{field.Minimum}:{field.Maximum}",
+                new[] { "items-low", "items-high", "items-extended" }.Select(key => new RecordQueryDependency(key)),
+                () => PersonEquipmentService.GetOptions(_workspace.Documents, field.Name, field.Minimum, field.Maximum)
+                    .Select(option => new ReferenceChoice(option.Id, option.Display)).ToArray(),
+                choices => 64L + choices.Sum(choice => 32L + choice.Display.Length * 2L));
         var key = (document, field.Name);
         if (!_referenceOptions.TryGetValue(key, out var entry))
             _referenceOptions[key] = entry = new ReferenceOptionsEntry(document.Data, field);

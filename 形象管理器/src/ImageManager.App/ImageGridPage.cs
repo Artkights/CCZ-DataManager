@@ -33,6 +33,7 @@ public sealed class ImageGridPage : UserControl
     private readonly HashSet<int> _usedIds = [];
     private readonly ToolTip _paletteTip = new();
     private readonly Dictionary<PictureBox, ImageResourceCoordinator.PixelLease> _thumbnailLeases = new();
+    private readonly Dictionary<PictureBox, Action<bool>> _thumbnailActivity = new();
     private ProjectProfile? _project;
     private List<ImageResourceDescriptor> _resources = [];
     private List<LogicalImageAsset> _assets = [];
@@ -212,10 +213,33 @@ public sealed class ImageGridPage : UserControl
     {
         if (IsDisposed || Disposing) return;
         var active = _isActive && Visible;
-        if (_effectiveViewActive == active) return;
+        if (_effectiveViewActive == active)
+        {
+            // A category can be explicitly left while its entire module is
+            // already hidden. Keep only the selected category's native cards.
+            if (!active && !_isActive) _gallery.SetActive(false);
+            return;
+        }
         _effectiveViewActive = active;
         _animationPreview.SetActive(active);
-        _gallery.SetActive(active);
+        if (!active)
+        {
+            foreach (var activity in _thumbnailActivity.Values.ToArray()) activity(false);
+            // Thumbnails normally fit within one 222x188 card. An unusually
+            // large decoder result may be shown, but is not retained hidden.
+            foreach (var pair in _thumbnailLeases.ToArray())
+                if (pair.Key.Image is { } image && (long)image.Width * image.Height * 4 > 1024 * 1024)
+                {
+                    pair.Key.Image = null;
+                    image.Dispose(); pair.Value.Dispose(); _thumbnailLeases.Remove(pair.Key);
+                }
+        }
+        _gallery.SetActive(active, retainViewport: !active && _isActive);
+        if (active)
+        {
+            foreach (var lease in _thumbnailLeases.Values) lease.Touch();
+            foreach (var activity in _thumbnailActivity.Values.ToArray()) activity(true);
+        }
     }
 
     protected override void OnParentChanged(EventArgs e)
@@ -550,22 +574,39 @@ public sealed class ImageGridPage : UserControl
             var box = new PictureBox { SizeMode = PictureBoxSizeMode.Zoom, Margin = Padding.Empty,
                 BackColor = Color.FromArgb(225, 228, 232), Tag = descriptor };
             viewport.Controls.Add(box);
-            box.Disposed += (_, _) => { if (_thumbnailLeases.Remove(box, out var lease)) lease.Dispose(); };
+            box.Disposed += (_, _) =>
+            {
+                if (_thumbnailActivity.Remove(box, out var activity)) activity(false);
+                if (_thumbnailLeases.Remove(box, out var lease)) lease.Dispose();
+            };
             viewport.SizeChanged += (_, _) => ArrangePreview(box);
             _paletteTip.SetToolTip(box, descriptor.Action switch { "small" => "小图", "large" => "大图", _ => descriptor.Action });
             previewPanel.Controls.Add(viewport, index, 0);
             box.Click += (_, _) => ActivatePreview(asset);
             viewport.Click += (_, _) => ActivatePreview(asset);
-            var started = false;
+            CancellationTokenSource? request = null;
+            void StopLoading()
+            {
+                var previous = request;
+                request = null;
+                previous?.Cancel(); previous?.Dispose();
+            }
             async void StartLoading()
             {
-                if (started || box.IsDisposed || box.Image != null || !_isActive || !box.Visible) return;
-                started = true;
-                try { await LoadThumbnailAsync(asset, descriptor, box, generation, cardCancellation.Token); }
-                finally { started = false; }
+                if (request != null || box.IsDisposed || box.Image != null || !_isActive || !Visible || !box.Visible) return;
+                var current = CancellationTokenSource.CreateLinkedTokenSource(cardCancellation.Token);
+                request = current;
+                try { await LoadThumbnailAsync(asset, descriptor, box, generation, current.Token); }
+                finally
+                {
+                    // A hidden request can finish after its replacement has
+                    // started. It never clears that replacement's ownership.
+                    if (ReferenceEquals(request, current)) { request = null; current.Dispose(); }
+                }
             }
+            _thumbnailActivity[box] = active => { if (active) StartLoading(); else StopLoading(); };
             box.MouseEnter += (_, _) => StartLoading();
-            box.VisibleChanged += (_, _) => { if (box.Visible) StartLoading(); };
+            box.VisibleChanged += (_, _) => { if (box.Visible) StartLoading(); else StopLoading(); };
             box.HandleCreated += (_, _) => StartLoading();
             if (box.IsHandleCreated) StartLoading();
         }
@@ -638,6 +679,7 @@ public sealed class ImageGridPage : UserControl
             if (bitmap == null && lastError != null) throw lastError;
             if (bitmap == null) return;
             if (cancellationToken.IsCancellationRequested || generation != Volatile.Read(ref _renderGeneration) ||
+                !_isActive || !Visible || !target.Visible ||
                 target.IsDisposed || !target.IsHandleCreated || target.Tag is not FrameDescriptor current || current != descriptor)
             {
                 bitmap.Dispose();
@@ -665,7 +707,9 @@ public sealed class ImageGridPage : UserControl
         catch (OperationCanceledException) { }
         catch (Exception ex)
         {
-            if (!target.IsDisposed) _paletteTip.SetToolTip(target, "预览失败：" + ex.Message);
+            if (!cancellationToken.IsCancellationRequested && generation == Volatile.Read(ref _renderGeneration) &&
+                !target.IsDisposed && _isActive && Visible && target.Visible)
+                _paletteTip.SetToolTip(target, "预览失败：" + ex.Message);
         }
     }
 

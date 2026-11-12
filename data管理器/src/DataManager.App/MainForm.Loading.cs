@@ -42,7 +42,7 @@ public sealed partial class MainForm
         panel.SaveRequested += (_, _) => SaveProject();
         panel.SImageLocationRequested += LocatePersonSImage;
         panel.PersonImageLocationRequested += LocatePersonImage;
-        panel.ExtendCategoryChanged += (_, _) => { if (ReferenceEquals(panel, _businessEditor)) RefreshExtendEntityList(); };
+        // Category changes already emit QueryScopeChanged after the detail render.
         panel.QueryScopeChanged += (_, _) =>
         {
             if (ReferenceEquals(panel, _businessEditor) && !_bindingModule && !_refreshingQuery)
@@ -55,7 +55,7 @@ public sealed partial class MainForm
     {
         if (!_businessEditors.TryGetValue(kind, out var next))
             _businessEditors[kind] = next = CreateBusinessEditor();
-        if (ReferenceEquals(next, _businessEditor)) { next.ActivateView(); return; }
+        if (ReferenceEquals(next, _businessEditor)) { if (next.Visible) next.ActivateView(); return; }
         var parent = _businessEditor.Parent;
         var index = parent?.Controls.GetChildIndex(_businessEditor) ?? -1;
         _businessEditor.DeactivateView();
@@ -66,7 +66,8 @@ public sealed partial class MainForm
         // their complete lifetime. Hidden editors never validate on navigation.
         if (next.Parent == null) parent.Controls.Add(next);
         if (index >= 0) parent.Controls.SetChildIndex(next, index);
-        next.ActivateView();
+        // VisibilityChanged performs activation after the new page is actually visible.
+        if (next.Visible) next.ActivateView();
     }
 
     private void ResetBusinessEditors()
@@ -117,8 +118,28 @@ public sealed partial class MainForm
         }
     }
 
+    private void BindPhysicalTableDataSource(DataTable table)
+    {
+        var wide = table.Columns.Count > 600;
+        if (wide || !_grid.AutoGenerateColumns)
+        {
+            _grid.DataSource = null;
+            _grid.Columns.Clear();
+        }
+        _grid.AutoGenerateColumns = !wide;
+        if (wide)
+            foreach (DataColumn field in table.Columns)
+                _grid.Columns.Add(new DataGridViewTextBoxColumn
+                {
+                    Name = field.ColumnName, HeaderText = field.ColumnName, DataPropertyName = field.ColumnName,
+                    ValueType = field.DataType, ReadOnly = field.ReadOnly, FillWeight = 1
+                });
+        _grid.DataSource = table;
+    }
+
     private void ApplyGridWidths(string key)
     {
+        using var timing = RuntimeTiming.Measure("MainForm.ApplyGridWidths");
         EnsureGridLayoutEvents();
         _arrangingGridWidths = true;
         try

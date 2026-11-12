@@ -22,7 +22,7 @@ public sealed class BaseScanner
         return Scan(rootPath, resolved, match);
     }
 
-    public ScanReport Scan(string rootPath, ResolvedProfile resolved, ProfileMatchResult match)
+    public ScanReport Scan(string rootPath, ResolvedProfile resolved, ProfileMatchResult match, SourceFileReadSession? sourceSession = null)
     {
         var reports = new List<ScanFileReport>();
         var diagnostics = new List<string>();
@@ -35,18 +35,18 @@ public sealed class BaseScanner
 
         foreach (var file in ProfileDetector.CoreFiles)
         {
-            var path = ProjectFileLocator.Resolve(rootPath, file);
-            if (!File.Exists(path))
+            var path = sourceSession?.Resolve(rootPath, file) ?? ProjectFileLocator.Resolve(rootPath, file);
+            if (!(sourceSession?.GetMetadata(path).Exists ?? File.Exists(path)))
             {
                 reports.Add(new ScanFileReport(file, false, 0, 0, false, string.Empty, "文件不存在"));
                 diagnostics.Add($"缺少核心文件：{file}");
                 continue;
             }
-            var length = new FileInfo(path).Length;
+            var length = sourceSession?.GetMetadata(path).Length ?? new FileInfo(path).Length;
             var known = expectedLengths.GetValueOrDefault(file) ?? [];
             var lengthMatches = known.Length == 0 || known.Contains(length);
             var expected = known.Length == 0 ? 0 : known[0];
-            var hash = HashService.Sha256(path);
+            var hash = sourceSession?.Read(path).Hash ?? HashService.Sha256(path);
             var message = known.Length == 0
                 ? $"长度 {length:N0} 字节；当前变体没有固定长度约束"
                 : lengthMatches
@@ -55,10 +55,10 @@ public sealed class BaseScanner
             reports.Add(new ScanFileReport(Path.GetRelativePath(rootPath, path), true, length, expected, lengthMatches, hash, message));
         }
 
-        var exePath = ProjectFileLocator.Resolve(rootPath, "Ekd5.exe");
-        if (File.Exists(exePath))
+        var exePath = sourceSession?.Resolve(rootPath, "Ekd5.exe") ?? ProjectFileLocator.Resolve(rootPath, "Ekd5.exe");
+        if (sourceSession?.GetMetadata(exePath).Exists ?? File.Exists(exePath))
         {
-            var exeBytes = File.ReadAllBytes(exePath);
+            var exeBytes = sourceSession?.Read(exePath).Bytes ?? File.ReadAllBytes(exePath);
             diagnostics.Add(TryDescribePe(exeBytes, out var description)
                 ? $"Ekd5.exe PE：{description}"
                 : "Ekd5.exe 未通过 MZ/PE 文件头检查。");
@@ -68,7 +68,7 @@ public sealed class BaseScanner
         var usable = 0;
         foreach (var definition in resolved.Tables)
         {
-            var validation = reader.Validate(rootPath, definition);
+            var validation = reader.Validate(rootPath, definition, sourceSession);
             if (validation.IsUsable) usable++;
             else diagnostics.Add($"{definition.DisplayName}：{validation.Message}");
             if (validation.IsUsable && definition.Key is "items-extended" or "item-description-extended")

@@ -609,7 +609,7 @@ public sealed class SearchableIdComboBox : ComboBox
         {
             SelectedIndex = -1;
             Items.Clear();
-            foreach (var option in filtered) Items.Add(option);
+            Items.AddRange(filtered.Cast<object>().ToArray());
             _itemsBinding = binding;
             _boundItemCount = Items.Count;
             SelectedIndex = -1;

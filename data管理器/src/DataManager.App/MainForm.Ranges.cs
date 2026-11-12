@@ -40,15 +40,17 @@ public sealed partial class MainForm
         RangeEditSession? next = null;
         try
         {
-            // The workspace has already completed recovery and loaded its
-            // documents. Inspect that same disk image without a second recovery.
-            var executable = ProjectFileLocator.Resolve(_workspace.RootPath, "Ekd5.exe");
-            var bytes = File.ReadAllBytes(executable);
-            var hash = HashService.Sha256(bytes);
-            if (_workspace.Documents.Values.Where(document =>
-                    Path.GetFullPath(document.FilePath).Equals(Path.GetFullPath(executable), StringComparison.OrdinalIgnoreCase))
-                .Any(document => !document.OriginalFileHash.Equals(hash, StringComparison.OrdinalIgnoreCase)))
-                throw new IOException("Ekd5.exe 在项目加载期间发生变化，请重新打开项目。");
+            // The range PE reader clones its input. Reuse the workspace's
+            // immutable saved image so every editor sees the same open-time
+            // bytes; the shared save path still checks the live disk baseline.
+            var executable = Path.GetFullPath(ProjectFileLocator.Resolve(_workspace.RootPath, "Ekd5.exe"));
+            var sources = _workspace.Documents.Values.Where(document =>
+                Path.GetFullPath(document.FilePath).Equals(executable, StringComparison.OrdinalIgnoreCase)).ToArray();
+            var source = sources.FirstOrDefault();
+            var bytes = source?.OriginalFileBytes ?? File.ReadAllBytes(executable);
+            var hash = source?.OriginalFileHash ?? HashService.Sha256(bytes);
+            if (sources.Any(document => !document.OriginalFileHash.Equals(hash, StringComparison.OrdinalIgnoreCase)))
+                throw new IOException("工作区的 Ekd5.exe 读取基线不一致，请重新打开项目。");
             next = new RangeEditSession(_workspace.RootPath, bytes, recoverStandaloneTransaction: false);
             _rangeSession = next;
             _rangeWorkspace = _workspace;
@@ -100,7 +102,8 @@ public sealed partial class MainForm
 
     private void RangeCatalogChanged(object? sender, WorkspaceRangeCatalogChangedEventArgs e)
     {
-        if (IsDisposed || Disposing) return;
+        if (_ownedResourcesDisposed || IsDisposed || Disposing) return;
+        DataManager.Core.Domain.WorkspaceReadCache.For(_workspace).InvalidateExternal();
         foreach (var editor in _businessEditors.Values)
             if (!editor.IsDisposed) editor.RefreshRangePickers(e);
     }

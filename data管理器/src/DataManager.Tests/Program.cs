@@ -9,6 +9,7 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        Console.OutputEncoding = new System.Text.UTF8Encoding(false);
         DataManager.App.ApplicationBootstrap.Initialize();
         Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException);
         var testHistoryBase = args.FirstOrDefault() == "--scene-terrain" && args.Length > 1
@@ -18,6 +19,41 @@ internal static class Program
         using var historyScope = DataManager.Core.History.ProjectHistoryPaths.UseBaseDirectory(testHistoryRoot);
         try
         {
+            if (args.FirstOrDefault() == "--query-choice-binding" && args.Length >= 3)
+            {
+                QueryChoiceBindingPerformanceTests.Run(Path.GetFullPath(args[1]), Path.GetFullPath(args[2]), args.Length > 3 ? int.Parse(args[3]) : 30);
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--runtime-session-lifecycle" && args.Length >= 3)
+            {
+                RuntimeSessionLifecycleTests.Run(Path.GetFullPath(args[1]), Path.GetFullPath(args[2]));
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--query-pipeline" && args.Length >= 2)
+            {
+                RecordQueryPipelineTests.Run(Path.GetFullPath(args[1]));
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--query-cache")
+            {
+                RecordQueryCacheTests.Run();
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--responsive-header-layout" && args.Length >= 3)
+            {
+                ResponsiveHeaderLayoutTests.Run(Path.GetFullPath(args[1]), Path.GetFullPath(args[2]));
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--source-file-read-session" && args.Length >= 2)
+            {
+                SourceFileReadSessionTests.Run(Path.GetFullPath(args[1]));
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--runtime-performance" && args.Length >= 3)
+            {
+                RuntimePerformanceTests.Run(Path.GetFullPath(args[1]), Path.GetFullPath(args[2]), args.Length > 3 ? int.Parse(args[3]) : 30);
+                return 0;
+            }
             if (args.FirstOrDefault() == "--csv-format-only" && args.Length >= 2)
             {
                 CsvFormatOnlyImportTests.Run(Path.GetFullPath(args[1]));

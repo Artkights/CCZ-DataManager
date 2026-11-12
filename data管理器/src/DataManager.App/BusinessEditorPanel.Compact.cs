@@ -20,9 +20,11 @@ public sealed partial class BusinessEditorPanel
 
     private string CompactLayoutSignature(BusinessPageKind kind, int id)
     {
-        var signature = string.Join('|', _compactTableKeys.Where(_workspace.Documents.ContainsKey).Select(key => _workspace.GetDocument(key))
+        var documents = _compactTableKeys.Where(_workspace.Documents.ContainsKey).Select(key => _workspace.GetDocument(key))
             .Where(document => HasCompactLayoutSource(kind, id, document))
-            .Select(document => $"{document.Definition.Key}:{System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(document)}"));
+            .ToArray();
+        var signature = _workspace.Documents.Count + ":" + ReadCache.GetSchemaVersion(
+            documents.Select(document => new RecordQueryDependency(document.Definition.Key)));
         if (kind == BusinessPageKind.Items)
         {
             foreach (var key in new[] { "items-low", "items-high", "items-extended" })
@@ -64,7 +66,6 @@ public sealed partial class BusinessEditorPanel
         foreach (var rebind in _entityRebinders.ToArray()) rebind();
         _accessoryDraftRefresh?.Invoke();
         RefreshEquipmentTypeBindings();
-        _refreshItemPermissions?.Invoke();
         RefreshCompactPreviews();
         return true;
     }
@@ -74,7 +75,7 @@ public sealed partial class BusinessEditorPanel
         if (!_workspace.Documents.TryGetValue(key, out var document)) return null;
         if (key == "job-series-attributes")
         {
-            var attribute = document.Definition.Fields.FirstOrDefault(field => field.Name == $"兵种系 {_id}");
+            var attribute = BusinessFieldDefinition(document, $"兵种系 {_id}");
             return attribute == null || originalPhysicalRow >= document.Data.Rows.Count ? null
                 : new(document, document.Data.Rows[originalPhysicalRow], originalPhysicalRow, attribute);
         }
@@ -82,7 +83,7 @@ public sealed partial class BusinessEditorPanel
             return originalPhysicalRow >= document.Data.Rows.Count ? null
                 : new(document, document.Data.Rows[originalPhysicalRow], originalPhysicalRow, document.Definition.Fields[0]);
         var match = FindRow(document, _id);
-        var selectedField = document.Definition.Fields.FirstOrDefault(field => field.Name == fieldName);
+        var selectedField = BusinessFieldDefinition(document, fieldName);
         return match == null || selectedField == null ? null : new(document, match.Value.Row, match.Value.Index, selectedField);
     }
 
@@ -98,8 +99,10 @@ public sealed partial class BusinessEditorPanel
             BusinessPageKind.Shop => ["scenario-names"],
             _ => Array.Empty<string>()
         };
-        return keys.Where(_workspace.Documents.ContainsKey).SelectMany(key => _lookup.Options(_workspace.GetDocument(key)))
-            .FirstOrDefault(option => option.Id == id)?.Name ?? string.Empty;
+        foreach (var key in keys)
+            if (_workspace.Documents.TryGetValue(key, out var document) && FindRow(document, id) != null)
+                return ReadCache.GetTableRowName(document, id);
+        return string.Empty;
     }
 
     private bool BuildCompactEntity(BusinessPageKind kind, int id)
@@ -785,7 +788,7 @@ public sealed partial class BusinessEditorPanel
             var check = (CheckBox)CreateEditor(binding.Document, binding.Row, binding.RowIndex, binding.Field);
             check.Name = storageColumn; check.Margin = new Padding(2, 0, 2, 0);
             void RefreshName() => check.Text = EquipmentPermissionDisplayName(storageColumn);
-            RefreshName(); RegisterEquipmentTypeBinding(check, RefreshName); _entityRebinders.Add(RefreshName);
+            RefreshName(); RegisterEquipmentTypeBinding(check, RefreshName);
             check.AutoSize = false; check.AutoEllipsis = true; check.Height = rowHeight; check.Dock = DockStyle.Fill;
             _diagnosticTips.SetToolTip(check, check.Text);
             var pair = index / 2;
@@ -831,7 +834,7 @@ public sealed partial class BusinessEditorPanel
         var left = Rows((SizeType.Percent, 68), (SizeType.Percent, 32)); root.Controls.Add(left, 0, 0);
         var itemFields = Fields("items-low").Concat(Fields("items-high")).Concat(Fields("items-extended")).ToArray();
         var item = itemFields.FirstOrDefault();
-        var semanticSnapshot = item == null ? null : ItemSemanticResolver.Resolve(item.Document, item.RowIndex);
+        var semanticSnapshot = item == null ? null : ReadQueryItem(_id)?.Snapshot ?? ItemSemanticResolver.Resolve(item.Document, item.RowIndex);
         var semantics = semanticSnapshot?.Semantics;
         var hidden = new HashSet<string>(StringComparer.Ordinal);
         IReadOnlyList<string> categoryHidden = semantics?.Category switch
@@ -869,7 +872,7 @@ public sealed partial class BusinessEditorPanel
         {
             var binding = ResolveEditorBinding(item.Document.Definition.Key, item.Field.Name, item.RowIndex);
             if (binding == null) return;
-            var current = ItemSemanticResolver.Resolve(binding.Document, binding.RowIndex);
+            var current = ReadQueryItem(_id)?.Snapshot ?? ItemSemanticResolver.Resolve(binding.Document, binding.RowIndex);
             label.Text = current.Category switch
             {
                 ItemCategory.Accessory => "辅助装备：特殊效果值和适用兵种独立编辑，图鉴可勾选。保留值可在“原始字段”页编辑。",
@@ -928,6 +931,9 @@ public sealed partial class BusinessEditorPanel
                     : $"{semantics.CategoryName}不使用兵种装备许可";
                 foreach (var (check, rowIndex) in checks)
                 {
+                    var jobId = Convert.ToInt32(growth.Data.Rows[rowIndex]["ID"], CultureInfo.InvariantCulture);
+                    var label = $"{jobId}：{NameOf("detailed-jobs", jobId)}";
+                    if (check.Text != label) check.Text = label;
                     check.Enabled = hasPermission && growth.Definition.IsWriteSupported;
                     check.Checked = hasPermission && Convert.ToInt32(growth.Data.Rows[rowIndex][semantics.PermissionColumn!], CultureInfo.InvariantCulture) != 0;
                 }
@@ -1113,9 +1119,12 @@ public sealed partial class BusinessEditorPanel
         var options = new List<IdNameOption>();
         try
         {
-            options.AddRange(new EffectNamePoolService().Read(_workspace, EffectNameChannel.Item)
-                .Where(item => item.EffectId != 255)
-                .Select(item => new IdNameOption(item.EffectId, item.Name)));
+            options.AddRange(ReadCache.GetOrCreateData<IReadOnlyList<IdNameOption>>("business-item-effect-pool",
+                [new("$external"), new("item-effect-names-low"), new("item-effect-names-high"), new("item-effect-names-66")],
+                () => new EffectNamePoolService().Read(_workspace, EffectNameChannel.Item)
+                    .Where(item => item.EffectId != 255)
+                    .Select(item => new IdNameOption(item.EffectId, item.Name)).ToArray(),
+                names => 128L + names.Sum(name => 64L + name.Name.Length * 2L)));
         }
         catch { }
         if (field == null || field.Minimum <= 255 && field.Maximum >= 255)

@@ -12,10 +12,10 @@ public sealed partial class BusinessEditorPanel
         DeclareQuoteQueryFields();
         var service = new PersonQuoteService(_workspace);
         PersonQuoteMapping mapping;
-        try { mapping = service.Resolve(personId); }
+        try { mapping = ReadPersonQuoteMapping(personId); }
         catch (Exception ex) { host.Controls.Add(Notice(ex.Message)); return; }
         var writable = _workspace.Documents.TryGetValue("person-critical-special-map", out var map) && map.Definition.IsWriteSupported;
-        var slots = service.GetSpecialSlots();
+        var slots = ReadPersonQuoteSlots();
         var initialSlot = slots.FirstOrDefault(slot => slot.PersonId == personId)?.Id ?? slots.FirstOrDefault(slot => slot.IsEmpty)?.Id ?? 0;
         var mode = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill, Enabled = writable, Margin = new Padding(2, 2, 4, 2) };
         mode.Items.AddRange(["普通暴击", "特殊暴击"]); mode.SelectedIndex = mapping.IsSpecial ? 1 : 0;

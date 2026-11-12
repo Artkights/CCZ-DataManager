@@ -1,4 +1,4 @@
-using System.Data;
+﻿using System.Data;
 using System.Globalization;
 using System.Text.RegularExpressions;
 using DataManager.Core.Binary;
@@ -27,6 +27,7 @@ public sealed partial class BusinessEditorPanel : UserControl, IEditorViewLifecy
     public void ActivateView()
     {
         if (IsDisposed || Disposing) return;
+        if (_viewActive) { ApplyDeferredResourceRefresh(); return; }
         _viewActive = true;
         UpdatePreviewActivity();
         ApplyDeferredResourceRefresh();
@@ -36,6 +37,7 @@ public sealed partial class BusinessEditorPanel : UserControl, IEditorViewLifecy
 
     public void DeactivateView()
     {
+        if (!_viewActive) return;
         _viewActive = false;
         UpdatePreviewActivity();
         AutoValidate = AutoValidate.Disable;
@@ -49,6 +51,7 @@ public sealed partial class BusinessEditorPanel : UserControl, IEditorViewLifecy
     // selection and resource binding while releasing work and owned pixels.
     private void UpdatePreviewActivity()
     {
+        using var timing = RuntimeTiming.Measure("BusinessEditorPanel.UpdatePreviewActivity");
         if (_releaseCompleted || IsDisposed || Disposing) return;
         var active = _viewActive && Visible;
         void Apply(Control host)
@@ -273,6 +276,7 @@ public sealed partial class BusinessEditorPanel : UserControl, IEditorViewLifecy
 
     public void Bind(BusinessPageKind kind, int id)
     {
+        using var timing = RuntimeTiming.Measure("BusinessEditorPanel.Bind");
         if (CanReuseStableBinding(kind, id))
         {
             RefreshChangedResourceBinding();
@@ -1239,7 +1243,7 @@ public sealed partial class BusinessEditorPanel : UserControl, IEditorViewLifecy
         catch { return false; }
     }
 
-    private IReadOnlyList<IdNameOption>? GetOptions(TableDocument document, int rowIndex, TableFieldDefinition field)
+    private IReadOnlyList<IdNameOption>? GetOptionsCore(TableDocument document, int rowIndex, TableFieldDefinition field)
     {
         if (document.Definition.Key == StrategyEffectClassService.TableKey)
             return StrategyEffectClassService.GetOptions(_workspace, rowIndex)
@@ -1565,11 +1569,14 @@ public sealed partial class BusinessEditorPanel : UserControl, IEditorViewLifecy
     }
 
     private IReadOnlyList<IdNameOption> OptionsFor(string tableKey)
-        => _lookup.ReferenceOptions(tableKey, _workspace.Documents);
+        => ReadCache.GetOrCreateData<IReadOnlyList<IdNameOption>>("business-reference-options:" + tableKey,
+            ReadCache.GetNavigationDependencies(tableKey == "items" ? QueryTableKeys("items-low") : [tableKey]),
+            () => _lookup.ReferenceOptions(tableKey, _workspace.Documents),
+            options => 128L + options.Sum(option => 64L + option.Name.Length * 2L));
 
     private string NameOf(string key, int id)
-        => _workspace.Documents.TryGetValue(key, out var document) && FindRow(document, id) is { } match && document.Data.Columns.Contains("名称")
-            ? Convert.ToString(match.Row["名称"], CultureInfo.InvariantCulture) ?? string.Empty : "未确认";
+        => _workspace.Documents.TryGetValue(key, out var document) && document.Data.Columns.Contains("名称") && FindRow(document, id) != null
+            ? ReadCache.GetTableRowName(document, id) : "未确认";
 
     private (DataRow Row, int Index)? FindRow(TableDocument document, int id) => _lookup.Find(document, id);
 

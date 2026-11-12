@@ -12,13 +12,15 @@ public sealed class BinaryTableReader
         _codecs = codecs ?? new RecordCodecRegistry();
     }
 
-    public TableValidation Validate(string rootPath, TableDefinition definition)
+    public TableValidation Validate(string rootPath, TableDefinition definition, SourceFileReadSession? sourceSession = null)
     {
         if (definition.Capability != TableCapability.Unavailable &&
             (definition.Key == "items-extended" && definition.FileName.Equals("Item.e5", StringComparison.OrdinalIgnoreCase) ||
              definition.Key == "item-description-extended" && definition.FileName.Equals("Itemmsg.e5", StringComparison.OrdinalIgnoreCase)))
-            return ValidateRootExtensionTable(rootPath, definition);
-        var path = ProjectFileLocator.Resolve(rootPath, definition.FileName);
+            return ValidateRootExtensionTable(rootPath, definition, sourceSession);
+        var path = sourceSession?.Resolve(rootPath, definition.FileName) ?? ProjectFileLocator.Resolve(rootPath, definition.FileName);
+        var metadata = sourceSession?.GetMetadata(path);
+        var exists = metadata?.Exists ?? File.Exists(path);
         if (definition.Capability == TableCapability.Unavailable)
         {
             // A table without layout evidence may retain inherited geometry
@@ -27,18 +29,18 @@ public sealed class BinaryTableReader
             {
                 Definition = definition,
                 Path = path,
-                FileExists = File.Exists(path),
+                FileExists = exists,
                 Message = string.IsNullOrWhiteSpace(definition.CapabilityEvidence)
                     ? "不可用：未提供布局证据"
                     : $"不可用：{definition.CapabilityEvidence}"
             };
         }
-        if (!File.Exists(path))
+        if (!exists)
         {
             return new TableValidation { Definition = definition, Path = path, FileExists = false, Message = "文件不存在" };
         }
 
-        var length = new FileInfo(path).Length;
+        var length = metadata?.Length ?? new FileInfo(path).Length;
         var hasEnough = length >= definition.EndOffsetExclusive;
         return new TableValidation
         {
@@ -63,20 +65,20 @@ public sealed class BinaryTableReader
     /// number of bytes.  Require the root path and exact extension geometry
     /// before exposing either extended table to the workspace.
     /// </summary>
-    private static TableValidation ValidateRootExtensionTable(string rootPath, TableDefinition definition)
+    private static TableValidation ValidateRootExtensionTable(string rootPath, TableDefinition definition, SourceFileReadSession? sourceSession)
     {
-        var root = Directory.Exists(rootPath)
+        var root = sourceSession != null ? sourceSession.FindInDirectory(rootPath, definition.FileName) : Directory.Exists(rootPath)
             ? Directory.EnumerateFiles(rootPath).FirstOrDefault(path =>
                 Path.GetFileName(path).Equals(definition.FileName, StringComparison.OrdinalIgnoreCase))
             : null;
-        var e5 = Directory.Exists(Path.Combine(rootPath, "E5"))
+        var e5 = sourceSession != null ? sourceSession.FindInDirectory(Path.Combine(rootPath, "E5"), definition.FileName) : Directory.Exists(Path.Combine(rootPath, "E5"))
             ? Directory.EnumerateFiles(Path.Combine(rootPath, "E5")).FirstOrDefault(path =>
                 Path.GetFileName(path).Equals(definition.FileName, StringComparison.OrdinalIgnoreCase))
             : null;
         var expected = definition.EndOffsetExclusive;
         if (root != null)
         {
-            var length = new FileInfo(root).Length;
+            var length = sourceSession?.GetMetadata(root).Length ?? new FileInfo(root).Length;
             if (length == expected)
                 return new TableValidation
                 {
@@ -96,30 +98,39 @@ public sealed class BinaryTableReader
             };
         }
         var missingPath = Path.Combine(rootPath, definition.FileName);
+        var e5Length = e5 == null ? 0 : sourceSession?.GetMetadata(e5).Length ?? new FileInfo(e5).Length;
         return new TableValidation
         {
             Definition = definition, Path = missingPath, FileExists = false,
-            ActualLength = e5 == null ? 0 : new FileInfo(e5).Length,
+            ActualLength = e5Length,
             HasEnoughBytes = false,
             Message = e5 == null
                 ? $"根目录缺少 {definition.FileName}（需要 {expected} 字节扩展表）。"
-                : $"仅发现 E5\\{definition.FileName}（{new FileInfo(e5).Length} 字节）；它是 E5 档案，不作为根目录扩展表。"
+                : $"仅发现 E5\\{definition.FileName}（{e5Length} 字节）；它是 E5 档案，不作为根目录扩展表。"
         };
     }
 
-    public TableDocument Read(string rootPath, TableDefinition definition)
+    public TableDocument Read(string rootPath, TableDefinition definition, SourceFileReadSession? sourceSession = null)
     {
-        var validation = Validate(rootPath, definition);
+        var validation = Validate(rootPath, definition, sourceSession);
         if (!validation.IsUsable)
         {
             throw new InvalidDataException($"{definition.DisplayName}：{validation.Message}（{definition.FileName}）");
         }
 
-        return ReadBytes(validation.Path, definition, File.ReadAllBytes(validation.Path));
+        return sourceSession == null
+            ? ReadBytes(validation.Path, definition, File.ReadAllBytes(validation.Path))
+            : ReadSnapshot(definition, sourceSession.Read(validation.Path));
     }
 
     /// <summary>Decode a complete candidate using exactly the same path as reopening the project.</summary>
     public TableDocument ReadBytes(string filePath, TableDefinition definition, byte[] bytes)
+        => ReadBytesCore(filePath, definition, bytes, HashService.Sha256(bytes));
+
+    internal TableDocument ReadSnapshot(TableDefinition definition, SourceFileReadSession.SourceFileSnapshot source)
+        => ReadBytesCore(source.Path, definition, source.Bytes, source.Hash);
+
+    private TableDocument ReadBytesCore(string filePath, TableDefinition definition, byte[] bytes, string sourceHash)
     {
         if (definition.Capability == TableCapability.Unavailable || bytes.LongLength < definition.EndOffsetExclusive)
             throw new InvalidDataException($"{definition.DisplayName}：候选文件不满足完整表的读取条件。");
@@ -134,7 +145,8 @@ public sealed class BinaryTableReader
             table.Columns.Add("属性", typeof(string));
             table.Columns["属性"]!.ReadOnly = true;
         }
-        foreach (var field in definition.Fields.Where(field => field.Policy != FieldPolicy.Preserve && field.Size != 0))
+        var fields = definition.Fields.Where(field => field.Policy != FieldPolicy.Preserve && field.Size != 0).ToArray();
+        foreach (var field in fields)
         {
             var type = field.Kind switch
             {
@@ -150,6 +162,7 @@ public sealed class BinaryTableReader
             table.Columns[field.Name]!.ReadOnly = definition.Capability != TableCapability.Editable || field.Policy == FieldPolicy.ReadOnly;
         }
 
+        table.BeginLoadData();
         for (var rowIndex = 0; rowIndex < definition.RowCount; rowIndex++)
         {
             var rowOffset = checked((int)(definition.DataOffset + (long)rowIndex * definition.RowSize));
@@ -172,7 +185,7 @@ public sealed class BinaryTableReader
                     _ => $"属性{rowIndex}"
                 };
             }
-            foreach (var field in definition.Fields.Where(field => field.Policy != FieldPolicy.Preserve && field.Size != 0))
+            foreach (var field in fields)
             {
                 try
                 {
@@ -188,6 +201,7 @@ public sealed class BinaryTableReader
             }
             table.Rows.Add(values);
         }
+        table.EndLoadData();
 
         var document = new TableDocument
         {
@@ -195,7 +209,7 @@ public sealed class BinaryTableReader
             FilePath = filePath,
             Data = table,
             OriginalFileBytes = bytes,
-            OriginalFileHash = HashService.Sha256(bytes)
+            OriginalFileHash = sourceHash
         };
         document.CaptureOriginalValues();
         return document;

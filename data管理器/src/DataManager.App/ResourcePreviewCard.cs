@@ -29,8 +29,8 @@ internal sealed class ResourcePreviewCard : Panel
     {
         if (_released || _previewActive == active) return;
         _previewActive = active;
-        if (!active) SuspendPreview();
-        else { UpdatePlayback(); Start(); }
+        if (!active) PauseHiddenPreview();
+        else { _pixelLease?.Touch(); UpdatePlayback(); Start(); }
     }
 
     public ResourcePreviewCard(ToolTip tips)
@@ -175,6 +175,21 @@ internal sealed class ResourcePreviewCard : Panel
         CancelPending(); _started = false; _loaded = false; _windowLoading = false;
         ReleaseOwnedPixels();
         _state.Text = "点击加载预览"; _state.Visible = true;
+    }
+
+    private void PauseHiddenPreview()
+    {
+        // Completed small still images already count against the shared pixel
+        // budget. Keep their lease so returning to a business tab can reuse
+        // them; eviction, replacement and disposal still release the bitmap.
+        if (_loaded && _animation is { TotalFrameCount: <= 1, LoadWindowAsync: null } image &&
+            image.PixelBytes <= 1024 * 1024)
+        {
+            _timer.Stop();
+            CancelPending();
+            return;
+        }
+        SuspendPreview();
     }
 
     private async void Advance()

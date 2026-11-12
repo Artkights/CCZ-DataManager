@@ -130,7 +130,8 @@ public sealed partial class BusinessEditorPanel
             var attributeIndex = rowIndex;
             DeclareQueryField(new RecordQueryField($"matrix:job-series-attributes:{attributeIndex}",
                 attributeIndex < JobAttributeNames.Length ? JobAttributeNames[attributeIndex] : label,
-                id => ReadMatrixQueryValues("job-series-attributes", attributeIndex, $"兵种系 {id}")));
+                id => ReadMatrixQueryValues("job-series-attributes", attributeIndex, $"兵种系 {id}"))
+                { Dependencies = [new("job-series-attributes")] });
             return;
         }
         if (_kind == BusinessPageKind.Items && tableKey == "detailed-job-growth") return;
@@ -143,12 +144,13 @@ public sealed partial class BusinessEditorPanel
                 foreach (var key in keys)
                 {
                     if (!_workspace.Documents.TryGetValue(key, out var source) || FindRow(source, id) is not { } match ||
-                        source.Definition.Fields.FirstOrDefault(candidate => candidate.Name == fieldName) is not { } sourceField) continue;
+                        BusinessFieldDefinition(source, fieldName) is not { } sourceField) continue;
                     return [Convert.ToString(ReadFieldValue(source, match.Index, sourceField), CultureInfo.InvariantCulture) ?? string.Empty];
                 }
                 return [];
             });
-        DeclareQueryField(field with { ReadValues = id => ReadBusinessQueryValues(field, keys, definition.Name, id) });
+        DeclareQueryField(field with { ReadValues = id => ReadBusinessQueryValues(field, keys, definition.Name, id),
+            Dependencies = BusinessFieldDependencies(keys, definition.Name) });
     }
 
     private IReadOnlyList<string> ReadBusinessQueryValues(RecordQueryField physical, IReadOnlyList<string> keys, string name, int id)
@@ -157,7 +159,7 @@ public sealed partial class BusinessEditorPanel
         foreach (var key in keys)
         {
             if (!_workspace.Documents.TryGetValue(key, out var document) || FindRow(document, id) is not { } match ||
-                document.Definition.Fields.FirstOrDefault(field => field.Name == name) is not { } definition ||
+                BusinessFieldDefinition(document, name) is not { } definition ||
                 !TryConvertInt(ReadFieldValue(document, match.Index, definition), out var number)) continue;
             if (key is "items-low" or "items-high" or "items-extended")
             {
@@ -175,8 +177,8 @@ public sealed partial class BusinessEditorPanel
             {
                 try
                 {
-                    var option = GetOptions(document, match.Index, definition)?.FirstOrDefault(candidate => candidate.Id == number);
-                    if (option != null) values.Add(option.Name);
+                    var optionName = QueryOptionName(document, match.Index, definition, number);
+                    if (optionName != null) values.Add(optionName);
                 }
                 catch (InvalidOperationException) { }
             }
@@ -192,11 +194,11 @@ public sealed partial class BusinessEditorPanel
         if (!_workspace.Documents.TryGetValue(tableKey, out var document) || rowIndex >= document.Data.Rows.Count ||
             !document.Data.Columns.Contains(fieldName)) return [];
         var value = Convert.ToString(document.Data.Rows[rowIndex][fieldName], CultureInfo.InvariantCulture) ?? string.Empty;
-        var field = document.Definition.Fields.FirstOrDefault(candidate => candidate.Name == fieldName);
+        var field = BusinessFieldDefinition(document, fieldName);
         if (field == null || field.Kind == FieldKind.RawBytes) return [];
-        var option = field != null && TryConvertInt(document.Data.Rows[rowIndex][fieldName], out var number)
-            ? JobAttributeOptions(document, rowIndex, field)?.FirstOrDefault(candidate => candidate.Id == number) : null;
-        return option == null ? [value] : [value, option.Name];
+        var option = TryConvertInt(document.Data.Rows[rowIndex][fieldName], out var number)
+            ? QueryOptionName(document, rowIndex, field, number) : null;
+        return option == null ? [value] : [value, option];
     }
 
     private void DeclareItemQueryFields()
@@ -239,22 +241,22 @@ public sealed partial class BusinessEditorPanel
         {
             var rowIndex = index;
             DeclareQueryField(new RecordQueryField($"matrix:job-series-attributes:{index}", JobAttributeNames[index],
-                id => ReadMatrixQueryValues("job-series-attributes", rowIndex, $"兵种系 {id}")));
+                id => ReadMatrixQueryValues("job-series-attributes", rowIndex, $"兵种系 {id}"))
+                { Dependencies = [new("job-series-attributes")] });
         }
     }
 
     private void DeclareQuoteQueryFields()
     {
         if (!_workspace.Documents.TryGetValue("persons", out var persons) || !persons.Data.Columns.Contains("暴击台词")) return;
-        var service = new PersonQuoteService(_workspace);
         void Add(string key, string label, Func<PersonQuoteMapping, IEnumerable<string>> read)
             => DeclareQueryField(new RecordQueryField("quote:" + key, label, id =>
             {
-                try { return read(service.Resolve(id)).ToArray(); }
+                try { return read(ReadPersonQuoteMapping(id)).ToArray(); }
                 catch (InvalidOperationException) { return []; }
                 catch (InvalidDataException) { return []; }
                 catch (KeyNotFoundException) { return []; }
-            }));
+            }) { Dependencies = QuoteDependencies });
         Add("mode", "暴击模式", mapping => [mapping.IsSpecial ? "1 特殊暴击" : "0 普通暴击"]);
         Add("type", "普通类型", mapping => [mapping.CriticalType.ToString(CultureInfo.InvariantCulture)]);
         if (_workspace.Documents.TryGetValue("person-critical-special-map", out var specialMap) && specialMap.Data.Columns.Contains("人物ID") &&
@@ -279,15 +281,8 @@ public sealed partial class BusinessEditorPanel
     {
         if (!_workspace.Documents.TryGetValue("strategies", out var source) ||
             !source.Definition.Fields.Any(field => IsLearningField(field.Name) && source.Data.Columns.Contains(field.Name))) return;
-        DeclareQueryField(new RecordQueryField("learning:strategies", "习得策略", id =>
-        {
-            if (!_workspace.Documents.TryGetValue("strategies", out var strategies)) return [];
-            var fieldName = $"兵种{id:D2}学习等级";
-            if (!strategies.Data.Columns.Contains(fieldName)) return [];
-            return strategies.Data.Rows.Cast<DataRow>().Where(row => row.RowState != DataRowState.Deleted &&
-                TryConvertInt(row[fieldName], out var level) && level > 0)
-                .SelectMany(row => new[] { $"{row["ID"]}：{row["名称"]}", Convert.ToString(row[fieldName], CultureInfo.InvariantCulture) ?? string.Empty }).ToArray();
-        }));
+        DeclareQueryField(new RecordQueryField("learning:strategies", "习得策略",
+            id => ReadLearningDirectory().GetValueOrDefault(id) ?? []) { Dependencies = LearningDependencies() });
     }
 
     private void DeclareItemPermissionQueryFields()
@@ -303,13 +298,17 @@ public sealed partial class BusinessEditorPanel
                 {
                     if (!_workspace.Documents.TryGetValue(key, out var items) || FindRow(items, itemId) is not { } item) continue;
                     var semantics = ItemTypeService.Resolve(items, item.Index);
-                    if (semantics.PermissionColumn is not { } permission || !growth.Data.Columns.Contains(permission) ||
-                        FindRow(growth, jobId) is not { } job) return [];
+                    if (semantics.PermissionColumn is not { } permission ||
+                        !_workspace.Documents.TryGetValue("detailed-job-growth", out var currentGrowth) ||
+                        !currentGrowth.Data.Columns.Contains(permission) || FindRow(currentGrowth, jobId) is not { } job) return [];
                     var allowed = TryConvertInt(job.Row[permission], out var number) && number != 0;
                     return [allowed ? "1 是 可装备" : "0 否 不可装备", $"{jobId}：{NameOf("detailed-jobs", jobId)}"];
                 }
                 return [];
-            }));
+            }) { Dependencies = QueryTableKeys("items-low").SelectMany(key => new[] {
+                    new RecordQueryDependency(key, "宝物类型"), new RecordQueryDependency(key, "装备特效号") })
+                .Concat([new RecordQueryDependency("detailed-job-growth")])
+                .Concat(ReadCache.GetNavigationDependencies(["detailed-jobs"])).ToArray() });
         }
     }
 }

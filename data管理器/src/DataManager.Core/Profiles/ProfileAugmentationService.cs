@@ -19,18 +19,21 @@ public sealed class ProfileAugmentationService
     private const int AssignmentRows = 1024;
     private const int AssignmentWidth = 2;
 
-    public ResolvedProfile Apply(string root, ResolvedProfile profile) => ApplyCore(root, profile, false, true);
+    public ResolvedProfile Apply(string root, ResolvedProfile profile, SourceFileReadSession? sourceSession = null)
+        => ApplyCore(root, profile, false, true, sourceSession);
 
     internal ResolvedProfile ApplyPreStrategyEffects(string root, ResolvedProfile profile) => ApplyCore(root, profile, false, false);
 
     // Only used to reproduce the frozen, shipped 6.4 CSV/history identity.
     internal ResolvedProfile ApplyPreConfiguration64(string root, ResolvedProfile profile) => ApplyCore(root, profile, true, false);
 
-    private ResolvedProfile ApplyCore(string root, ResolvedProfile profile, bool preConfiguration64, bool includeStrategyEffects)
+    private ResolvedProfile ApplyCore(string root, ResolvedProfile profile, bool preConfiguration64, bool includeStrategyEffects,
+        SourceFileReadSession? sourceSession = null)
     {
         if (string.IsNullOrWhiteSpace(root)) return profile;
-        var path = ProjectFileLocator.Resolve(root, "Ekd5.exe");
-        var executable = File.Exists(path) ? File.ReadAllBytes(path) : [];
+        var path = sourceSession?.Resolve(root, "Ekd5.exe") ?? ProjectFileLocator.Resolve(root, "Ekd5.exe");
+        var executable = (sourceSession?.GetMetadata(path).Exists ?? File.Exists(path))
+            ? sourceSession?.Read(path).Bytes ?? File.ReadAllBytes(path) : [];
         var is64 = profile.ProfileId.Equals("ccz-6.4", StringComparison.OrdinalIgnoreCase);
         var configuration64 = is64 && !preConfiguration64 ? Ccz64ConfigurationProbe.Inspect(executable) : null;
         var personalEffectNames = new EffectNamePoolProbe().Inspect(executable, is64 ? 180 : 255);
@@ -48,13 +51,13 @@ public sealed class ProfileAugmentationService
             Capability: supported ? TableCapability.Editable : TableCapability.Unavailable, CapabilityEvidence: evidence);
         var is66 = profile.ProfileId.Equals("ccz-6.6", StringComparison.OrdinalIgnoreCase);
         var assignments65 = !is66 ? EmbeddedEngineLayoutProbe.InspectAssignments65(executable) : null;
-        var assignmentEvidence = InspectAssignmentLayout(root, profile, executable, assignments65);
+        var assignmentEvidence = InspectAssignmentLayout(root, profile, executable, assignments65, sourceSession);
         var assignments66 = is66 ? EmbeddedEngineLayoutProbe.InspectAssignments(executable) : null;
         var terrain66 = is66 || is64 ? EmbeddedEngineLayoutProbe.InspectStrategyTerrain(executable) : null;
         var ini66 = is66 ? ReadAssignmentIni(root, assignments66!.R.Offset, assignments66.S.Offset) : default;
         var tables = profile.Tables.Where(item => item.Key != table.Key).Select(item =>
         {
-            item = AugmentExtensionGeometry(root, item);
+            item = AugmentExtensionGeometry(root, item, sourceSession);
             if (configuration64 is not null)
             {
                 if (item.Key == "person-retreat-quotes")
@@ -97,7 +100,7 @@ public sealed class ProfileAugmentationService
                     VerificationLevel = assignmentEvidence.Capability == TableCapability.Editable ? VerificationLevel.SourceReviewed : VerificationLevel.InheritedUnverified }
                 : item;
         }).Append(table).ToArray();
-        tables = ExtendedItemLayoutProbe.Apply(root, tables, executable).ToArray();
+        tables = ExtendedItemLayoutProbe.Apply(root, tables, executable, sourceSession).ToArray();
         var equipmentTables = EquipmentTypeCatalogService.BuildTables(executable);
         tables = tables.Where(item => !equipmentTables.Any(equipment => equipment.Key == item.Key)).Concat(equipmentTables).ToArray();
         tables = TextConsumerEvidence.Apply(tables, executable).ToArray();
@@ -138,7 +141,7 @@ public sealed class ProfileAugmentationService
     }
 
     private static (TableCapability Capability, string Evidence) InspectAssignmentLayout(string root, ResolvedProfile profile, byte[] executable,
-        EmbeddedEngineLayoutProbe.Assignments? consumers)
+        EmbeddedEngineLayoutProbe.Assignments? consumers, SourceFileReadSession? sourceSession)
     {
         if (profile.ProfileId is not ("ccz-6.4" or "ccz-6.5"))
             return (TableCapability.Unavailable, "6.6 R/S 指定尚无独立布局证据，禁止套用 6.5 System.ini 或固定偏移。");
@@ -158,18 +161,19 @@ public sealed class ProfileAugmentationService
         var knownHashes = profile.Profile.Variants.SelectMany(variant => variant.Fingerprints)
             .Where(fingerprint => fingerprint.Sha256.ContainsKey("Ekd5.exe"))
             .Select(fingerprint => fingerprint.Sha256["Ekd5.exe"]).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var currentHash = HashService.Sha256(executable);
+        var currentHash = sourceSession != null && executable.Length > 0
+            ? sourceSession.Read(sourceSession.Resolve(root, "Ekd5.exe")).Hash : HashService.Sha256(executable);
         if (knownHashes.Contains(currentHash))
             return (TableCapability.Editable, $"Ekd5.exe SHA-256 匹配已验证的 {version} 原样样本；R +0xE1000、S +0xD2800，1024×UInt16 边界已核对。" +
                 (ini.MatchesKnownLayout ? " 本项目 System.ini FileHead/RFileHead 与样本一致。" : " 本项目未提供指定器 INI，沿用已验证样本几何。"));
-        if (TryRecoverVerifiedExecutable(root, profile, executable, knownHashes, out var historyEvidence))
+        if (TryRecoverVerifiedExecutable(root, profile, executable, knownHashes, currentHash, out var historyEvidence))
             return (TableCapability.Editable, historyEvidence + "；R/S 沿用已验证样本几何，保存后的 SHA 变化不改变布局身份。");
         if (dynamicVerified)
             return (TableCapability.Editable, consumers!.R.Evidence + " " + consumers.S.Evidence +
                 (ini.HasAssignmentKeys ? " " + ini.Evidence : " 无需 SHA 白名单或指定器 INI；本项目完整消费函数与 PE 可写节映射构成独立证据。"));
         if (!ini.MatchesKnownLayout)
             return (TableCapability.Unavailable, "未知 Ekd5.exe SHA-256，且缺少本项目 System.ini 的 FileHead/RFileHead 布局证据；不读取或写入猜测的 R/S 偏移。");
-        if (!ValidateAssignmentResources(root, executable, out var resourceEvidence))
+        if (!ValidateAssignmentResources(root, executable, sourceSession, out var resourceEvidence))
             return (TableCapability.Unavailable, "未知 Ekd5.exe SHA-256；" + ini.Evidence + "；" + resourceEvidence);
         return (TableCapability.ReadOnly, ini.Evidence + "；" + resourceEvidence +
             "。目录与数值检查不能证明未知引擎的地址引用，R/S 当前只读；取得独立布局证据前不开放写入。");
@@ -178,12 +182,12 @@ public sealed class ProfileAugmentationService
     private static bool IsExtension(string key)
         => key is "effect-archive" or "effect-messages" or "strategy-study-extended" or "forge";
 
-    private static TableDefinition AugmentExtensionGeometry(string root, TableDefinition table)
+    private static TableDefinition AugmentExtensionGeometry(string root, TableDefinition table, SourceFileReadSession? sourceSession)
     {
         if (!IsExtension(table.Key)) return table;
-        var path = ProjectFileLocator.Resolve(root, table.FileName);
-        if (!File.Exists(path)) return table;
-        var length = new FileInfo(path).Length;
+        var path = sourceSession?.Resolve(root, table.FileName) ?? ProjectFileLocator.Resolve(root, table.FileName);
+        if (!(sourceSession?.GetMetadata(path).Exists ?? File.Exists(path))) return table;
+        var length = sourceSession?.GetMetadata(path).Length ?? new FileInfo(path).Length;
         var maximumRows = table.Key == "effect-messages" ? 256 : 1024;
         if (table.DataOffset != 0 || table.RowSize <= 0 || length == 0 || length % table.RowSize != 0 ||
             length / table.RowSize > maximumRows)
@@ -233,7 +237,8 @@ public sealed class ProfileAugmentationService
         return long.TryParse(input, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out value) && value >= 0;
     }
 
-    private static bool TryRecoverVerifiedExecutable(string root, ResolvedProfile profile, byte[] executable, IReadOnlySet<string> knownHashes, out string evidence)
+    private static bool TryRecoverVerifiedExecutable(string root, ResolvedProfile profile, byte[] executable, IReadOnlySet<string> knownHashes,
+        string initialHash, out string evidence)
     {
         evidence = string.Empty;
         var store = new HistoryStore();
@@ -243,7 +248,7 @@ public sealed class ProfileAugmentationService
             .OrderByDescending(entry => entry.CreatedAt).SelectMany(entry => entry.Files.Select(file => (entry.OperationId, File: file)))
             .Where(item => Path.GetFileName(item.File.RelativePath).Equals("Ekd5.exe", StringComparison.OrdinalIgnoreCase)).ToArray();
         var current = executable;
-        var currentHash = HashService.Sha256(current);
+        var currentHash = initialHash;
         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { currentHash };
         for (var step = 0; step < history.Length; step++)
         {
@@ -280,7 +285,7 @@ public sealed class ProfileAugmentationService
         return false;
     }
 
-    private static bool ValidateAssignmentResources(string root, byte[] executable, out string evidence)
+    private static bool ValidateAssignmentResources(string root, byte[] executable, SourceFileReadSession? sourceSession, out string evidence)
     {
         evidence = string.Empty;
         try
@@ -289,8 +294,8 @@ public sealed class ProfileAugmentationService
             if (rCount % 2 != 0) throw new InvalidDataException("Pmapobj.e5 不是完整正反面配对资源");
             var sCount = new[] { ("Unit_mov.e5", 48 * 48 * 11), ("Unit_atk.e5", 64 * 64 * 12), ("Unit_spc.e5", 48 * 48 * 5) }
                 .Select(item => ProbeE5Directory(ProjectFileLocator.Resolve(root, item.Item1), item.Item2)).Min();
-            var dataPath = ProjectFileLocator.Resolve(root, "Data.e5");
-            var data = File.ReadAllBytes(dataPath);
+            var dataPath = sourceSession?.Resolve(root, "Data.e5") ?? ProjectFileLocator.Resolve(root, "Data.e5");
+            var data = sourceSession?.Read(dataPath).Bytes ?? File.ReadAllBytes(dataPath);
             if (data.Length < 396 + AssignmentRows * 32) throw new InvalidDataException("Data.e5 人物样本长度不足");
             var nonzeroR = false;
             var nonzeroS = false;

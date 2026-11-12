@@ -6,8 +6,9 @@ namespace DataManager.App;
 
 public sealed partial class BusinessEditorPanel
 {
-    private sealed record QueryItem(TableDocument Document, int RowIndex, long Revision, ItemSemanticSnapshot Snapshot);
-    private readonly Dictionary<int, QueryItem> _queryItems = [];
+    private sealed record QueryItem(TableDocument Document, int RowIndex, ItemSemanticSnapshot Snapshot);
+    private static readonly string[] QueryItemValueFields =
+        ["宝物类型", "装备特效号", "初始能力", "装备特效值", "能力成长", "宝物图鉴"];
 
     private static bool IsItemSemanticQueryField(string tableKey, string fieldName)
         => tableKey is "items-low" or "items-high" or "items-extended" &&
@@ -18,28 +19,38 @@ public sealed partial class BusinessEditorPanel
         foreach (var key in QueryTableKeys("items-low"))
         {
             if (!_workspace.Documents.TryGetValue(key, out var document) || FindRow(document, id) is not { } row) continue;
-            if (_queryItems.TryGetValue(id, out var cached) && ReferenceEquals(document, cached.Document) &&
-                row.Index == cached.RowIndex && document.Revision == cached.Revision) return cached;
-            var value = new QueryItem(document, row.Index, document.Revision, ItemSemanticResolver.Resolve(document, row.Index));
-            _queryItems[id] = value;
-            return value;
+            var snapshot = ReadCache.GetOrCreateData($"business-item-semantic:{key}:{id}",
+                QueryItemValueFields.Select(name => new RecordQueryDependency(key, name)),
+                () => ItemSemanticResolver.Resolve(document, row.Index),
+                value => 768L + value.RawSummary.Length * 2L + value.Fields.Sum(field => 128L + field.Evidence.Length * 2L));
+            return new(document, row.Index, snapshot);
         }
-        _queryItems.Remove(id);
         return null;
     }
 
     private void DeclareItemSemanticQueryFields()
     {
         var documents = QueryTableKeys("items-low").Where(_workspace.Documents.ContainsKey).Select(_workspace.GetDocument).ToArray();
-        var categories = documents.Where(document => document.Data.Columns.Contains("宝物类型") && document.Data.Columns.Contains("装备特效号"))
-            .SelectMany(document => Enumerable.Range(0, document.Data.Rows.Count).Select(index => ItemTypeService.Resolve(document, index).Category)).ToHashSet();
+        var categories = ReadCache.GetOrCreateData<IReadOnlySet<ItemCategory>>("business-item-categories",
+            QueryTableKeys("items-low").SelectMany(table => new[] {
+                new RecordQueryDependency(table, "宝物类型"), new RecordQueryDependency(table, "装备特效号") }),
+            () => documents.Where(document => document.Data.Columns.Contains("宝物类型") && document.Data.Columns.Contains("装备特效号"))
+                .SelectMany(document => Enumerable.Range(0, document.Data.Rows.Count).Where(index => document.Data.Rows[index].RowState != System.Data.DataRowState.Deleted)
+                    .Select(index => ItemTypeService.Resolve(document, index).Category)).ToHashSet(), _ => 256);
         var hasEquipment = categories.Contains(ItemCategory.Weapon) || categories.Contains(ItemCategory.Armor);
         var hasAccessory = categories.Contains(ItemCategory.Accessory);
         var hasConsumable = categories.Contains(ItemCategory.Consumable);
         bool Has(string name) => documents.Any(document => document.Data.Rows.Count > 0 && document.Data.Columns.Contains(name) &&
             document.Definition.Fields.Any(field => field.Name == name && field.Kind != FieldKind.RawBytes));
         void Add(string key, string label, Func<QueryItem, IReadOnlyList<string>> read)
-            => DeclareQueryField(new RecordQueryField("item:" + key, label, id => ReadQueryItem(id) is { } item ? read(item) : []));
+            => DeclareQueryField(new RecordQueryField("item:" + key, label, id => ReadQueryItem(id) is { } item ? read(item) : [])
+            {
+                Dependencies = QueryTableKeys("items-low").SelectMany(table => QueryItemValueFields
+                    .Select(name => new RecordQueryDependency(table, name)))
+                    .Concat(EquipmentNameDependencies).Concat(ReadCache.GetNavigationDependencies(["job-series"]))
+                    .Concat([new RecordQueryDependency("$external"), new("item-effect-names-low"),
+                        new("item-effect-names-high"), new("item-effect-names-66")]).ToArray()
+            });
         static IReadOnlyList<string> Number(int? number) => number.HasValue ? [number.Value.ToString(CultureInfo.InvariantCulture)] : [];
         if (Has("宝物类型") && Has("装备特效号"))
         {
@@ -56,16 +67,16 @@ public sealed partial class BusinessEditorPanel
                 if (item.Snapshot.Category is not (ItemCategory.Weapon or ItemCategory.Armor)) return [];
                 var number = item.Snapshot.TypeValue;
                 return [number.ToString(CultureInfo.InvariantCulture),
-                    new EquipmentTypeCatalogService().GetTypeDisplayName(_workspace, number)];
+                    EquipmentTypeQueryName(number)];
             });
             Add("effect-number", "实际特效号", item =>
             {
                 var number = item.Snapshot.ActualEffectNumber;
                 var sourceName = item.Snapshot.Semantics.IsCategoryMarker ||
                     item.Snapshot.Category is ItemCategory.Weapon or ItemCategory.Armor ? "装备特效号" : "宝物类型";
-                var field = item.Document.Definition.Fields.FirstOrDefault(candidate => candidate.Name == sourceName);
-                var option = field == null ? null : GetOptions(item.Document, item.RowIndex, field)?.FirstOrDefault(candidate => candidate.Id == number);
-                return option == null ? [number.ToString(CultureInfo.InvariantCulture)] : [number.ToString(CultureInfo.InvariantCulture), option.Name];
+                var field = BusinessFieldDefinition(item.Document, sourceName);
+                var option = field == null ? null : QueryOptionName(item.Document, item.RowIndex, field, number);
+                return option == null ? [number.ToString(CultureInfo.InvariantCulture)] : [number.ToString(CultureInfo.InvariantCulture), option];
             });
         }
         if (Has("初始能力") && hasEquipment) Add("initial", "初始属性", item => Number(item.Snapshot.InitialAttribute));

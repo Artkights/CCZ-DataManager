@@ -1,0 +1,4029 @@
+{
+  "Schema": "ccz.runtime-performance-comparison.v1",
+  "GeneratedAt": "2026-11-13T04:23:16.6555910+08:00",
+  "EvidenceDirectory": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\data管理器\\验证\\布局与读取性能-1.2026.1113.1",
+  "AggregationHost": {
+    "MachineName": "NEU20236557",
+    "OS": "Microsoft Windows NT 10.0.22621.0",
+    "ProcessorCount": 20,
+    "ProcessArchitecture": "X64",
+    "PowerShell": "7.6.5",
+    "Note": "聚合主机信息，不是原始 benchmark 机器遥测。"
+  },
+  "Thresholds": {
+    "ExpectedRunsPerSidePerProfile": 3,
+    "ExpectedRawSamplesPerScenarioPerSide": 90,
+    "BusinessAndPhysicalP95Ms": 200,
+    "CandidateHeartbeatP95MsPerRun": 100,
+    "SlowBaselineThresholdMs": 200,
+    "MinimumSlowScenarioImprovementPercent": 40,
+    "ExtensionMaximumRegressionPercent": 10,
+    "ColdMedianMaximumRegressionPercent": 10,
+    "SoftPrivateMemoryBytes": 1073741824
+  },
+  "Flags": {
+    "AllPerformanceGatesPassed": true,
+    "AllMemorySoftTargetsPassed": true,
+    "AllPerformanceAndMemoryTargetsPassed": true,
+    "FixedActualDpiAndWindowAcrossRuns": true,
+    "EvidenceProblemsPresent": false
+  },
+  "Profiles": [
+    {
+      "Profile": "6.4",
+      "BaselineCold": {
+        "Count": 3,
+        "P50Ms": 3308.2937,
+        "P95Ms": 3465.8912,
+        "MaximumMs": 3465.8912
+      },
+      "CandidateCold": {
+        "Count": 3,
+        "P50Ms": 1808.9426,
+        "P95Ms": 1875.096,
+        "MaximumMs": 1875.096
+      },
+      "ColdMedianRatio": 0.5467902078947827,
+      "Flags": {
+        "CompleteEvidence": true,
+        "MatchingRunEnvironmentAndMethod": true,
+        "ScenarioPerformancePassed": true,
+        "EveryCandidateRunHeartbeatP95AtMost100Ms": true,
+        "ColdMedianRegressionAtMost10Percent": true,
+        "MemorySoftTargetPassed": true,
+        "PerformancePassed": true
+      }
+    },
+    {
+      "Profile": "6.5",
+      "BaselineCold": {
+        "Count": 3,
+        "P50Ms": 2978.9051,
+        "P95Ms": 3061.3359,
+        "MaximumMs": 3061.3359
+      },
+      "CandidateCold": {
+        "Count": 3,
+        "P50Ms": 1714.0916,
+        "P95Ms": 1926.9259,
+        "MaximumMs": 1926.9259
+      },
+      "ColdMedianRatio": 0.5754099383696379,
+      "Flags": {
+        "CompleteEvidence": true,
+        "MatchingRunEnvironmentAndMethod": true,
+        "ScenarioPerformancePassed": true,
+        "EveryCandidateRunHeartbeatP95AtMost100Ms": true,
+        "ColdMedianRegressionAtMost10Percent": true,
+        "MemorySoftTargetPassed": true,
+        "PerformancePassed": true
+      }
+    },
+    {
+      "Profile": "6.6",
+      "BaselineCold": {
+        "Count": 3,
+        "P50Ms": 3193.6484,
+        "P95Ms": 3382.178,
+        "MaximumMs": 3382.178
+      },
+      "CandidateCold": {
+        "Count": 3,
+        "P50Ms": 1823.4379,
+        "P95Ms": 1900.7928,
+        "MaximumMs": 1900.7928
+      },
+      "ColdMedianRatio": 0.570957623262473,
+      "Flags": {
+        "CompleteEvidence": true,
+        "MatchingRunEnvironmentAndMethod": true,
+        "ScenarioPerformancePassed": true,
+        "EveryCandidateRunHeartbeatP95AtMost100Ms": true,
+        "ColdMedianRegressionAtMost10Percent": true,
+        "MemorySoftTargetPassed": true,
+        "PerformancePassed": true
+      }
+    }
+  ],
+  "Scenarios": [
+    {
+      "Profile": "6.4",
+      "Scenario": "人物",
+      "Category": "常用业务/物理表",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 191.566,
+        "P95Ms": 251.948,
+        "MaximumMs": 444.1051
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 89.5023,
+        "P95Ms": 120.3233,
+        "MaximumMs": 126.4026
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 168.8579,
+        "P95Ms": 226.3558,
+        "MaximumMs": 401.7677
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 71.1166,
+        "P95Ms": 98.9709,
+        "MaximumMs": 109.1689
+      },
+      "P95CandidateToBaselineRatio": 0.47757195929318746,
+      "P95ImprovementPercent": 52.242804070681245,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": true,
+        "ExtensionRegressionAtMost10Percent": null,
+        "BaselineP95Over200Ms": true,
+        "SlowScenarioImprovementAtLeast40Percent": true,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.4",
+      "Scenario": "兵种系",
+      "Category": "常用业务/物理表",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 168.4006,
+        "P95Ms": 211.3806,
+        "MaximumMs": 465.2105
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 79.6093,
+        "P95Ms": 93.7766,
+        "MaximumMs": 103.7861
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 138.4754,
+        "P95Ms": 167.4979,
+        "MaximumMs": 404.4935
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 36.5411,
+        "P95Ms": 41.7987,
+        "MaximumMs": 53.871
+      },
+      "P95CandidateToBaselineRatio": 0.44363863098127265,
+      "P95ImprovementPercent": 55.63613690187273,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": true,
+        "ExtensionRegressionAtMost10Percent": null,
+        "BaselineP95Over200Ms": true,
+        "SlowScenarioImprovementAtLeast40Percent": true,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.4",
+      "Scenario": "兵种",
+      "Category": "常用业务/物理表",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 155.079,
+        "P95Ms": 195.925,
+        "MaximumMs": 513.567
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 63.8019,
+        "P95Ms": 89.8411,
+        "MaximumMs": 126.8909
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 119.4231,
+        "P95Ms": 156.9433,
+        "MaximumMs": 344.7153
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 41.7825,
+        "P95Ms": 52.0495,
+        "MaximumMs": 88.6306
+      },
+      "P95CandidateToBaselineRatio": 0.458548424141891,
+      "P95ImprovementPercent": 54.1451575858109,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": true,
+        "ExtensionRegressionAtMost10Percent": null,
+        "BaselineP95Over200Ms": false,
+        "SlowScenarioImprovementAtLeast40Percent": null,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.4",
+      "Scenario": "宝物",
+      "Category": "常用业务/物理表",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 127.3666,
+        "P95Ms": 159.7134,
+        "MaximumMs": 419.0934
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 61.9947,
+        "P95Ms": 73.8047,
+        "MaximumMs": 92.0248
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 110.5139,
+        "P95Ms": 137.9404,
+        "MaximumMs": 406.4344
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 41.1027,
+        "P95Ms": 50.2848,
+        "MaximumMs": 60.1744
+      },
+      "P95CandidateToBaselineRatio": 0.4621071243865574,
+      "P95ImprovementPercent": 53.78928756134427,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": true,
+        "ExtensionRegressionAtMost10Percent": null,
+        "BaselineP95Over200Ms": false,
+        "SlowScenarioImprovementAtLeast40Percent": null,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.4",
+      "Scenario": "策略",
+      "Category": "常用业务/物理表",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 157.3101,
+        "P95Ms": 184.1535,
+        "MaximumMs": 209.2177
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 90.378,
+        "P95Ms": 111.8959,
+        "MaximumMs": 173.737
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 122.9694,
+        "P95Ms": 154.3409,
+        "MaximumMs": 180.8793
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 53.8632,
+        "P95Ms": 70.6122,
+        "MaximumMs": 132.7275
+      },
+      "P95CandidateToBaselineRatio": 0.607622988430847,
+      "P95ImprovementPercent": 39.23770115691529,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": true,
+        "ExtensionRegressionAtMost10Percent": null,
+        "BaselineP95Over200Ms": false,
+        "SlowScenarioImprovementAtLeast40Percent": null,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.4",
+      "Scenario": "商店",
+      "Category": "常用业务/物理表",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 129.4335,
+        "P95Ms": 151.7134,
+        "MaximumMs": 192.3083
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 64.9761,
+        "P95Ms": 79.8503,
+        "MaximumMs": 95.8639
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 112.2188,
+        "P95Ms": 131.0696,
+        "MaximumMs": 174.2197
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 37.2367,
+        "P95Ms": 47.9233,
+        "MaximumMs": 61.5611
+      },
+      "P95CandidateToBaselineRatio": 0.5263233175184262,
+      "P95ImprovementPercent": 47.36766824815738,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": true,
+        "ExtensionRegressionAtMost10Percent": null,
+        "BaselineP95Over200Ms": false,
+        "SlowScenarioImprovementAtLeast40Percent": null,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.4",
+      "Scenario": "拓展数据",
+      "Category": "常用业务/物理表",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 63.5139,
+        "P95Ms": 94.2781,
+        "MaximumMs": 114.5823
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 50.2986,
+        "P95Ms": 69.9014,
+        "MaximumMs": 75.2931
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 55.277,
+        "P95Ms": 71.4354,
+        "MaximumMs": 83.3613
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 38.2975,
+        "P95Ms": 44.1931,
+        "MaximumMs": 45.966
+      },
+      "P95CandidateToBaselineRatio": 0.7414383616131424,
+      "P95ImprovementPercent": 25.856163838685763,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": true,
+        "ExtensionRegressionAtMost10Percent": null,
+        "BaselineP95Over200Ms": false,
+        "SlowScenarioImprovementAtLeast40Percent": null,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.4",
+      "Scenario": "extend/Strategies",
+      "Category": "常用业务/物理表",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 17.8129,
+        "P95Ms": 32.9088,
+        "MaximumMs": 44.6177
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 16.8531,
+        "P95Ms": 32.7777,
+        "MaximumMs": 35.826
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 12.7266,
+        "P95Ms": 15.6129,
+        "MaximumMs": 27.4385
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 12.0975,
+        "P95Ms": 15.0566,
+        "MaximumMs": 16.576
+      },
+      "P95CandidateToBaselineRatio": 0.9960162631271879,
+      "P95ImprovementPercent": 0.39837368728120603,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": true,
+        "ExtensionRegressionAtMost10Percent": null,
+        "BaselineP95Over200Ms": false,
+        "SlowScenarioImprovementAtLeast40Percent": null,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.4",
+      "Scenario": "extend/Effects",
+      "Category": "常用业务/物理表",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 15.7322,
+        "P95Ms": 17.4652,
+        "MaximumMs": 32.0033
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 15.7134,
+        "P95Ms": 18.7042,
+        "MaximumMs": 26.9644
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 9.7008,
+        "P95Ms": 12.7349,
+        "MaximumMs": 15.3913
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 7.7436,
+        "P95Ms": 11.8909,
+        "MaximumMs": 14.6552
+      },
+      "P95CandidateToBaselineRatio": 1.070941071387674,
+      "P95ImprovementPercent": -7.0941071387673915,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": true,
+        "ExtensionRegressionAtMost10Percent": null,
+        "BaselineP95Over200Ms": false,
+        "SlowScenarioImprovementAtLeast40Percent": null,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.4",
+      "Scenario": "physical/persons",
+      "Category": "常用业务/物理表",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 180.8228,
+        "P95Ms": 207.2453,
+        "MaximumMs": 216.1829
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 76.9931,
+        "P95Ms": 100.8894,
+        "MaximumMs": 117.375
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 162.097,
+        "P95Ms": 188.9647,
+        "MaximumMs": 202.3054
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 60.4667,
+        "P95Ms": 74.4664,
+        "MaximumMs": 87.3371
+      },
+      "P95CandidateToBaselineRatio": 0.4868115223843436,
+      "P95ImprovementPercent": 51.318847761565635,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": true,
+        "ExtensionRegressionAtMost10Percent": null,
+        "BaselineP95Over200Ms": true,
+        "SlowScenarioImprovementAtLeast40Percent": true,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.4",
+      "Scenario": "physical/strategies",
+      "Category": "常用业务/物理表",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 178.8479,
+        "P95Ms": 205.0209,
+        "MaximumMs": 437.9724
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 79.3761,
+        "P95Ms": 100.0646,
+        "MaximumMs": 118.3805
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 170.7639,
+        "P95Ms": 187.1909,
+        "MaximumMs": 418.6665
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 62.7076,
+        "P95Ms": 83.5322,
+        "MaximumMs": 99.7072
+      },
+      "P95CandidateToBaselineRatio": 0.4880702406437587,
+      "P95ImprovementPercent": 51.19297593562413,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": true,
+        "ExtensionRegressionAtMost10Percent": null,
+        "BaselineP95Over200Ms": true,
+        "SlowScenarioImprovementAtLeast40Percent": true,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.4",
+      "Scenario": "__resources",
+      "Category": "资源/范围/公式",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 215.2627,
+        "P95Ms": 276.2143,
+        "MaximumMs": 360.2133
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 78.3098,
+        "P95Ms": 99.383,
+        "MaximumMs": 112.6199
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 183.0191,
+        "P95Ms": 227.2766,
+        "MaximumMs": 293.4108
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 60.5715,
+        "P95Ms": 79.2968,
+        "MaximumMs": 105.2881
+      },
+      "P95CandidateToBaselineRatio": 0.3598039638063634,
+      "P95ImprovementPercent": 64.01960361936365,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": null,
+        "ExtensionRegressionAtMost10Percent": true,
+        "BaselineP95Over200Ms": true,
+        "SlowScenarioImprovementAtLeast40Percent": true,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.4",
+      "Scenario": "__ranges/0",
+      "Category": "资源/范围/公式",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 100.4757,
+        "P95Ms": 124.5715,
+        "MaximumMs": 148.142
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 77.929,
+        "P95Ms": 103.6429,
+        "MaximumMs": 134.5285
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 81.364,
+        "P95Ms": 108.2342,
+        "MaximumMs": 125.0568
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 65.6107,
+        "P95Ms": 82.7768,
+        "MaximumMs": 109.5655
+      },
+      "P95CandidateToBaselineRatio": 0.8319952798192203,
+      "P95ImprovementPercent": 16.800472018077972,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": null,
+        "ExtensionRegressionAtMost10Percent": true,
+        "BaselineP95Over200Ms": false,
+        "SlowScenarioImprovementAtLeast40Percent": null,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.4",
+      "Scenario": "__ranges/1",
+      "Category": "资源/范围/公式",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 62.5453,
+        "P95Ms": 79.0434,
+        "MaximumMs": 80.8047
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 63.0295,
+        "P95Ms": 79.8083,
+        "MaximumMs": 86.9691
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 47.7855,
+        "P95Ms": 61.4327,
+        "MaximumMs": 70.5256
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 49.3939,
+        "P95Ms": 65.9616,
+        "MaximumMs": 67.1447
+      },
+      "P95CandidateToBaselineRatio": 1.0096769622764203,
+      "P95ImprovementPercent": -0.9676962276420342,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": null,
+        "ExtensionRegressionAtMost10Percent": true,
+        "BaselineP95Over200Ms": false,
+        "SlowScenarioImprovementAtLeast40Percent": null,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.4",
+      "Scenario": "__ranges/2",
+      "Category": "资源/范围/公式",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 15.7874,
+        "P95Ms": 22.063,
+        "MaximumMs": 32.1408
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 15.6991,
+        "P95Ms": 21.597,
+        "MaximumMs": 31.3845
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 8.6247,
+        "P95Ms": 11.9137,
+        "MaximumMs": 14.1266
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 8.9813,
+        "P95Ms": 12.2565,
+        "MaximumMs": 14.4931
+      },
+      "P95CandidateToBaselineRatio": 0.9788786656393057,
+      "P95ImprovementPercent": 2.11213343606943,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": null,
+        "ExtensionRegressionAtMost10Percent": true,
+        "BaselineP95Over200Ms": false,
+        "SlowScenarioImprovementAtLeast40Percent": null,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.4",
+      "Scenario": "__formulas",
+      "Category": "资源/范围/公式",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 71.6568,
+        "P95Ms": 102.7682,
+        "MaximumMs": 114.117
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 66.9686,
+        "P95Ms": 101.3662,
+        "MaximumMs": 121.125
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 58.3615,
+        "P95Ms": 74.8981,
+        "MaximumMs": 89.7361
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 55.771,
+        "P95Ms": 70.7054,
+        "MaximumMs": 92.1763
+      },
+      "P95CandidateToBaselineRatio": 0.9863576475991602,
+      "P95ImprovementPercent": 1.3642352400839775,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": null,
+        "ExtensionRegressionAtMost10Percent": true,
+        "BaselineP95Over200Ms": false,
+        "SlowScenarioImprovementAtLeast40Percent": null,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.5",
+      "Scenario": "人物",
+      "Category": "常用业务/物理表",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 189.3576,
+        "P95Ms": 219.7563,
+        "MaximumMs": 293.9219
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 84.029,
+        "P95Ms": 119.4522,
+        "MaximumMs": 137.7528
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 165.3489,
+        "P95Ms": 193.0629,
+        "MaximumMs": 269.9926
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 65.8013,
+        "P95Ms": 97.7279,
+        "MaximumMs": 105.1077
+      },
+      "P95CandidateToBaselineRatio": 0.5435666690784291,
+      "P95ImprovementPercent": 45.64333309215709,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": true,
+        "ExtensionRegressionAtMost10Percent": null,
+        "BaselineP95Over200Ms": true,
+        "SlowScenarioImprovementAtLeast40Percent": true,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.5",
+      "Scenario": "兵种系",
+      "Category": "常用业务/物理表",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 170.8916,
+        "P95Ms": 200.9179,
+        "MaximumMs": 238.3456
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 63.9652,
+        "P95Ms": 100.6143,
+        "MaximumMs": 105.4179
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 139.813,
+        "P95Ms": 165.6834,
+        "MaximumMs": 209.0094
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 30.618,
+        "P95Ms": 41.8323,
+        "MaximumMs": 49.0235
+      },
+      "P95CandidateToBaselineRatio": 0.5007732013922105,
+      "P95ImprovementPercent": 49.92267986077895,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": true,
+        "ExtensionRegressionAtMost10Percent": null,
+        "BaselineP95Over200Ms": true,
+        "SlowScenarioImprovementAtLeast40Percent": true,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.5",
+      "Scenario": "兵种",
+      "Category": "常用业务/物理表",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 143.7829,
+        "P95Ms": 168.8795,
+        "MaximumMs": 257.0833
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 61.8992,
+        "P95Ms": 88.033,
+        "MaximumMs": 142.2089
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 112.9456,
+        "P95Ms": 144.2839,
+        "MaximumMs": 220.4585
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 38.0183,
+        "P95Ms": 52.3574,
+        "MaximumMs": 102.708
+      },
+      "P95CandidateToBaselineRatio": 0.5212770052019339,
+      "P95ImprovementPercent": 47.872299479806614,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": true,
+        "ExtensionRegressionAtMost10Percent": null,
+        "BaselineP95Over200Ms": false,
+        "SlowScenarioImprovementAtLeast40Percent": null,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.5",
+      "Scenario": "宝物",
+      "Category": "常用业务/物理表",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 125.1202,
+        "P95Ms": 154.4378,
+        "MaximumMs": 171.8476
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 54.4176,
+        "P95Ms": 67.2736,
+        "MaximumMs": 74.986
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 107.3047,
+        "P95Ms": 125.9627,
+        "MaximumMs": 160.5034
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 36.3277,
+        "P95Ms": 45.1857,
+        "MaximumMs": 51.491
+      },
+      "P95CandidateToBaselineRatio": 0.43560320077079573,
+      "P95ImprovementPercent": 56.439679922920426,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": true,
+        "ExtensionRegressionAtMost10Percent": null,
+        "BaselineP95Over200Ms": false,
+        "SlowScenarioImprovementAtLeast40Percent": null,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.5",
+      "Scenario": "策略",
+      "Category": "常用业务/物理表",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 155.3218,
+        "P95Ms": 184.4053,
+        "MaximumMs": 206.7335
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 83.5653,
+        "P95Ms": 108.4219,
+        "MaximumMs": 143.1242
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 121.4226,
+        "P95Ms": 148.3277,
+        "MaximumMs": 162.1331
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 51.8874,
+        "P95Ms": 66.6354,
+        "MaximumMs": 91.6305
+      },
+      "P95CandidateToBaselineRatio": 0.5879543592293713,
+      "P95ImprovementPercent": 41.20456407706287,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": true,
+        "ExtensionRegressionAtMost10Percent": null,
+        "BaselineP95Over200Ms": false,
+        "SlowScenarioImprovementAtLeast40Percent": null,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.5",
+      "Scenario": "商店",
+      "Category": "常用业务/物理表",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 129.449,
+        "P95Ms": 156.5869,
+        "MaximumMs": 182.8955
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 61.2873,
+        "P95Ms": 75.5798,
+        "MaximumMs": 85.6675
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 112.4188,
+        "P95Ms": 139.3518,
+        "MaximumMs": 158.2919
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 34.1315,
+        "P95Ms": 41.5082,
+        "MaximumMs": 50.3182
+      },
+      "P95CandidateToBaselineRatio": 0.48267000623934697,
+      "P95ImprovementPercent": 51.7329993760653,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": true,
+        "ExtensionRegressionAtMost10Percent": null,
+        "BaselineP95Over200Ms": false,
+        "SlowScenarioImprovementAtLeast40Percent": null,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.5",
+      "Scenario": "拓展数据",
+      "Category": "常用业务/物理表",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 63.264,
+        "P95Ms": 87.1762,
+        "MaximumMs": 90.2078
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 46.8296,
+        "P95Ms": 68.5329,
+        "MaximumMs": 73.6017
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 53.7338,
+        "P95Ms": 63.4783,
+        "MaximumMs": 73.6692
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 32.6368,
+        "P95Ms": 43.2229,
+        "MaximumMs": 47.7961
+      },
+      "P95CandidateToBaselineRatio": 0.7861423186603683,
+      "P95ImprovementPercent": 21.38576813396317,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": true,
+        "ExtensionRegressionAtMost10Percent": null,
+        "BaselineP95Over200Ms": false,
+        "SlowScenarioImprovementAtLeast40Percent": null,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.5",
+      "Scenario": "extend/Strategies",
+      "Category": "常用业务/物理表",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 18.8741,
+        "P95Ms": 32.6257,
+        "MaximumMs": 49.5801
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 16.9942,
+        "P95Ms": 32.6192,
+        "MaximumMs": 41.6656
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 13.1676,
+        "P95Ms": 14.918,
+        "MaximumMs": 31.8944
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 10.5306,
+        "P95Ms": 14.698,
+        "MaximumMs": 16.4752
+      },
+      "P95CandidateToBaselineRatio": 0.9998007705581795,
+      "P95ImprovementPercent": 0.019922944182049207,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": true,
+        "ExtensionRegressionAtMost10Percent": null,
+        "BaselineP95Over200Ms": false,
+        "SlowScenarioImprovementAtLeast40Percent": null,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.5",
+      "Scenario": "extend/Effects",
+      "Category": "常用业务/物理表",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 15.9051,
+        "P95Ms": 30.7046,
+        "MaximumMs": 40.0402
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 15.7103,
+        "P95Ms": 23.9836,
+        "MaximumMs": 26.7001
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 8.8822,
+        "P95Ms": 12.4188,
+        "MaximumMs": 21.3256
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 7.0699,
+        "P95Ms": 11.2045,
+        "MaximumMs": 17.9181
+      },
+      "P95CandidateToBaselineRatio": 0.7811077167590523,
+      "P95ImprovementPercent": 21.889228324094766,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": true,
+        "ExtensionRegressionAtMost10Percent": null,
+        "BaselineP95Over200Ms": false,
+        "SlowScenarioImprovementAtLeast40Percent": null,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.5",
+      "Scenario": "physical/persons",
+      "Category": "常用业务/物理表",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 177.1317,
+        "P95Ms": 204.0991,
+        "MaximumMs": 235.4847
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 69.6801,
+        "P95Ms": 100.4772,
+        "MaximumMs": 121.8287
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 156.4109,
+        "P95Ms": 184.2906,
+        "MaximumMs": 219.7808
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 58.5394,
+        "P95Ms": 77.0971,
+        "MaximumMs": 85.9202
+      },
+      "P95CandidateToBaselineRatio": 0.4922961443730031,
+      "P95ImprovementPercent": 50.77038556269968,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": true,
+        "ExtensionRegressionAtMost10Percent": null,
+        "BaselineP95Over200Ms": true,
+        "SlowScenarioImprovementAtLeast40Percent": true,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.5",
+      "Scenario": "physical/strategies",
+      "Category": "常用业务/物理表",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 190.3186,
+        "P95Ms": 216.4295,
+        "MaximumMs": 262.3458
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 77.0971,
+        "P95Ms": 101.5278,
+        "MaximumMs": 111.7819
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 182.4411,
+        "P95Ms": 205.6642,
+        "MaximumMs": 253.3834
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 58.5061,
+        "P95Ms": 82.4971,
+        "MaximumMs": 94.5823
+      },
+      "P95CandidateToBaselineRatio": 0.4691033338800857,
+      "P95ImprovementPercent": 53.08966661199144,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": true,
+        "ExtensionRegressionAtMost10Percent": null,
+        "BaselineP95Over200Ms": true,
+        "SlowScenarioImprovementAtLeast40Percent": true,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.5",
+      "Scenario": "__resources",
+      "Category": "资源/范围/公式",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 212.2719,
+        "P95Ms": 252.198,
+        "MaximumMs": 301.6465
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 63.8997,
+        "P95Ms": 95.5257,
+        "MaximumMs": 100.6315
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 175.1735,
+        "P95Ms": 221.5435,
+        "MaximumMs": 248.2593
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 53.7985,
+        "P95Ms": 76.9395,
+        "MaximumMs": 79.2666
+      },
+      "P95CandidateToBaselineRatio": 0.3787726310280018,
+      "P95ImprovementPercent": 62.12273689719983,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": null,
+        "ExtensionRegressionAtMost10Percent": true,
+        "BaselineP95Over200Ms": true,
+        "SlowScenarioImprovementAtLeast40Percent": true,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.5",
+      "Scenario": "__ranges/0",
+      "Category": "资源/范围/公式",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 100.6705,
+        "P95Ms": 122.0531,
+        "MaximumMs": 145.8137
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 73.637,
+        "P95Ms": 94.9667,
+        "MaximumMs": 159.1695
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 83.0873,
+        "P95Ms": 107.4309,
+        "MaximumMs": 131.8769
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 59.0691,
+        "P95Ms": 74.0622,
+        "MaximumMs": 134.3008
+      },
+      "P95CandidateToBaselineRatio": 0.7780769189803455,
+      "P95ImprovementPercent": 22.192308101965452,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": null,
+        "ExtensionRegressionAtMost10Percent": true,
+        "BaselineP95Over200Ms": false,
+        "SlowScenarioImprovementAtLeast40Percent": null,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.5",
+      "Scenario": "__ranges/1",
+      "Category": "资源/范围/公式",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 62.7282,
+        "P95Ms": 78.6067,
+        "MaximumMs": 80.8784
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 56.3318,
+        "P95Ms": 79.266,
+        "MaximumMs": 91.8635
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 48.3173,
+        "P95Ms": 61.9113,
+        "MaximumMs": 65.8187
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 44.5725,
+        "P95Ms": 64.6869,
+        "MaximumMs": 72.026
+      },
+      "P95CandidateToBaselineRatio": 1.0083873257623077,
+      "P95ImprovementPercent": -0.8387325762307718,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": null,
+        "ExtensionRegressionAtMost10Percent": true,
+        "BaselineP95Over200Ms": false,
+        "SlowScenarioImprovementAtLeast40Percent": null,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.5",
+      "Scenario": "__ranges/2",
+      "Category": "资源/范围/公式",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 15.7449,
+        "P95Ms": 25.0795,
+        "MaximumMs": 30.2362
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 15.7955,
+        "P95Ms": 22.8141,
+        "MaximumMs": 27.5299
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 7.9029,
+        "P95Ms": 11.749,
+        "MaximumMs": 14.4919
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 7.7008,
+        "P95Ms": 10.7393,
+        "MaximumMs": 11.4236
+      },
+      "P95CandidateToBaselineRatio": 0.9096712454395024,
+      "P95ImprovementPercent": 9.03287545604976,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": null,
+        "ExtensionRegressionAtMost10Percent": true,
+        "BaselineP95Over200Ms": false,
+        "SlowScenarioImprovementAtLeast40Percent": null,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.5",
+      "Scenario": "__formulas",
+      "Category": "资源/范围/公式",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 70.0424,
+        "P95Ms": 99.8915,
+        "MaximumMs": 115.8783
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 64.6174,
+        "P95Ms": 92.4278,
+        "MaximumMs": 102.5998
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 56.3148,
+        "P95Ms": 72.1735,
+        "MaximumMs": 88.9093
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 45.1154,
+        "P95Ms": 66.5804,
+        "MaximumMs": 76.2971
+      },
+      "P95CandidateToBaselineRatio": 0.9252819308950212,
+      "P95ImprovementPercent": 7.471806910497881,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": null,
+        "ExtensionRegressionAtMost10Percent": true,
+        "BaselineP95Over200Ms": false,
+        "SlowScenarioImprovementAtLeast40Percent": null,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.6",
+      "Scenario": "人物",
+      "Category": "常用业务/物理表",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 188.4199,
+        "P95Ms": 223.6715,
+        "MaximumMs": 246.7822
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 90.0316,
+        "P95Ms": 122.352,
+        "MaximumMs": 130.8225
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 164.9229,
+        "P95Ms": 190.0609,
+        "MaximumMs": 223.2633
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 74.6776,
+        "P95Ms": 99.7648,
+        "MaximumMs": 105.0651
+      },
+      "P95CandidateToBaselineRatio": 0.5470164951726081,
+      "P95ImprovementPercent": 45.29835048273919,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": true,
+        "ExtensionRegressionAtMost10Percent": null,
+        "BaselineP95Over200Ms": true,
+        "SlowScenarioImprovementAtLeast40Percent": true,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.6",
+      "Scenario": "兵种系",
+      "Category": "常用业务/物理表",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 183.6087,
+        "P95Ms": 215.7818,
+        "MaximumMs": 270.065
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 79.1449,
+        "P95Ms": 99.3482,
+        "MaximumMs": 106.6938
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 154.0388,
+        "P95Ms": 175.4618,
+        "MaximumMs": 235.5632
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 36.5686,
+        "P95Ms": 42.4531,
+        "MaximumMs": 50.7172
+      },
+      "P95CandidateToBaselineRatio": 0.46041047020647713,
+      "P95ImprovementPercent": 53.95895297935229,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": true,
+        "ExtensionRegressionAtMost10Percent": null,
+        "BaselineP95Over200Ms": true,
+        "SlowScenarioImprovementAtLeast40Percent": true,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.6",
+      "Scenario": "兵种",
+      "Category": "常用业务/物理表",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 151.8055,
+        "P95Ms": 179.6731,
+        "MaximumMs": 218.6979
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 63.7861,
+        "P95Ms": 93.1172,
+        "MaximumMs": 100.2846
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 118.7988,
+        "P95Ms": 148.6295,
+        "MaximumMs": 196.7897
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 42.5347,
+        "P95Ms": 51.2085,
+        "MaximumMs": 64.1564
+      },
+      "P95CandidateToBaselineRatio": 0.5182589936946599,
+      "P95ImprovementPercent": 48.174100630534014,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": true,
+        "ExtensionRegressionAtMost10Percent": null,
+        "BaselineP95Over200Ms": false,
+        "SlowScenarioImprovementAtLeast40Percent": null,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.6",
+      "Scenario": "宝物",
+      "Category": "常用业务/物理表",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 127.2902,
+        "P95Ms": 156.8214,
+        "MaximumMs": 224.8111
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 62.235,
+        "P95Ms": 67.7232,
+        "MaximumMs": 96.4012
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 111.6996,
+        "P95Ms": 129.3844,
+        "MaximumMs": 207.3185
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 41.5888,
+        "P95Ms": 48.8778,
+        "MaximumMs": 63.0229
+      },
+      "P95CandidateToBaselineRatio": 0.43184922465938963,
+      "P95ImprovementPercent": 56.81507753406103,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": true,
+        "ExtensionRegressionAtMost10Percent": null,
+        "BaselineP95Over200Ms": false,
+        "SlowScenarioImprovementAtLeast40Percent": null,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.6",
+      "Scenario": "策略",
+      "Category": "常用业务/物理表",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 157.8703,
+        "P95Ms": 192.8896,
+        "MaximumMs": 271.2769
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 92.2414,
+        "P95Ms": 107.2477,
+        "MaximumMs": 132.4057
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 122.5176,
+        "P95Ms": 152.6861,
+        "MaximumMs": 216.9879
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 55.1099,
+        "P95Ms": 68.432,
+        "MaximumMs": 78.8736
+      },
+      "P95CandidateToBaselineRatio": 0.5560056115000498,
+      "P95ImprovementPercent": 44.39943884999502,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": true,
+        "ExtensionRegressionAtMost10Percent": null,
+        "BaselineP95Over200Ms": false,
+        "SlowScenarioImprovementAtLeast40Percent": null,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.6",
+      "Scenario": "商店",
+      "Category": "常用业务/物理表",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 129.8077,
+        "P95Ms": 156.9904,
+        "MaximumMs": 172.498
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 57.761,
+        "P95Ms": 79.2528,
+        "MaximumMs": 115.7753
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 114.1152,
+        "P95Ms": 137.1766,
+        "MaximumMs": 144.3191
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 35.2381,
+        "P95Ms": 43.4198,
+        "MaximumMs": 83.9379
+      },
+      "P95CandidateToBaselineRatio": 0.5048257727861066,
+      "P95ImprovementPercent": 49.51742272138934,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": true,
+        "ExtensionRegressionAtMost10Percent": null,
+        "BaselineP95Over200Ms": false,
+        "SlowScenarioImprovementAtLeast40Percent": null,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.6",
+      "Scenario": "拓展数据",
+      "Category": "常用业务/物理表",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 346.1303,
+        "P95Ms": 387.12,
+        "MaximumMs": 422.5251
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 92.9589,
+        "P95Ms": 118.3035,
+        "MaximumMs": 121.1897
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 324.8583,
+        "P95Ms": 371.3218,
+        "MaximumMs": 398.2754
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 82.2903,
+        "P95Ms": 104.405,
+        "MaximumMs": 109.2411
+      },
+      "P95CandidateToBaselineRatio": 0.30559903905765656,
+      "P95ImprovementPercent": 69.44009609423433,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": true,
+        "ExtensionRegressionAtMost10Percent": null,
+        "BaselineP95Over200Ms": true,
+        "SlowScenarioImprovementAtLeast40Percent": true,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.6",
+      "Scenario": "extend/Strategies",
+      "Category": "常用业务/物理表",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 113.2414,
+        "P95Ms": 152.424,
+        "MaximumMs": 163.4794
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 79.9507,
+        "P95Ms": 113.2824,
+        "MaximumMs": 143.4049
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 91.7902,
+        "P95Ms": 122.2192,
+        "MaximumMs": 146.06
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 59.3319,
+        "P95Ms": 86.5463,
+        "MaximumMs": 107.5832
+      },
+      "P95CandidateToBaselineRatio": 0.7432057943630924,
+      "P95ImprovementPercent": 25.67942056369076,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": true,
+        "ExtensionRegressionAtMost10Percent": null,
+        "BaselineP95Over200Ms": false,
+        "SlowScenarioImprovementAtLeast40Percent": null,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.6",
+      "Scenario": "extend/Effects",
+      "Category": "常用业务/物理表",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 436.9012,
+        "P95Ms": 496.3239,
+        "MaximumMs": 506.4947
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 119.0386,
+        "P95Ms": 148.0679,
+        "MaximumMs": 156.473
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 424.5372,
+        "P95Ms": 486.359,
+        "MaximumMs": 501.5615
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 104.3486,
+        "P95Ms": 125.739,
+        "MaximumMs": 139.1096
+      },
+      "P95CandidateToBaselineRatio": 0.2983291757660673,
+      "P95ImprovementPercent": 70.16708242339327,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": true,
+        "ExtensionRegressionAtMost10Percent": null,
+        "BaselineP95Over200Ms": true,
+        "SlowScenarioImprovementAtLeast40Percent": true,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.6",
+      "Scenario": "physical/persons",
+      "Category": "常用业务/物理表",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 113.4757,
+        "P95Ms": 136.498,
+        "MaximumMs": 156.1731
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 50.4017,
+        "P95Ms": 75.2783,
+        "MaximumMs": 108.9637
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 102.1065,
+        "P95Ms": 122.0677,
+        "MaximumMs": 135.1816
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 43.9323,
+        "P95Ms": 53.7163,
+        "MaximumMs": 98.5494
+      },
+      "P95CandidateToBaselineRatio": 0.5514974578382101,
+      "P95ImprovementPercent": 44.85025421617899,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": true,
+        "ExtensionRegressionAtMost10Percent": null,
+        "BaselineP95Over200Ms": false,
+        "SlowScenarioImprovementAtLeast40Percent": null,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.6",
+      "Scenario": "physical/strategies",
+      "Category": "常用业务/物理表",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 193.4216,
+        "P95Ms": 216.9354,
+        "MaximumMs": 291.732
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 77.0984,
+        "P95Ms": 94.4054,
+        "MaximumMs": 102.8336
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 184.5978,
+        "P95Ms": 206.0636,
+        "MaximumMs": 271.2452
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 60.1378,
+        "P95Ms": 81.227,
+        "MaximumMs": 89.0368
+      },
+      "P95CandidateToBaselineRatio": 0.4351774767972401,
+      "P95ImprovementPercent": 56.482252320276,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": true,
+        "ExtensionRegressionAtMost10Percent": null,
+        "BaselineP95Over200Ms": true,
+        "SlowScenarioImprovementAtLeast40Percent": true,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.6",
+      "Scenario": "__resources",
+      "Category": "资源/范围/公式",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 213.8931,
+        "P95Ms": 272.5711,
+        "MaximumMs": 320.4481
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 67.5666,
+        "P95Ms": 100.0029,
+        "MaximumMs": 124.3622
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 180.0634,
+        "P95Ms": 237.2663,
+        "MaximumMs": 281.9475
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 58.4836,
+        "P95Ms": 81.1938,
+        "MaximumMs": 113.7805
+      },
+      "P95CandidateToBaselineRatio": 0.3668873919502104,
+      "P95ImprovementPercent": 63.31126080497895,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": null,
+        "ExtensionRegressionAtMost10Percent": true,
+        "BaselineP95Over200Ms": true,
+        "SlowScenarioImprovementAtLeast40Percent": true,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.6",
+      "Scenario": "__ranges/0",
+      "Category": "资源/范围/公式",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 98.7442,
+        "P95Ms": 119.053,
+        "MaximumMs": 134.1091
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 75.4422,
+        "P95Ms": 96.0642,
+        "MaximumMs": 114.7691
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 80.6295,
+        "P95Ms": 98.9341,
+        "MaximumMs": 116.4235
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 64.5465,
+        "P95Ms": 78.0111,
+        "MaximumMs": 96.3586
+      },
+      "P95CandidateToBaselineRatio": 0.8069028079930787,
+      "P95ImprovementPercent": 19.309719200692133,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": null,
+        "ExtensionRegressionAtMost10Percent": true,
+        "BaselineP95Over200Ms": false,
+        "SlowScenarioImprovementAtLeast40Percent": null,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.6",
+      "Scenario": "__ranges/1",
+      "Category": "资源/范围/公式",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 62.8817,
+        "P95Ms": 78.9484,
+        "MaximumMs": 84.4085
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 63.0999,
+        "P95Ms": 79.1244,
+        "MaximumMs": 80.1741
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 48.5228,
+        "P95Ms": 64.6706,
+        "MaximumMs": 69.4652
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 50.46,
+        "P95Ms": 62.0594,
+        "MaximumMs": 73.3836
+      },
+      "P95CandidateToBaselineRatio": 1.0022293042037582,
+      "P95ImprovementPercent": -0.222930420375822,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": null,
+        "ExtensionRegressionAtMost10Percent": true,
+        "BaselineP95Over200Ms": false,
+        "SlowScenarioImprovementAtLeast40Percent": null,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.6",
+      "Scenario": "__ranges/2",
+      "Category": "资源/范围/公式",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 15.7181,
+        "P95Ms": 23.2523,
+        "MaximumMs": 27.9704
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 15.705,
+        "P95Ms": 16.1248,
+        "MaximumMs": 25.5426
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 8.9218,
+        "P95Ms": 11.4195,
+        "MaximumMs": 12.8822
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 9.3012,
+        "P95Ms": 11.6867,
+        "MaximumMs": 11.9987
+      },
+      "P95CandidateToBaselineRatio": 0.6934711834958261,
+      "P95ImprovementPercent": 30.652881650417385,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": null,
+        "ExtensionRegressionAtMost10Percent": true,
+        "BaselineP95Over200Ms": false,
+        "SlowScenarioImprovementAtLeast40Percent": null,
+        "Passed": true
+      }
+    },
+    {
+      "Profile": "6.6",
+      "Scenario": "__formulas",
+      "Category": "资源/范围/公式",
+      "BaselineReady": {
+        "Count": 90,
+        "P50Ms": 71.3258,
+        "P95Ms": 97.447,
+        "MaximumMs": 104.5608
+      },
+      "CandidateReady": {
+        "Count": 90,
+        "P50Ms": 68.7285,
+        "P95Ms": 98.5589,
+        "MaximumMs": 103.2395
+      },
+      "BaselineSelect": {
+        "Count": 90,
+        "P50Ms": 56.7888,
+        "P95Ms": 73.5545,
+        "MaximumMs": 79.6968
+      },
+      "CandidateSelect": {
+        "Count": 90,
+        "P50Ms": 55.2399,
+        "P95Ms": 75.3859,
+        "MaximumMs": 88.8443
+      },
+      "P95CandidateToBaselineRatio": 1.01141030508892,
+      "P95ImprovementPercent": -1.1410305088920047,
+      "Flags": {
+        "NinetySamplesPerSide": true,
+        "CandidateP95AtMost200Ms": null,
+        "ExtensionRegressionAtMost10Percent": true,
+        "BaselineP95Over200Ms": false,
+        "SlowScenarioImprovementAtLeast40Percent": null,
+        "Passed": true
+      }
+    }
+  ],
+  "Runs": [
+    {
+      "Profile": "6.4",
+      "Side": "baseline",
+      "Run": 1,
+      "EvidencePath": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\data管理器\\验证\\布局与读取性能-1.2026.1113.1\\baseline-final-6.4-1\\runtime-performance.json",
+      "Sha256": "B969F438E0200BED902B9083BE4092607F15B2131C92B6D4D45E255BD923C112",
+      "Version": "1.2026.1112.3",
+      "Source": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\基底\\洗隋",
+      "ActualDpi": 144.0,
+      "Window": "{Width=1280, Height=800}",
+      "Cycles": 30,
+      "RawSampleCount": 480,
+      "EvidenceComplete": true,
+      "Problems": [],
+      "ColdInteractiveMs": 3308.2937,
+      "FirstVisibleImageMs": 3309.3544,
+      "Heartbeat": {
+        "P95Ms": 179.4139,
+        "MaximumMs": 404.5873,
+        "Samples": 1335,
+        "Meets100MsTarget": false
+      },
+      "NaturalStableMemory": {
+        "PeakPrivateBytes": 447721472.0,
+        "PeakPrivateMiB": 426.98046875,
+        "MeetsSoft1GiBTarget": true,
+        "EndMinusFirstPrivateBytes": 137011200.0,
+        "Samples": [
+          {
+            "Cycle": 0,
+            "PrivateBytes": 327880704,
+            "ManagedBytes": 178720328,
+            "Gdi": 358,
+            "User": 1383
+          },
+          {
+            "Cycle": 5,
+            "PrivateBytes": 310710272,
+            "ManagedBytes": 172640816,
+            "Gdi": 356,
+            "User": 1384
+          },
+          {
+            "Cycle": 10,
+            "PrivateBytes": 352149504,
+            "ManagedBytes": 218865904,
+            "Gdi": 356,
+            "User": 1385
+          },
+          {
+            "Cycle": 15,
+            "PrivateBytes": 392712192,
+            "ManagedBytes": 254072104,
+            "Gdi": 356,
+            "User": 1385
+          },
+          {
+            "Cycle": 20,
+            "PrivateBytes": 432627712,
+            "ManagedBytes": 299626408,
+            "Gdi": 356,
+            "User": 1384
+          },
+          {
+            "Cycle": 25,
+            "PrivateBytes": 434925568,
+            "ManagedBytes": 336235896,
+            "Gdi": 356,
+            "User": 1384
+          },
+          {
+            "Cycle": 30,
+            "PrivateBytes": 447721472,
+            "ManagedBytes": 372512600,
+            "Gdi": 356,
+            "User": 1384
+          }
+        ]
+      },
+      "QueryMeasurements": [
+        {
+          "Conditions": [
+            {
+              "FieldKey": "identity",
+              "Text": "曹"
+            }
+          ],
+          "Ms": 88.711,
+          "Summary": "匹配 0 / 共 1024 项"
+        },
+        {
+          "Conditions": [
+            {
+              "FieldKey": null,
+              "Text": "曹"
+            }
+          ],
+          "Ms": 108.2,
+          "Summary": "匹配 60 / 共 1024 项"
+        },
+        {
+          "Conditions": [
+            {
+              "FieldKey": null,
+              "Text": "__no_literal_match__"
+            }
+          ],
+          "Ms": 86.6568,
+          "Summary": "匹配 0 / 共 1024 项"
+        }
+      ],
+      "Notes": "Identical UI event harness; no duplicate smoke handler. Copying, hashing, screenshots and forced GC excluded. Data ready includes queued UI work; asynchronous image completion measured separately. No production or test forced GC in measured loops."
+    },
+    {
+      "Profile": "6.4",
+      "Side": "baseline",
+      "Run": 2,
+      "EvidencePath": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\data管理器\\验证\\布局与读取性能-1.2026.1113.1\\baseline-final-6.4-2\\runtime-performance.json",
+      "Sha256": "6364C07CF1028B44E43583E4C118EF873E72E46690FC3D803CA2E583F12DD1E1",
+      "Version": "1.2026.1112.3",
+      "Source": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\基底\\洗隋",
+      "ActualDpi": 144.0,
+      "Window": "{Width=1280, Height=800}",
+      "Cycles": 30,
+      "RawSampleCount": 480,
+      "EvidenceComplete": true,
+      "Problems": [],
+      "ColdInteractiveMs": 3465.8912,
+      "FirstVisibleImageMs": 3466.8086,
+      "Heartbeat": {
+        "P95Ms": 167.5849,
+        "MaximumMs": 227.2109,
+        "Samples": 1286,
+        "Meets100MsTarget": false
+      },
+      "NaturalStableMemory": {
+        "PeakPrivateBytes": 433225728.0,
+        "PeakPrivateMiB": 413.15625,
+        "MeetsSoft1GiBTarget": true,
+        "EndMinusFirstPrivateBytes": 133439488.0,
+        "Samples": [
+          {
+            "Cycle": 0,
+            "PrivateBytes": 313921536,
+            "ManagedBytes": 187956672,
+            "Gdi": 358,
+            "User": 1384
+          },
+          {
+            "Cycle": 5,
+            "PrivateBytes": 299786240,
+            "ManagedBytes": 172596400,
+            "Gdi": 360,
+            "User": 1384
+          },
+          {
+            "Cycle": 10,
+            "PrivateBytes": 339472384,
+            "ManagedBytes": 218477832,
+            "Gdi": 360,
+            "User": 1384
+          },
+          {
+            "Cycle": 15,
+            "PrivateBytes": 379760640,
+            "ManagedBytes": 253555432,
+            "Gdi": 360,
+            "User": 1384
+          },
+          {
+            "Cycle": 20,
+            "PrivateBytes": 421027840,
+            "ManagedBytes": 299115880,
+            "Gdi": 360,
+            "User": 1384
+          },
+          {
+            "Cycle": 25,
+            "PrivateBytes": 425443328,
+            "ManagedBytes": 335646128,
+            "Gdi": 360,
+            "User": 1384
+          },
+          {
+            "Cycle": 30,
+            "PrivateBytes": 433225728,
+            "ManagedBytes": 371824216,
+            "Gdi": 360,
+            "User": 1384
+          }
+        ]
+      },
+      "QueryMeasurements": [
+        {
+          "Conditions": [
+            {
+              "FieldKey": "identity",
+              "Text": "曹"
+            }
+          ],
+          "Ms": 91.0459,
+          "Summary": "匹配 0 / 共 1024 项"
+        },
+        {
+          "Conditions": [
+            {
+              "FieldKey": null,
+              "Text": "曹"
+            }
+          ],
+          "Ms": 116.6878,
+          "Summary": "匹配 60 / 共 1024 项"
+        },
+        {
+          "Conditions": [
+            {
+              "FieldKey": null,
+              "Text": "__no_literal_match__"
+            }
+          ],
+          "Ms": 109.8251,
+          "Summary": "匹配 0 / 共 1024 项"
+        }
+      ],
+      "Notes": "Identical UI event harness; no duplicate smoke handler. Copying, hashing, screenshots and forced GC excluded. Data ready includes queued UI work; asynchronous image completion measured separately. No production or test forced GC in measured loops."
+    },
+    {
+      "Profile": "6.4",
+      "Side": "baseline",
+      "Run": 3,
+      "EvidencePath": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\data管理器\\验证\\布局与读取性能-1.2026.1113.1\\baseline-final-6.4-3\\runtime-performance.json",
+      "Sha256": "79DE45D959C3870038683028FD05164118BCCDE58BABA0689CBC686BBDC3029D",
+      "Version": "1.2026.1112.3",
+      "Source": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\基底\\洗隋",
+      "ActualDpi": 144.0,
+      "Window": "{Width=1280, Height=800}",
+      "Cycles": 30,
+      "RawSampleCount": 480,
+      "EvidenceComplete": true,
+      "Problems": [],
+      "ColdInteractiveMs": 3195.0801,
+      "FirstVisibleImageMs": 3196.0601,
+      "Heartbeat": {
+        "P95Ms": 164.8211,
+        "MaximumMs": 248.6953,
+        "Samples": 1282,
+        "Meets100MsTarget": false
+      },
+      "NaturalStableMemory": {
+        "PeakPrivateBytes": 429920256.0,
+        "PeakPrivateMiB": 410.00390625,
+        "MeetsSoft1GiBTarget": true,
+        "EndMinusFirstPrivateBytes": 75104256.0,
+        "Samples": [
+          {
+            "Cycle": 0,
+            "PrivateBytes": 289710080,
+            "ManagedBytes": 166600560,
+            "Gdi": 358,
+            "User": 1385
+          },
+          {
+            "Cycle": 5,
+            "PrivateBytes": 332795904,
+            "ManagedBytes": 211979296,
+            "Gdi": 360,
+            "User": 1385
+          },
+          {
+            "Cycle": 10,
+            "PrivateBytes": 380551168,
+            "ManagedBytes": 258101872,
+            "Gdi": 360,
+            "User": 1385
+          },
+          {
+            "Cycle": 15,
+            "PrivateBytes": 421154816,
+            "ManagedBytes": 290683632,
+            "Gdi": 360,
+            "User": 1385
+          },
+          {
+            "Cycle": 20,
+            "PrivateBytes": 429920256,
+            "ManagedBytes": 338100600,
+            "Gdi": 360,
+            "User": 1385
+          },
+          {
+            "Cycle": 25,
+            "PrivateBytes": 429920256,
+            "ManagedBytes": 373132720,
+            "Gdi": 356,
+            "User": 1385
+          },
+          {
+            "Cycle": 30,
+            "PrivateBytes": 407900160,
+            "ManagedBytes": 182354280,
+            "Gdi": 356,
+            "User": 1385
+          }
+        ]
+      },
+      "QueryMeasurements": [
+        {
+          "Conditions": [
+            {
+              "FieldKey": "identity",
+              "Text": "曹"
+            }
+          ],
+          "Ms": 90.1341,
+          "Summary": "匹配 0 / 共 1024 项"
+        },
+        {
+          "Conditions": [
+            {
+              "FieldKey": null,
+              "Text": "曹"
+            }
+          ],
+          "Ms": 104.6732,
+          "Summary": "匹配 60 / 共 1024 项"
+        },
+        {
+          "Conditions": [
+            {
+              "FieldKey": null,
+              "Text": "__no_literal_match__"
+            }
+          ],
+          "Ms": 66.4479,
+          "Summary": "匹配 0 / 共 1024 项"
+        }
+      ],
+      "Notes": "Identical UI event harness; no duplicate smoke handler. Copying, hashing, screenshots and forced GC excluded. Data ready includes queued UI work; asynchronous image completion measured separately. No production or test forced GC in measured loops."
+    },
+    {
+      "Profile": "6.4",
+      "Side": "candidate",
+      "Run": 1,
+      "EvidencePath": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\data管理器\\验证\\布局与读取性能-1.2026.1113.1\\candidate-final-6.4-1\\runtime-performance.json",
+      "Sha256": "DBCCAAEBEDF91A070D778472094B68A2086714D3B0BC0FDB42C4FC2B0CF7516F",
+      "Version": "1.2026.1113.1",
+      "Source": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\基底\\洗隋",
+      "ActualDpi": 144.0,
+      "Window": "{Width=1280, Height=800}",
+      "Cycles": 30,
+      "RawSampleCount": 480,
+      "EvidenceComplete": true,
+      "Problems": [],
+      "ColdInteractiveMs": 1808.9426,
+      "FirstVisibleImageMs": 1809.9435,
+      "Heartbeat": {
+        "P95Ms": 77.1746,
+        "MaximumMs": 105.3249,
+        "Samples": 748,
+        "Meets100MsTarget": true
+      },
+      "NaturalStableMemory": {
+        "PeakPrivateBytes": 442482688.0,
+        "PeakPrivateMiB": 421.984375,
+        "MeetsSoft1GiBTarget": true,
+        "EndMinusFirstPrivateBytes": -49332224.0,
+        "Samples": [
+          {
+            "Cycle": 0,
+            "PrivateBytes": 304848896,
+            "ManagedBytes": 164805344,
+            "Gdi": 358,
+            "User": 1497
+          },
+          {
+            "Cycle": 5,
+            "PrivateBytes": 321052672,
+            "ManagedBytes": 184030768,
+            "Gdi": 358,
+            "User": 1498
+          },
+          {
+            "Cycle": 10,
+            "PrivateBytes": 360386560,
+            "ManagedBytes": 230188808,
+            "Gdi": 358,
+            "User": 1497
+          },
+          {
+            "Cycle": 15,
+            "PrivateBytes": 401944576,
+            "ManagedBytes": 264242536,
+            "Gdi": 358,
+            "User": 1497
+          },
+          {
+            "Cycle": 20,
+            "PrivateBytes": 442482688,
+            "ManagedBytes": 309941896,
+            "Gdi": 358,
+            "User": 1497
+          },
+          {
+            "Cycle": 25,
+            "PrivateBytes": 396099584,
+            "ManagedBytes": 343600720,
+            "Gdi": 358,
+            "User": 1497
+          },
+          {
+            "Cycle": 30,
+            "PrivateBytes": 271720448,
+            "ManagedBytes": 187720488,
+            "Gdi": 358,
+            "User": 1497
+          }
+        ]
+      },
+      "QueryMeasurements": [
+        {
+          "Conditions": [
+            {
+              "FieldKey": "identity",
+              "Text": "曹"
+            }
+          ],
+          "Ms": 70.4848,
+          "Summary": "匹配 0 / 共 1024 项"
+        },
+        {
+          "Conditions": [
+            {
+              "FieldKey": null,
+              "Text": "曹"
+            }
+          ],
+          "Ms": 1167.3504,
+          "Summary": "匹配 60 / 共 1024 项"
+        },
+        {
+          "Conditions": [
+            {
+              "FieldKey": null,
+              "Text": "__no_literal_match__"
+            }
+          ],
+          "Ms": 118.2816,
+          "Summary": "匹配 0 / 共 1024 项"
+        }
+      ],
+      "Notes": "Identical UI event harness; no duplicate smoke handler. Copying, hashing, screenshots and forced GC excluded. Data ready includes queued UI work; asynchronous image completion measured separately. No production or test forced GC in measured loops."
+    },
+    {
+      "Profile": "6.4",
+      "Side": "candidate",
+      "Run": 2,
+      "EvidencePath": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\data管理器\\验证\\布局与读取性能-1.2026.1113.1\\candidate-final-6.4-2\\runtime-performance.json",
+      "Sha256": "8DA0FA826DC621FC740102E788D95B24D7C07373520B9AE5DB7691FD73EF79EA",
+      "Version": "1.2026.1113.1",
+      "Source": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\基底\\洗隋",
+      "ActualDpi": 144.0,
+      "Window": "{Width=1280, Height=800}",
+      "Cycles": 30,
+      "RawSampleCount": 480,
+      "EvidenceComplete": true,
+      "Problems": [],
+      "ColdInteractiveMs": 1875.096,
+      "FirstVisibleImageMs": 1876.0513,
+      "Heartbeat": {
+        "P95Ms": 79.0075,
+        "MaximumMs": 108.3883,
+        "Samples": 744,
+        "Meets100MsTarget": true
+      },
+      "NaturalStableMemory": {
+        "PeakPrivateBytes": 442343424.0,
+        "PeakPrivateMiB": 421.8515625,
+        "MeetsSoft1GiBTarget": true,
+        "EndMinusFirstPrivateBytes": -49434624.0,
+        "Samples": [
+          {
+            "Cycle": 0,
+            "PrivateBytes": 304295936,
+            "ManagedBytes": 164418664,
+            "Gdi": 358,
+            "User": 1497
+          },
+          {
+            "Cycle": 5,
+            "PrivateBytes": 320684032,
+            "ManagedBytes": 183870608,
+            "Gdi": 358,
+            "User": 1497
+          },
+          {
+            "Cycle": 10,
+            "PrivateBytes": 358944768,
+            "ManagedBytes": 230513128,
+            "Gdi": 358,
+            "User": 1497
+          },
+          {
+            "Cycle": 15,
+            "PrivateBytes": 400699392,
+            "ManagedBytes": 264030816,
+            "Gdi": 358,
+            "User": 1497
+          },
+          {
+            "Cycle": 20,
+            "PrivateBytes": 442343424,
+            "ManagedBytes": 309888704,
+            "Gdi": 358,
+            "User": 1497
+          },
+          {
+            "Cycle": 25,
+            "PrivateBytes": 396664832,
+            "ManagedBytes": 343546648,
+            "Gdi": 358,
+            "User": 1497
+          },
+          {
+            "Cycle": 30,
+            "PrivateBytes": 271249408,
+            "ManagedBytes": 188021768,
+            "Gdi": 358,
+            "User": 1497
+          }
+        ]
+      },
+      "QueryMeasurements": [
+        {
+          "Conditions": [
+            {
+              "FieldKey": "identity",
+              "Text": "曹"
+            }
+          ],
+          "Ms": 112.137,
+          "Summary": "匹配 0 / 共 1024 项"
+        },
+        {
+          "Conditions": [
+            {
+              "FieldKey": null,
+              "Text": "曹"
+            }
+          ],
+          "Ms": 1363.1391,
+          "Summary": "匹配 60 / 共 1024 项"
+        },
+        {
+          "Conditions": [
+            {
+              "FieldKey": null,
+              "Text": "__no_literal_match__"
+            }
+          ],
+          "Ms": 88.7875,
+          "Summary": "匹配 0 / 共 1024 项"
+        }
+      ],
+      "Notes": "Identical UI event harness; no duplicate smoke handler. Copying, hashing, screenshots and forced GC excluded. Data ready includes queued UI work; asynchronous image completion measured separately. No production or test forced GC in measured loops."
+    },
+    {
+      "Profile": "6.4",
+      "Side": "candidate",
+      "Run": 3,
+      "EvidencePath": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\data管理器\\验证\\布局与读取性能-1.2026.1113.1\\candidate-final-6.4-3\\runtime-performance.json",
+      "Sha256": "B7EE7DA327C840971A4E75F44C9F33E072E49146322742B38EE6A7B74F30EAF6",
+      "Version": "1.2026.1113.1",
+      "Source": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\基底\\洗隋",
+      "ActualDpi": 144.0,
+      "Window": "{Width=1280, Height=800}",
+      "Cycles": 30,
+      "RawSampleCount": 480,
+      "EvidenceComplete": true,
+      "Problems": [],
+      "ColdInteractiveMs": 1792.17,
+      "FirstVisibleImageMs": 1793.1369,
+      "Heartbeat": {
+        "P95Ms": 76.3498,
+        "MaximumMs": 141.4012,
+        "Samples": 746,
+        "Meets100MsTarget": true
+      },
+      "NaturalStableMemory": {
+        "PeakPrivateBytes": 441761792.0,
+        "PeakPrivateMiB": 421.296875,
+        "MeetsSoft1GiBTarget": true,
+        "EndMinusFirstPrivateBytes": -48316416.0,
+        "Samples": [
+          {
+            "Cycle": 0,
+            "PrivateBytes": 303984640,
+            "ManagedBytes": 164730704,
+            "Gdi": 358,
+            "User": 1498
+          },
+          {
+            "Cycle": 5,
+            "PrivateBytes": 320278528,
+            "ManagedBytes": 183914152,
+            "Gdi": 358,
+            "User": 1498
+          },
+          {
+            "Cycle": 10,
+            "PrivateBytes": 361029632,
+            "ManagedBytes": 230119528,
+            "Gdi": 358,
+            "User": 1498
+          },
+          {
+            "Cycle": 15,
+            "PrivateBytes": 397864960,
+            "ManagedBytes": 264158776,
+            "Gdi": 358,
+            "User": 1497
+          },
+          {
+            "Cycle": 20,
+            "PrivateBytes": 441761792,
+            "ManagedBytes": 309891656,
+            "Gdi": 358,
+            "User": 1497
+          },
+          {
+            "Cycle": 25,
+            "PrivateBytes": 394784768,
+            "ManagedBytes": 343637576,
+            "Gdi": 358,
+            "User": 1497
+          },
+          {
+            "Cycle": 30,
+            "PrivateBytes": 271962112,
+            "ManagedBytes": 187652672,
+            "Gdi": 358,
+            "User": 1497
+          }
+        ]
+      },
+      "QueryMeasurements": [
+        {
+          "Conditions": [
+            {
+              "FieldKey": "identity",
+              "Text": "曹"
+            }
+          ],
+          "Ms": 79.1578,
+          "Summary": "匹配 0 / 共 1024 项"
+        },
+        {
+          "Conditions": [
+            {
+              "FieldKey": null,
+              "Text": "曹"
+            }
+          ],
+          "Ms": 1195.6923,
+          "Summary": "匹配 60 / 共 1024 项"
+        },
+        {
+          "Conditions": [
+            {
+              "FieldKey": null,
+              "Text": "__no_literal_match__"
+            }
+          ],
+          "Ms": 122.4159,
+          "Summary": "匹配 0 / 共 1024 项"
+        }
+      ],
+      "Notes": "Identical UI event harness; no duplicate smoke handler. Copying, hashing, screenshots and forced GC excluded. Data ready includes queued UI work; asynchronous image completion measured separately. No production or test forced GC in measured loops."
+    },
+    {
+      "Profile": "6.5",
+      "Side": "baseline",
+      "Run": 1,
+      "EvidencePath": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\data管理器\\验证\\布局与读取性能-1.2026.1113.1\\baseline-final-6.5-1\\runtime-performance.json",
+      "Sha256": "B7F0C20EBDD61CB8F7B64B30BC0469502EB94C4812B06D9844059288DEF587A3",
+      "Version": "1.2026.1112.3",
+      "Source": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\基底\\加强版6.5未加密版",
+      "ActualDpi": 144.0,
+      "Window": "{Width=1280, Height=800}",
+      "Cycles": 30,
+      "RawSampleCount": 480,
+      "EvidenceComplete": true,
+      "Problems": [],
+      "ColdInteractiveMs": 2978.9051,
+      "FirstVisibleImageMs": 2979.8336,
+      "Heartbeat": {
+        "P95Ms": 166.8245,
+        "MaximumMs": 235.3305,
+        "Samples": 1269,
+        "Meets100MsTarget": false
+      },
+      "NaturalStableMemory": {
+        "PeakPrivateBytes": 310198272.0,
+        "PeakPrivateMiB": 295.828125,
+        "MeetsSoft1GiBTarget": true,
+        "EndMinusFirstPrivateBytes": 25206784.0,
+        "Samples": [
+          {
+            "Cycle": 0,
+            "PrivateBytes": 208183296,
+            "ManagedBytes": 159834720,
+            "Gdi": 350,
+            "User": 1369
+          },
+          {
+            "Cycle": 5,
+            "PrivateBytes": 253280256,
+            "ManagedBytes": 205991888,
+            "Gdi": 348,
+            "User": 1370
+          },
+          {
+            "Cycle": 10,
+            "PrivateBytes": 243695616,
+            "ManagedBytes": 175852264,
+            "Gdi": 348,
+            "User": 1370
+          },
+          {
+            "Cycle": 15,
+            "PrivateBytes": 272424960,
+            "ManagedBytes": 211970352,
+            "Gdi": 350,
+            "User": 1369
+          },
+          {
+            "Cycle": 20,
+            "PrivateBytes": 310198272,
+            "ManagedBytes": 258656920,
+            "Gdi": 350,
+            "User": 1369
+          },
+          {
+            "Cycle": 25,
+            "PrivateBytes": 238235648,
+            "ManagedBytes": 173091304,
+            "Gdi": 350,
+            "User": 1370
+          },
+          {
+            "Cycle": 30,
+            "PrivateBytes": 278487040,
+            "ManagedBytes": 223614856,
+            "Gdi": 350,
+            "User": 1370
+          }
+        ]
+      },
+      "QueryMeasurements": [
+        {
+          "Conditions": [
+            {
+              "FieldKey": "identity",
+              "Text": "曹"
+            }
+          ],
+          "Ms": 37.2677,
+          "Summary": "匹配 11 / 共 1024 项"
+        },
+        {
+          "Conditions": [
+            {
+              "FieldKey": null,
+              "Text": "曹"
+            }
+          ],
+          "Ms": 31.7656,
+          "Summary": "匹配 84 / 共 1024 项"
+        },
+        {
+          "Conditions": [
+            {
+              "FieldKey": null,
+              "Text": "__no_literal_match__"
+            }
+          ],
+          "Ms": 89.218,
+          "Summary": "匹配 0 / 共 1024 项"
+        }
+      ],
+      "Notes": "Identical UI event harness; no duplicate smoke handler. Copying, hashing, screenshots and forced GC excluded. Data ready includes queued UI work; asynchronous image completion measured separately. No production or test forced GC in measured loops."
+    },
+    {
+      "Profile": "6.5",
+      "Side": "baseline",
+      "Run": 2,
+      "EvidencePath": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\data管理器\\验证\\布局与读取性能-1.2026.1113.1\\baseline-final-6.5-2\\runtime-performance.json",
+      "Sha256": "5ABACE5529D330DB553897DB99373ADB96735E7449497B435C02A8031989C02D",
+      "Version": "1.2026.1112.3",
+      "Source": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\基底\\加强版6.5未加密版",
+      "ActualDpi": 144.0,
+      "Window": "{Width=1280, Height=800}",
+      "Cycles": 30,
+      "RawSampleCount": 480,
+      "EvidenceComplete": true,
+      "Problems": [],
+      "ColdInteractiveMs": 2899.2086,
+      "FirstVisibleImageMs": 2900.1905,
+      "Heartbeat": {
+        "P95Ms": 166.6134,
+        "MaximumMs": 269.5155,
+        "Samples": 1284,
+        "Meets100MsTarget": false
+      },
+      "NaturalStableMemory": {
+        "PeakPrivateBytes": 297250816.0,
+        "PeakPrivateMiB": 283.48046875,
+        "MeetsSoft1GiBTarget": true,
+        "EndMinusFirstPrivateBytes": 25600000.0,
+        "Samples": [
+          {
+            "Cycle": 0,
+            "PrivateBytes": 283488256,
+            "ManagedBytes": 141687544,
+            "Gdi": 350,
+            "User": 1369
+          },
+          {
+            "Cycle": 5,
+            "PrivateBytes": 240607232,
+            "ManagedBytes": 191495120,
+            "Gdi": 348,
+            "User": 1370
+          },
+          {
+            "Cycle": 10,
+            "PrivateBytes": 232845312,
+            "ManagedBytes": 161182224,
+            "Gdi": 348,
+            "User": 1370
+          },
+          {
+            "Cycle": 15,
+            "PrivateBytes": 270589952,
+            "ManagedBytes": 197011488,
+            "Gdi": 348,
+            "User": 1369
+          },
+          {
+            "Cycle": 20,
+            "PrivateBytes": 297250816,
+            "ManagedBytes": 243976584,
+            "Gdi": 348,
+            "User": 1369
+          },
+          {
+            "Cycle": 25,
+            "PrivateBytes": 235864064,
+            "ManagedBytes": 158438592,
+            "Gdi": 348,
+            "User": 1369
+          },
+          {
+            "Cycle": 30,
+            "PrivateBytes": 266207232,
+            "ManagedBytes": 208469288,
+            "Gdi": 348,
+            "User": 1370
+          }
+        ]
+      },
+      "QueryMeasurements": [
+        {
+          "Conditions": [
+            {
+              "FieldKey": "identity",
+              "Text": "曹"
+            }
+          ],
+          "Ms": 47.6268,
+          "Summary": "匹配 11 / 共 1024 项"
+        },
+        {
+          "Conditions": [
+            {
+              "FieldKey": null,
+              "Text": "曹"
+            }
+          ],
+          "Ms": 32.3655,
+          "Summary": "匹配 84 / 共 1024 项"
+        },
+        {
+          "Conditions": [
+            {
+              "FieldKey": null,
+              "Text": "__no_literal_match__"
+            }
+          ],
+          "Ms": 90.8843,
+          "Summary": "匹配 0 / 共 1024 项"
+        }
+      ],
+      "Notes": "Identical UI event harness; no duplicate smoke handler. Copying, hashing, screenshots and forced GC excluded. Data ready includes queued UI work; asynchronous image completion measured separately. No production or test forced GC in measured loops."
+    },
+    {
+      "Profile": "6.5",
+      "Side": "baseline",
+      "Run": 3,
+      "EvidencePath": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\data管理器\\验证\\布局与读取性能-1.2026.1113.1\\baseline-final-6.5-3\\runtime-performance.json",
+      "Sha256": "277B8E7C46DC25082B74DD6FCF4969A02BD933E7C422EA17811B3FF9F653BFA6",
+      "Version": "1.2026.1112.3",
+      "Source": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\基底\\加强版6.5未加密版",
+      "ActualDpi": 144.0,
+      "Window": "{Width=1280, Height=800}",
+      "Cycles": 30,
+      "RawSampleCount": 480,
+      "EvidenceComplete": true,
+      "Problems": [],
+      "ColdInteractiveMs": 3061.3359,
+      "FirstVisibleImageMs": 3062.2691,
+      "Heartbeat": {
+        "P95Ms": 166.66,
+        "MaximumMs": 226.371,
+        "Samples": 1283,
+        "Meets100MsTarget": false
+      },
+      "NaturalStableMemory": {
+        "PeakPrivateBytes": 306774016.0,
+        "PeakPrivateMiB": 292.5625,
+        "MeetsSoft1GiBTarget": true,
+        "EndMinusFirstPrivateBytes": 16306176.0,
+        "Samples": [
+          {
+            "Cycle": 0,
+            "PrivateBytes": 298139648,
+            "ManagedBytes": 150715856,
+            "Gdi": 350,
+            "User": 1368
+          },
+          {
+            "Cycle": 5,
+            "PrivateBytes": 279044096,
+            "ManagedBytes": 198543544,
+            "Gdi": 352,
+            "User": 1369
+          },
+          {
+            "Cycle": 10,
+            "PrivateBytes": 247107584,
+            "ManagedBytes": 170559608,
+            "Gdi": 348,
+            "User": 1370
+          },
+          {
+            "Cycle": 15,
+            "PrivateBytes": 281042944,
+            "ManagedBytes": 206830192,
+            "Gdi": 348,
+            "User": 1370
+          },
+          {
+            "Cycle": 20,
+            "PrivateBytes": 306774016,
+            "ManagedBytes": 253034464,
+            "Gdi": 348,
+            "User": 1370
+          },
+          {
+            "Cycle": 25,
+            "PrivateBytes": 289308672,
+            "ManagedBytes": 164086352,
+            "Gdi": 348,
+            "User": 1370
+          },
+          {
+            "Cycle": 30,
+            "PrivateBytes": 295350272,
+            "ManagedBytes": 213992040,
+            "Gdi": 348,
+            "User": 1370
+          }
+        ]
+      },
+      "QueryMeasurements": [
+        {
+          "Conditions": [
+            {
+              "FieldKey": "identity",
+              "Text": "曹"
+            }
+          ],
+          "Ms": 35.0111,
+          "Summary": "匹配 11 / 共 1024 项"
+        },
+        {
+          "Conditions": [
+            {
+              "FieldKey": null,
+              "Text": "曹"
+            }
+          ],
+          "Ms": 30.2552,
+          "Summary": "匹配 84 / 共 1024 项"
+        },
+        {
+          "Conditions": [
+            {
+              "FieldKey": null,
+              "Text": "__no_literal_match__"
+            }
+          ],
+          "Ms": 112.9658,
+          "Summary": "匹配 0 / 共 1024 项"
+        }
+      ],
+      "Notes": "Identical UI event harness; no duplicate smoke handler. Copying, hashing, screenshots and forced GC excluded. Data ready includes queued UI work; asynchronous image completion measured separately. No production or test forced GC in measured loops."
+    },
+    {
+      "Profile": "6.5",
+      "Side": "candidate",
+      "Run": 1,
+      "EvidencePath": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\data管理器\\验证\\布局与读取性能-1.2026.1113.1\\candidate-final-6.5-1\\runtime-performance.json",
+      "Sha256": "0F1FCBBD8FD8149850DFF4E8601E6F2D9A97D97D2FCA967A1E7619F0C12D73FA",
+      "Version": "1.2026.1113.1",
+      "Source": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\基底\\加强版6.5未加密版",
+      "ActualDpi": 144.0,
+      "Window": "{Width=1280, Height=800}",
+      "Cycles": 30,
+      "RawSampleCount": 480,
+      "EvidenceComplete": true,
+      "Problems": [],
+      "ColdInteractiveMs": 1926.9259,
+      "FirstVisibleImageMs": 1928.3239,
+      "Heartbeat": {
+        "P95Ms": 77.1035,
+        "MaximumMs": 128.6349,
+        "Samples": 759,
+        "Meets100MsTarget": true
+      },
+      "NaturalStableMemory": {
+        "PeakPrivateBytes": 298455040.0,
+        "PeakPrivateMiB": 284.62890625,
+        "MeetsSoft1GiBTarget": true,
+        "EndMinusFirstPrivateBytes": 22278144.0,
+        "Samples": [
+          {
+            "Cycle": 0,
+            "PrivateBytes": 236883968,
+            "ManagedBytes": 142561352,
+            "Gdi": 351,
+            "User": 1483
+          },
+          {
+            "Cycle": 5,
+            "PrivateBytes": 276176896,
+            "ManagedBytes": 184266656,
+            "Gdi": 351,
+            "User": 1483
+          },
+          {
+            "Cycle": 10,
+            "PrivateBytes": 281645056,
+            "ManagedBytes": 231475840,
+            "Gdi": 351,
+            "User": 1483
+          },
+          {
+            "Cycle": 15,
+            "PrivateBytes": 251191296,
+            "ManagedBytes": 171895864,
+            "Gdi": 351,
+            "User": 1482
+          },
+          {
+            "Cycle": 20,
+            "PrivateBytes": 282861568,
+            "ManagedBytes": 207033536,
+            "Gdi": 351,
+            "User": 1482
+          },
+          {
+            "Cycle": 25,
+            "PrivateBytes": 270258176,
+            "ManagedBytes": 166622728,
+            "Gdi": 351,
+            "User": 1482
+          },
+          {
+            "Cycle": 30,
+            "PrivateBytes": 298455040,
+            "ManagedBytes": 213071848,
+            "Gdi": 351,
+            "User": 1482
+          }
+        ]
+      },
+      "QueryMeasurements": [
+        {
+          "Conditions": [
+            {
+              "FieldKey": "identity",
+              "Text": "曹"
+            }
+          ],
+          "Ms": 44.4777,
+          "Summary": "匹配 11 / 共 1024 项"
+        },
+        {
+          "Conditions": [
+            {
+              "FieldKey": null,
+              "Text": "曹"
+            }
+          ],
+          "Ms": 1224.1313,
+          "Summary": "匹配 84 / 共 1024 项"
+        },
+        {
+          "Conditions": [
+            {
+              "FieldKey": null,
+              "Text": "__no_literal_match__"
+            }
+          ],
+          "Ms": 116.6146,
+          "Summary": "匹配 0 / 共 1024 项"
+        }
+      ],
+      "Notes": "Identical UI event harness; no duplicate smoke handler. Copying, hashing, screenshots and forced GC excluded. Data ready includes queued UI work; asynchronous image completion measured separately. No production or test forced GC in measured loops."
+    },
+    {
+      "Profile": "6.5",
+      "Side": "candidate",
+      "Run": 2,
+      "EvidencePath": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\data管理器\\验证\\布局与读取性能-1.2026.1113.1\\candidate-final-6.5-2\\runtime-performance.json",
+      "Sha256": "FDCFF84365EA070517D1B84BF98909EA75D0F3258AE6BADC18ECBE95D0808B41",
+      "Version": "1.2026.1113.1",
+      "Source": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\基底\\加强版6.5未加密版",
+      "ActualDpi": 144.0,
+      "Window": "{Width=1280, Height=800}",
+      "Cycles": 30,
+      "RawSampleCount": 480,
+      "EvidenceComplete": true,
+      "Problems": [],
+      "ColdInteractiveMs": 1714.0916,
+      "FirstVisibleImageMs": 1714.9961,
+      "Heartbeat": {
+        "P95Ms": 74.7498,
+        "MaximumMs": 134.2351,
+        "Samples": 744,
+        "Meets100MsTarget": true
+      },
+      "NaturalStableMemory": {
+        "PeakPrivateBytes": 298647552.0,
+        "PeakPrivateMiB": 284.8125,
+        "MeetsSoft1GiBTarget": true,
+        "EndMinusFirstPrivateBytes": 23011328.0,
+        "Samples": [
+          {
+            "Cycle": 0,
+            "PrivateBytes": 236589056,
+            "ManagedBytes": 142564648,
+            "Gdi": 351,
+            "User": 1481
+          },
+          {
+            "Cycle": 5,
+            "PrivateBytes": 275636224,
+            "ManagedBytes": 184256104,
+            "Gdi": 351,
+            "User": 1482
+          },
+          {
+            "Cycle": 10,
+            "PrivateBytes": 280625152,
+            "ManagedBytes": 228532912,
+            "Gdi": 351,
+            "User": 1482
+          },
+          {
+            "Cycle": 15,
+            "PrivateBytes": 252919808,
+            "ManagedBytes": 171964232,
+            "Gdi": 351,
+            "User": 1482
+          },
+          {
+            "Cycle": 20,
+            "PrivateBytes": 281128960,
+            "ManagedBytes": 207049888,
+            "Gdi": 351,
+            "User": 1482
+          },
+          {
+            "Cycle": 25,
+            "PrivateBytes": 270938112,
+            "ManagedBytes": 166654544,
+            "Gdi": 351,
+            "User": 1482
+          },
+          {
+            "Cycle": 30,
+            "PrivateBytes": 298647552,
+            "ManagedBytes": 213160440,
+            "Gdi": 351,
+            "User": 1482
+          }
+        ]
+      },
+      "QueryMeasurements": [
+        {
+          "Conditions": [
+            {
+              "FieldKey": "identity",
+              "Text": "曹"
+            }
+          ],
+          "Ms": 30.9519,
+          "Summary": "匹配 11 / 共 1024 项"
+        },
+        {
+          "Conditions": [
+            {
+              "FieldKey": null,
+              "Text": "曹"
+            }
+          ],
+          "Ms": 1348.5609,
+          "Summary": "匹配 84 / 共 1024 项"
+        },
+        {
+          "Conditions": [
+            {
+              "FieldKey": null,
+              "Text": "__no_literal_match__"
+            }
+          ],
+          "Ms": 124.8288,
+          "Summary": "匹配 0 / 共 1024 项"
+        }
+      ],
+      "Notes": "Identical UI event harness; no duplicate smoke handler. Copying, hashing, screenshots and forced GC excluded. Data ready includes queued UI work; asynchronous image completion measured separately. No production or test forced GC in measured loops."
+    },
+    {
+      "Profile": "6.5",
+      "Side": "candidate",
+      "Run": 3,
+      "EvidencePath": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\data管理器\\验证\\布局与读取性能-1.2026.1113.1\\candidate-final-6.5-3\\runtime-performance.json",
+      "Sha256": "CE859BC48B21717441639199F91833CAE71D4C1FFA35C961F980ABCE4FE59AD9",
+      "Version": "1.2026.1113.1",
+      "Source": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\基底\\加强版6.5未加密版",
+      "ActualDpi": 144.0,
+      "Window": "{Width=1280, Height=800}",
+      "Cycles": 30,
+      "RawSampleCount": 480,
+      "EvidenceComplete": true,
+      "Problems": [],
+      "ColdInteractiveMs": 1677.0924,
+      "FirstVisibleImageMs": 1678.0087,
+      "Heartbeat": {
+        "P95Ms": 60.393,
+        "MaximumMs": 101.6655,
+        "Samples": 633,
+        "Meets100MsTarget": true
+      },
+      "NaturalStableMemory": {
+        "PeakPrivateBytes": 298758144.0,
+        "PeakPrivateMiB": 284.91796875,
+        "MeetsSoft1GiBTarget": true,
+        "EndMinusFirstPrivateBytes": 23035904.0,
+        "Samples": [
+          {
+            "Cycle": 0,
+            "PrivateBytes": 236601344,
+            "ManagedBytes": 142574048,
+            "Gdi": 351,
+            "User": 1482
+          },
+          {
+            "Cycle": 5,
+            "PrivateBytes": 275722240,
+            "ManagedBytes": 184263296,
+            "Gdi": 351,
+            "User": 1482
+          },
+          {
+            "Cycle": 10,
+            "PrivateBytes": 280592384,
+            "ManagedBytes": 231428760,
+            "Gdi": 351,
+            "User": 1482
+          },
+          {
+            "Cycle": 15,
+            "PrivateBytes": 255959040,
+            "ManagedBytes": 171924624,
+            "Gdi": 351,
+            "User": 1482
+          },
+          {
+            "Cycle": 20,
+            "PrivateBytes": 282546176,
+            "ManagedBytes": 207073280,
+            "Gdi": 351,
+            "User": 1482
+          },
+          {
+            "Cycle": 25,
+            "PrivateBytes": 270442496,
+            "ManagedBytes": 166746456,
+            "Gdi": 351,
+            "User": 1482
+          },
+          {
+            "Cycle": 30,
+            "PrivateBytes": 298758144,
+            "ManagedBytes": 213197184,
+            "Gdi": 351,
+            "User": 1482
+          }
+        ]
+      },
+      "QueryMeasurements": [
+        {
+          "Conditions": [
+            {
+              "FieldKey": "identity",
+              "Text": "曹"
+            }
+          ],
+          "Ms": 21.807,
+          "Summary": "匹配 11 / 共 1024 项"
+        },
+        {
+          "Conditions": [
+            {
+              "FieldKey": null,
+              "Text": "曹"
+            }
+          ],
+          "Ms": 1188.6439,
+          "Summary": "匹配 84 / 共 1024 项"
+        },
+        {
+          "Conditions": [
+            {
+              "FieldKey": null,
+              "Text": "__no_literal_match__"
+            }
+          ],
+          "Ms": 109.8588,
+          "Summary": "匹配 0 / 共 1024 项"
+        }
+      ],
+      "Notes": "Identical UI event harness; no duplicate smoke handler. Copying, hashing, screenshots and forced GC excluded. Data ready includes queued UI work; asynchronous image completion measured separately. No production or test forced GC in measured loops."
+    },
+    {
+      "Profile": "6.6",
+      "Side": "baseline",
+      "Run": 1,
+      "EvidencePath": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\data管理器\\验证\\布局与读取性能-1.2026.1113.1\\baseline-final-6.6-1\\runtime-performance.json",
+      "Sha256": "9F792F52A729FCF3A39537C9FCAA53AC26BF17F720F24925438D08E2DD539F5B",
+      "Version": "1.2026.1112.3",
+      "Source": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\基底\\复刻版6.6山贼",
+      "ActualDpi": 144.0,
+      "Window": "{Width=1280, Height=800}",
+      "Cycles": 30,
+      "RawSampleCount": 480,
+      "EvidenceComplete": true,
+      "Problems": [],
+      "ColdInteractiveMs": 3193.6484,
+      "FirstVisibleImageMs": 3194.6904,
+      "Heartbeat": {
+        "P95Ms": 329.2624,
+        "MaximumMs": 477.8342,
+        "Samples": 1743,
+        "Meets100MsTarget": false
+      },
+      "NaturalStableMemory": {
+        "PeakPrivateBytes": 430592000.0,
+        "PeakPrivateMiB": 410.64453125,
+        "MeetsSoft1GiBTarget": true,
+        "EndMinusFirstPrivateBytes": -22773760.0,
+        "Samples": [
+          {
+            "Cycle": 0,
+            "PrivateBytes": 416309248,
+            "ManagedBytes": 225752176,
+            "Gdi": 370,
+            "User": 1453
+          },
+          {
+            "Cycle": 5,
+            "PrivateBytes": 420339712,
+            "ManagedBytes": 266255624,
+            "Gdi": 375,
+            "User": 1455
+          },
+          {
+            "Cycle": 10,
+            "PrivateBytes": 394641408,
+            "ManagedBytes": 307241456,
+            "Gdi": 375,
+            "User": 1455
+          },
+          {
+            "Cycle": 15,
+            "PrivateBytes": 430592000,
+            "ManagedBytes": 346043456,
+            "Gdi": 375,
+            "User": 1455
+          },
+          {
+            "Cycle": 20,
+            "PrivateBytes": 387657728,
+            "ManagedBytes": 254600920,
+            "Gdi": 375,
+            "User": 1455
+          },
+          {
+            "Cycle": 25,
+            "PrivateBytes": 389283840,
+            "ManagedBytes": 286485208,
+            "Gdi": 375,
+            "User": 1454
+          },
+          {
+            "Cycle": 30,
+            "PrivateBytes": 397565952,
+            "ManagedBytes": 254408552,
+            "Gdi": 375,
+            "User": 1454
+          }
+        ]
+      },
+      "QueryMeasurements": [
+        {
+          "Conditions": [
+            {
+              "FieldKey": "identity",
+              "Text": "曹"
+            }
+          ],
+          "Ms": 99.0133,
+          "Summary": "匹配 13 / 共 1024 项"
+        },
+        {
+          "Conditions": [
+            {
+              "FieldKey": null,
+              "Text": "曹"
+            }
+          ],
+          "Ms": 47.1561,
+          "Summary": "匹配 111 / 共 1024 项"
+        },
+        {
+          "Conditions": [
+            {
+              "FieldKey": null,
+              "Text": "__no_literal_match__"
+            }
+          ],
+          "Ms": 95.5871,
+          "Summary": "匹配 0 / 共 1024 项"
+        }
+      ],
+      "Notes": "Identical UI event harness; no duplicate smoke handler. Copying, hashing, screenshots and forced GC excluded. Data ready includes queued UI work; asynchronous image completion measured separately. No production or test forced GC in measured loops."
+    },
+    {
+      "Profile": "6.6",
+      "Side": "baseline",
+      "Run": 2,
+      "EvidencePath": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\data管理器\\验证\\布局与读取性能-1.2026.1113.1\\baseline-final-6.6-2\\runtime-performance.json",
+      "Sha256": "D81A686FAF670DE69A2920BB984911944EA6A69DE2697C0CC626C4A8EFED6191",
+      "Version": "1.2026.1112.3",
+      "Source": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\基底\\复刻版6.6山贼",
+      "ActualDpi": 144.0,
+      "Window": "{Width=1280, Height=800}",
+      "Cycles": 30,
+      "RawSampleCount": 480,
+      "EvidenceComplete": true,
+      "Problems": [],
+      "ColdInteractiveMs": 3382.178,
+      "FirstVisibleImageMs": 3383.1751,
+      "Heartbeat": {
+        "P95Ms": 323.5112,
+        "MaximumMs": 498.4458,
+        "Samples": 1750,
+        "Meets100MsTarget": false
+      },
+      "NaturalStableMemory": {
+        "PeakPrivateBytes": 434839552.0,
+        "PeakPrivateMiB": 414.6953125,
+        "MeetsSoft1GiBTarget": true,
+        "EndMinusFirstPrivateBytes": -25026560.0,
+        "Samples": [
+          {
+            "Cycle": 0,
+            "PrivateBytes": 418086912,
+            "ManagedBytes": 225292792,
+            "Gdi": 370,
+            "User": 1454
+          },
+          {
+            "Cycle": 5,
+            "PrivateBytes": 424235008,
+            "ManagedBytes": 266670928,
+            "Gdi": 375,
+            "User": 1454
+          },
+          {
+            "Cycle": 10,
+            "PrivateBytes": 395665408,
+            "ManagedBytes": 306903440,
+            "Gdi": 375,
+            "User": 1455
+          },
+          {
+            "Cycle": 15,
+            "PrivateBytes": 434839552,
+            "ManagedBytes": 346001536,
+            "Gdi": 375,
+            "User": 1454
+          },
+          {
+            "Cycle": 20,
+            "PrivateBytes": 404623360,
+            "ManagedBytes": 254148808,
+            "Gdi": 375,
+            "User": 1455
+          },
+          {
+            "Cycle": 25,
+            "PrivateBytes": 403775488,
+            "ManagedBytes": 285253496,
+            "Gdi": 375,
+            "User": 1454
+          },
+          {
+            "Cycle": 30,
+            "PrivateBytes": 399208448,
+            "ManagedBytes": 252509160,
+            "Gdi": 375,
+            "User": 1454
+          }
+        ]
+      },
+      "QueryMeasurements": [
+        {
+          "Conditions": [
+            {
+              "FieldKey": "identity",
+              "Text": "曹"
+            }
+          ],
+          "Ms": 79.0825,
+          "Summary": "匹配 13 / 共 1024 项"
+        },
+        {
+          "Conditions": [
+            {
+              "FieldKey": null,
+              "Text": "曹"
+            }
+          ],
+          "Ms": 48.5949,
+          "Summary": "匹配 111 / 共 1024 项"
+        },
+        {
+          "Conditions": [
+            {
+              "FieldKey": null,
+              "Text": "__no_literal_match__"
+            }
+          ],
+          "Ms": 88.3482,
+          "Summary": "匹配 0 / 共 1024 项"
+        }
+      ],
+      "Notes": "Identical UI event harness; no duplicate smoke handler. Copying, hashing, screenshots and forced GC excluded. Data ready includes queued UI work; asynchronous image completion measured separately. No production or test forced GC in measured loops."
+    },
+    {
+      "Profile": "6.6",
+      "Side": "baseline",
+      "Run": 3,
+      "EvidencePath": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\data管理器\\验证\\布局与读取性能-1.2026.1113.1\\baseline-final-6.6-3\\runtime-performance.json",
+      "Sha256": "4840486CADA0CC0397F7FB281E8D928B1E38AF0E9584F9FA23E63584CD1DAD14",
+      "Version": "1.2026.1112.3",
+      "Source": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\基底\\复刻版6.6山贼",
+      "ActualDpi": 144.0,
+      "Window": "{Width=1280, Height=800}",
+      "Cycles": 30,
+      "RawSampleCount": 480,
+      "EvidenceComplete": true,
+      "Problems": [],
+      "ColdInteractiveMs": 3084.0064,
+      "FirstVisibleImageMs": 3084.9514,
+      "Heartbeat": {
+        "P95Ms": 320.3662,
+        "MaximumMs": 466.053,
+        "Samples": 1733,
+        "Meets100MsTarget": false
+      },
+      "NaturalStableMemory": {
+        "PeakPrivateBytes": 434610176.0,
+        "PeakPrivateMiB": 414.4765625,
+        "MeetsSoft1GiBTarget": true,
+        "EndMinusFirstPrivateBytes": -25726976.0,
+        "Samples": [
+          {
+            "Cycle": 0,
+            "PrivateBytes": 416190464,
+            "ManagedBytes": 225318504,
+            "Gdi": 370,
+            "User": 1454
+          },
+          {
+            "Cycle": 5,
+            "PrivateBytes": 424284160,
+            "ManagedBytes": 266168704,
+            "Gdi": 375,
+            "User": 1454
+          },
+          {
+            "Cycle": 10,
+            "PrivateBytes": 398585856,
+            "ManagedBytes": 306876808,
+            "Gdi": 375,
+            "User": 1454
+          },
+          {
+            "Cycle": 15,
+            "PrivateBytes": 434610176,
+            "ManagedBytes": 346063248,
+            "Gdi": 375,
+            "User": 1455
+          },
+          {
+            "Cycle": 20,
+            "PrivateBytes": 403775488,
+            "ManagedBytes": 254132888,
+            "Gdi": 375,
+            "User": 1455
+          },
+          {
+            "Cycle": 25,
+            "PrivateBytes": 401698816,
+            "ManagedBytes": 285273608,
+            "Gdi": 375,
+            "User": 1454
+          },
+          {
+            "Cycle": 30,
+            "PrivateBytes": 398557184,
+            "ManagedBytes": 252533040,
+            "Gdi": 375,
+            "User": 1454
+          }
+        ]
+      },
+      "QueryMeasurements": [
+        {
+          "Conditions": [
+            {
+              "FieldKey": "identity",
+              "Text": "曹"
+            }
+          ],
+          "Ms": 69.3905,
+          "Summary": "匹配 13 / 共 1024 项"
+        },
+        {
+          "Conditions": [
+            {
+              "FieldKey": null,
+              "Text": "曹"
+            }
+          ],
+          "Ms": 30.8515,
+          "Summary": "匹配 111 / 共 1024 项"
+        },
+        {
+          "Conditions": [
+            {
+              "FieldKey": null,
+              "Text": "__no_literal_match__"
+            }
+          ],
+          "Ms": 88.9519,
+          "Summary": "匹配 0 / 共 1024 项"
+        }
+      ],
+      "Notes": "Identical UI event harness; no duplicate smoke handler. Copying, hashing, screenshots and forced GC excluded. Data ready includes queued UI work; asynchronous image completion measured separately. No production or test forced GC in measured loops."
+    },
+    {
+      "Profile": "6.6",
+      "Side": "candidate",
+      "Run": 1,
+      "EvidencePath": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\data管理器\\验证\\布局与读取性能-1.2026.1113.1\\candidate-final-6.6-1\\runtime-performance.json",
+      "Sha256": "C248BA242848556C92565522E5D2219948D70098FD2E266B87DEE49F7A75198B",
+      "Version": "1.2026.1113.1",
+      "Source": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\基底\\复刻版6.6山贼",
+      "ActualDpi": 144.0,
+      "Window": "{Width=1280, Height=800}",
+      "Cycles": 30,
+      "RawSampleCount": 480,
+      "EvidenceComplete": true,
+      "Problems": [],
+      "ColdInteractiveMs": 1900.7928,
+      "FirstVisibleImageMs": 1902.4568,
+      "Heartbeat": {
+        "P95Ms": 88.7068,
+        "MaximumMs": 126.2254,
+        "Samples": 883,
+        "Meets100MsTarget": true
+      },
+      "NaturalStableMemory": {
+        "PeakPrivateBytes": 508268544.0,
+        "PeakPrivateMiB": 484.72265625,
+        "MeetsSoft1GiBTarget": true,
+        "EndMinusFirstPrivateBytes": 190242816.0,
+        "Samples": [
+          {
+            "Cycle": 0,
+            "PrivateBytes": 299204608,
+            "ManagedBytes": 222093960,
+            "Gdi": 373,
+            "User": 1567
+          },
+          {
+            "Cycle": 5,
+            "PrivateBytes": 318025728,
+            "ManagedBytes": 268266568,
+            "Gdi": 373,
+            "User": 1567
+          },
+          {
+            "Cycle": 10,
+            "PrivateBytes": 352817152,
+            "ManagedBytes": 301495288,
+            "Gdi": 373,
+            "User": 1566
+          },
+          {
+            "Cycle": 15,
+            "PrivateBytes": 388235264,
+            "ManagedBytes": 334654936,
+            "Gdi": 373,
+            "User": 1566
+          },
+          {
+            "Cycle": 20,
+            "PrivateBytes": 429002752,
+            "ManagedBytes": 380494512,
+            "Gdi": 373,
+            "User": 1566
+          },
+          {
+            "Cycle": 25,
+            "PrivateBytes": 465633280,
+            "ManagedBytes": 413176760,
+            "Gdi": 373,
+            "User": 1566
+          },
+          {
+            "Cycle": 30,
+            "PrivateBytes": 508268544,
+            "ManagedBytes": 445722832,
+            "Gdi": 373,
+            "User": 1566
+          }
+        ]
+      },
+      "QueryMeasurements": [
+        {
+          "Conditions": [
+            {
+              "FieldKey": "identity",
+              "Text": "曹"
+            }
+          ],
+          "Ms": 70.4362,
+          "Summary": "匹配 13 / 共 1024 项"
+        },
+        {
+          "Conditions": [
+            {
+              "FieldKey": null,
+              "Text": "曹"
+            }
+          ],
+          "Ms": 1326.7686,
+          "Summary": "匹配 111 / 共 1024 项"
+        },
+        {
+          "Conditions": [
+            {
+              "FieldKey": null,
+              "Text": "__no_literal_match__"
+            }
+          ],
+          "Ms": 108.9845,
+          "Summary": "匹配 0 / 共 1024 项"
+        }
+      ],
+      "Notes": "Identical UI event harness; no duplicate smoke handler. Copying, hashing, screenshots and forced GC excluded. Data ready includes queued UI work; asynchronous image completion measured separately. No production or test forced GC in measured loops."
+    },
+    {
+      "Profile": "6.6",
+      "Side": "candidate",
+      "Run": 2,
+      "EvidencePath": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\data管理器\\验证\\布局与读取性能-1.2026.1113.1\\candidate-final-6.6-2\\runtime-performance.json",
+      "Sha256": "41C6CEEEE6BF8C66566FA2633E4B8AF6D1477DB1D5C2AC9E56C9FDBAD79D57F0",
+      "Version": "1.2026.1113.1",
+      "Source": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\基底\\复刻版6.6山贼",
+      "ActualDpi": 144.0,
+      "Window": "{Width=1280, Height=800}",
+      "Cycles": 30,
+      "RawSampleCount": 480,
+      "EvidenceComplete": true,
+      "Problems": [],
+      "ColdInteractiveMs": 1795.6633,
+      "FirstVisibleImageMs": 1796.6482,
+      "Heartbeat": {
+        "P95Ms": 89.0658,
+        "MaximumMs": 126.3935,
+        "Samples": 854,
+        "Meets100MsTarget": true
+      },
+      "NaturalStableMemory": {
+        "PeakPrivateBytes": 507666432.0,
+        "PeakPrivateMiB": 484.1484375,
+        "MeetsSoft1GiBTarget": true,
+        "EndMinusFirstPrivateBytes": 189329408.0,
+        "Samples": [
+          {
+            "Cycle": 0,
+            "PrivateBytes": 298704896,
+            "ManagedBytes": 222206376,
+            "Gdi": 373,
+            "User": 1568
+          },
+          {
+            "Cycle": 5,
+            "PrivateBytes": 318337024,
+            "ManagedBytes": 268467848,
+            "Gdi": 373,
+            "User": 1568
+          },
+          {
+            "Cycle": 10,
+            "PrivateBytes": 353173504,
+            "ManagedBytes": 302287224,
+            "Gdi": 373,
+            "User": 1567
+          },
+          {
+            "Cycle": 15,
+            "PrivateBytes": 389898240,
+            "ManagedBytes": 334671784,
+            "Gdi": 373,
+            "User": 1566
+          },
+          {
+            "Cycle": 20,
+            "PrivateBytes": 428564480,
+            "ManagedBytes": 380499328,
+            "Gdi": 373,
+            "User": 1566
+          },
+          {
+            "Cycle": 25,
+            "PrivateBytes": 463560704,
+            "ManagedBytes": 413237936,
+            "Gdi": 373,
+            "User": 1566
+          },
+          {
+            "Cycle": 30,
+            "PrivateBytes": 507666432,
+            "ManagedBytes": 445920744,
+            "Gdi": 373,
+            "User": 1566
+          }
+        ]
+      },
+      "QueryMeasurements": [
+        {
+          "Conditions": [
+            {
+              "FieldKey": "identity",
+              "Text": "曹"
+            }
+          ],
+          "Ms": 47.0007,
+          "Summary": "匹配 13 / 共 1024 项"
+        },
+        {
+          "Conditions": [
+            {
+              "FieldKey": null,
+              "Text": "曹"
+            }
+          ],
+          "Ms": 1358.5071,
+          "Summary": "匹配 111 / 共 1024 项"
+        },
+        {
+          "Conditions": [
+            {
+              "FieldKey": null,
+              "Text": "__no_literal_match__"
+            }
+          ],
+          "Ms": 136.1825,
+          "Summary": "匹配 0 / 共 1024 项"
+        }
+      ],
+      "Notes": "Identical UI event harness; no duplicate smoke handler. Copying, hashing, screenshots and forced GC excluded. Data ready includes queued UI work; asynchronous image completion measured separately. No production or test forced GC in measured loops."
+    },
+    {
+      "Profile": "6.6",
+      "Side": "candidate",
+      "Run": 3,
+      "EvidencePath": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\data管理器\\验证\\布局与读取性能-1.2026.1113.1\\candidate-final-6.6-3\\runtime-performance.json",
+      "Sha256": "8D81303F0DEE1838DD1A5C85A76D6E9A8519B8EB869191A45B93AC484F3A8DF3",
+      "Version": "1.2026.1113.1",
+      "Source": "F:\\从0开始的AI制作曹操传MOD\\曹操传加强版6.5（未加密）\\基底\\复刻版6.6山贼",
+      "ActualDpi": 144.0,
+      "Window": "{Width=1280, Height=800}",
+      "Cycles": 30,
+      "RawSampleCount": 480,
+      "EvidenceComplete": true,
+      "Problems": [],
+      "ColdInteractiveMs": 1823.4379,
+      "FirstVisibleImageMs": 1824.3502,
+      "Heartbeat": {
+        "P95Ms": 87.1968,
+        "MaximumMs": 139.8951,
+        "Samples": 846,
+        "Meets100MsTarget": true
+      },
+      "NaturalStableMemory": {
+        "PeakPrivateBytes": 303669248.0,
+        "PeakPrivateMiB": 289.6015625,
+        "MeetsSoft1GiBTarget": true,
+        "EndMinusFirstPrivateBytes": -794624.0,
+        "Samples": [
+          {
+            "Cycle": 0,
+            "PrivateBytes": 296828928,
+            "ManagedBytes": 183006592,
+            "Gdi": 373,
+            "User": 1567
+          },
+          {
+            "Cycle": 5,
+            "PrivateBytes": 303669248,
+            "ManagedBytes": 229197728,
+            "Gdi": 373,
+            "User": 1567
+          },
+          {
+            "Cycle": 10,
+            "PrivateBytes": 298848256,
+            "ManagedBytes": 164460904,
+            "Gdi": 373,
+            "User": 1566
+          },
+          {
+            "Cycle": 15,
+            "PrivateBytes": 298135552,
+            "ManagedBytes": 204002344,
+            "Gdi": 373,
+            "User": 1566
+          },
+          {
+            "Cycle": 20,
+            "PrivateBytes": 297644032,
+            "ManagedBytes": 249921056,
+            "Gdi": 373,
+            "User": 1566
+          },
+          {
+            "Cycle": 25,
+            "PrivateBytes": 297066496,
+            "ManagedBytes": 192387344,
+            "Gdi": 373,
+            "User": 1567
+          },
+          {
+            "Cycle": 30,
+            "PrivateBytes": 302874624,
+            "ManagedBytes": 225701552,
+            "Gdi": 373,
+            "User": 1567
+          }
+        ]
+      },
+      "QueryMeasurements": [
+        {
+          "Conditions": [
+            {
+              "FieldKey": "identity",
+              "Text": "曹"
+            }
+          ],
+          "Ms": 48.3159,
+          "Summary": "匹配 13 / 共 1024 项"
+        },
+        {
+          "Conditions": [
+            {
+              "FieldKey": null,
+              "Text": "曹"
+            }
+          ],
+          "Ms": 1175.6389,
+          "Summary": "匹配 111 / 共 1024 项"
+        },
+        {
+          "Conditions": [
+            {
+              "FieldKey": null,
+              "Text": "__no_literal_match__"
+            }
+          ],
+          "Ms": 127.7377,
+          "Summary": "匹配 0 / 共 1024 项"
+        }
+      ],
+      "Notes": "Identical UI event harness; no duplicate smoke handler. Copying, hashing, screenshots and forced GC excluded. Data ready includes queued UI work; asynchronous image completion measured separately. No production or test forced GC in measured loops."
+    }
+  ],
+  "EvidenceProblems": [],
+  "MethodAndLimitations": [
+    "统计直接合并每场景三次独立运行的 90 条 Samples，使用 nearest-rank（ceil(N×P)-1）；不平均三次 P95。ReadyMs 为门槛依据，SelectMs 单列。",
+    "RuntimePerformanceTests.Select 在唯一真实标签事件前设置预期业务/物理视图；仅在目标确实不同时选择表或分类。没有额外 smoke 导航调用，也没有中间物理表激活。旧版与候选版必须使用同一份修正后的 harness。",
+    "每次候选运行的心跳 P95 分别要求 ≤100 ms；旧版心跳作为对照逐次列出。原始心跳队列未写入 JSON，不能把不同运行的 P95 合并成总体 P95。",
+    "冷启动比较三次 ColdInteractiveMs 的中位数；文件复制、源码构建、截图和强制 GC 不在计时内。首次全局可见图片时间单列，不能替代逐页图片完成验收。",
+    "实际运行 DPI 与窗口尺寸来自每份原始报告。100%/125%/150% 字体模拟属于单独布局验收，不能证明真实显示器 DPI 切换，也不应混入本次固定窗口运行性能统计。",
+    "原始 JSON 的 FirstEntries 保留逐场景首次进入耗时，热切换统计只合并 Samples；逐页图片完成时间、完整 CPU/机器指纹或字体比例未纳入当前报告。聚合主机信息仅描述生成报告的机器，不能独立证明所有输入都来自该机器。",
+    "内存以自然运行第 5..30 轮的峰值专用内存与 1 GiB 软目标比较，单独给出结论；30 轮记录不能代替 100 轮平台期、句柄及反复开关项目/旧工作区回收验收。没有把强制 GC 数值混入自然运行数据。",
+    "查询耗时保留每次运行的原始条件、数量与耗时，未将一次查询伪装成 90 条样本。动画样本、真实 DPI 和游戏内实战的覆盖应以独立验证记录为准。"
+  ]
+}

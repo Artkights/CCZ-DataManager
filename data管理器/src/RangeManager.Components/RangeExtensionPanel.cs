@@ -17,12 +17,16 @@ public sealed class RangeExtensionPanel : UserControl, IEditorViewLifecycle
     private void ArrangeView()
     {
         var rowHeight = Math.Max(72 * DeviceDpi / 96, Font.Height + 12);
+        var metric = (rowHeight, _grid.RowCount);
+        if (_rowMetrics == metric) return;
+        _rowMetrics = metric;
         if (_grid.RowTemplate.Height != rowHeight) _grid.RowTemplate.Height = rowHeight;
         foreach (DataGridViewRow row in _grid.Rows)
             if (row.Height != rowHeight) row.Height = rowHeight;
         PerformLayout();
     }
-    private readonly DataGridView _grid = new() { Name = "RangeExtensionMappingGrid" };
+    private (int Height, int Rows)? _rowMetrics;
+    private readonly DataGridView _grid = new BufferedGrid() { Name = "RangeExtensionMappingGrid" };
     private readonly Label _status = new() { AutoEllipsis = true, Dock = DockStyle.Fill };
     private readonly Label _hint = new() { AutoEllipsis = true, Dock = DockStyle.Fill, ForeColor = Color.DimGray };
     private readonly Button _restore = ManagerUiStyle.CreateButton("恢复本表");
@@ -250,6 +254,7 @@ public sealed class RangeExtensionPanel : UserControl, IEditorViewLifecycle
             return;
         }
         _refreshPending = false;
+        _rowMetrics = null;
 
         int selectedRow = -1;
         int selectedColumn = -1;
@@ -411,5 +416,10 @@ public sealed class RangeExtensionPanel : UserControl, IEditorViewLifecycle
             if (_session != null) _session.Changed -= SessionChanged;
         }
         base.Dispose(disposing);
+    }
+
+    private sealed class BufferedGrid : DataGridView
+    {
+        public BufferedGrid() => DoubleBuffered = true;
     }
 }

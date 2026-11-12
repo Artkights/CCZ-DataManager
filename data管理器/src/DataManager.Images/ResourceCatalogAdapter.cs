@@ -1,5 +1,6 @@
 ﻿using System.Drawing;
 using System.Security.Cryptography;
+using System.Diagnostics;
 using ImageManager.Core;
 
 namespace DataManager.Images;
@@ -23,6 +24,7 @@ public sealed partial class ResourceCatalogAdapter : IDisposable
     private readonly ImagePreviewService _previews = ImagePreviewService.Shared;
 
     private long _revision;
+    private long _catalogHits, _freshnessChecks, _fileProbes;
     private bool _disposed;
 
     /// <summary>Project owner calls this once on activation, never from a background decoder.</summary>
@@ -32,7 +34,7 @@ public sealed partial class ResourceCatalogAdapter : IDisposable
         lock (_cacheGate)
         {
             foreach (var old in _catalogCache.Keys.Where(key => !key.Equals(root, StringComparison.OrdinalIgnoreCase)).ToArray())
-                _catalogCache.Remove(old);
+                if (_catalogCache.Remove(old, out var removed)) removed.Dispose();
         }
         _catalogService.RetainRoot(root);
         _previews.RetainRoot(root);
@@ -41,13 +43,32 @@ public sealed partial class ResourceCatalogAdapter : IDisposable
 
     /// <summary>Read cache generation for callers that retain resource picker thumbnails.</summary>
     public long Revision => Interlocked.Read(ref _revision);
+    public ResourceCatalogCacheStatistics CacheStatistics => new(Interlocked.Read(ref _catalogHits),
+        Interlocked.Read(ref _freshnessChecks), Interlocked.Read(ref _fileProbes));
+
+    /// <summary>
+    /// Check metadata on activation without rebuilding a catalog on the UI
+    /// thread. The periodic check also covers unavailable/lost watcher events.
+    /// </summary>
+    public void CheckForChanges(string rootPath)
+    {
+        var root = Path.GetFullPath(rootPath);
+        lock (_cacheGate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_catalogCache.TryGetValue(root, out var entry) && !IsFresh(entry, forceCheck: false))
+                entry.MarkDirty(() => Interlocked.Increment(ref _revision));
+        }
+    }
 
     /// <summary>Face 0 has eight expressions; all later faces share the resulting +8 physical image offset.</summary>
     public static int HalfBodyImageNumber(int faceId) => faceId < 0 ? -1 : faceId == 0 ? 1 : checked(faceId + 8);
 
     public ResourceCatalogSnapshot Scan(string rootPath)
     {
-        return GetCatalog(rootPath).Snapshot;
+        // An explicit rescan always verifies disk metadata. Preview requests
+        // coalesce their checks and use watcher invalidation between them.
+        return GetCatalog(rootPath, forceCheck: true).Snapshot;
     }
 
     public Task<ResourceCatalogSnapshot> ScanAsync(string rootPath, CancellationToken cancellationToken = default)
@@ -343,18 +364,21 @@ public sealed partial class ResourceCatalogAdapter : IDisposable
     private ImageResourceDescriptor? FindDescriptor(CatalogCache catalog, string key)
         => catalog.Descriptors.TryGetValue(key, out var descriptor) ? descriptor : null;
 
-    private CatalogCache GetCatalog(string rootPath)
+    private CatalogCache GetCatalog(string rootPath, bool forceCheck = false)
     {
         var root = Path.GetFullPath(rootPath);
         lock (_cacheGate)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            if (_catalogCache.TryGetValue(root, out var cached) && IsFresh(cached)) return cached;
+            if (_catalogCache.TryGetValue(root, out var cached) && IsFresh(cached, forceCheck))
+            { Interlocked.Increment(ref _catalogHits); return cached; }
 
             if (cached != null)
             {
                 Interlocked.Increment(ref _revision);
+                _catalogCache.Remove(root);
                 _previews.InvalidatePaths(cached.Files.Select(file => file.Path));
+                cached.Dispose();
             }
 
             // Keep this work under the gate so rapidly alternating previews do
@@ -381,6 +405,7 @@ public sealed partial class ResourceCatalogAdapter : IDisposable
                 CaptureDirectoryStamp(root), CaptureDirectoryStamp(Path.Combine(root, "E5")),
                 CaptureDirectoryStamp(profile.TryGetResource("MapDirectory") ?? Path.Combine(root, "Map")),
                 CaptureFileStamps(profile, descriptors));
+            entry.StartWatching(() => Interlocked.Increment(ref _revision));
             _catalogCache[root] = entry;
             return entry;
         }
@@ -393,12 +418,20 @@ public sealed partial class ResourceCatalogAdapter : IDisposable
         {
             Interlocked.Increment(ref _revision);
             if (_catalogCache.Remove(root, out var removed))
+            {
                 _previews.InvalidatePaths(removed.Files.Select(file => file.Path));
+                removed.Dispose();
+            }
         }
     }
 
-    private static bool IsFresh(CatalogCache entry)
+    private bool IsFresh(CatalogCache entry, bool forceCheck)
     {
+        if (entry.IsDirty) return false;
+        if (!forceCheck && entry.CanCoalesce && Stopwatch.GetElapsedTime(entry.LastCheck) < TimeSpan.FromMilliseconds(500))
+            return true;
+        Interlocked.Increment(ref _freshnessChecks);
+        entry.LastCheck = Stopwatch.GetTimestamp();
         if (!entry.RootDirectory.Equals(CaptureDirectoryStamp(entry.Profile.RootPath)) ||
             !entry.E5Directory.Equals(CaptureDirectoryStamp(Path.Combine(entry.Profile.RootPath, "E5"))) ||
             !entry.MapDirectory.Equals(CaptureDirectoryStamp(entry.Profile.TryGetResource("MapDirectory") ??
@@ -406,10 +439,12 @@ public sealed partial class ResourceCatalogAdapter : IDisposable
             return false;
         foreach (var original in entry.Files)
         {
+            Interlocked.Increment(ref _fileProbes);
             try
             {
                 var info = new FileInfo(original.Path);
-                if (!info.Exists || info.Length != original.Length || info.LastWriteTimeUtc != original.LastWriteUtc)
+                if (info.Exists != original.Exists ||
+                    info.Exists && (info.Length != original.Length || info.LastWriteTimeUtc != original.LastWriteUtc))
                     return false;
             }
             catch (IOException) { return false; }
@@ -432,19 +467,32 @@ public sealed partial class ResourceCatalogAdapter : IDisposable
     private static IReadOnlyList<FileStamp> CaptureFileStamps(ProjectProfile profile, IReadOnlyList<ImageResourceDescriptor> descriptors)
         => profile.ResourcePaths.Values.Concat(descriptors.SelectMany(descriptor => descriptor.Paths))
             .Concat(new[] { Path.Combine(profile.RootPath, "System.ini"), Path.Combine(profile.RootPath, "E5", "System.ini") })
-            .Distinct(StringComparer.OrdinalIgnoreCase)
             .Where(File.Exists)
+            // Retain missing palette candidates too: creating a higher-priority
+            // fallback must invalidate completed thumbnails on the next visit.
+            .Concat(PaletteDependencyPaths(profile))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .Select(path =>
             {
                 try
                 {
                     var info = new FileInfo(path);
-                    return new FileStamp(Path.GetFullPath(path), info.Length, info.LastWriteTimeUtc);
+                    return new FileStamp(Path.GetFullPath(path), info.Exists,
+                        info.Exists ? info.Length : 0, info.Exists ? info.LastWriteTimeUtc : DateTime.MinValue);
                 }
-                catch (IOException) { return new FileStamp(Path.GetFullPath(path), -1, DateTime.MinValue); }
-                catch (UnauthorizedAccessException) { return new FileStamp(Path.GetFullPath(path), -1, DateTime.MinValue); }
+                catch (IOException) { return new FileStamp(Path.GetFullPath(path), true, -1, DateTime.MinValue); }
+                catch (UnauthorizedAccessException) { return new FileStamp(Path.GetFullPath(path), true, -1, DateTime.MinValue); }
             })
             .ToArray();
+
+    private static IReadOnlyList<string> PaletteDependencyPaths(ProjectProfile profile)
+        => new[]
+        {
+            profile.TryGetResource("Spalet.e5"), Path.Combine(profile.RootPath, "Spalet.e5"),
+            Path.Combine(profile.RootPath, "E5", "Spalet.e5"), Path.Combine(profile.RootPath, "tsb"),
+            Path.Combine(profile.RootPath, "Assets", "Palettes", "tsb"),
+            Path.Combine(AppContext.BaseDirectory, "Assets", "Palettes", "tsb")
+        }.Where(path => path != null).Select(path => Path.GetFullPath(path!)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
 
     private ImageResourceDescriptor[] BuildDescriptors(ProjectProfile profile)
     {
@@ -589,6 +637,7 @@ public sealed partial class ResourceCatalogAdapter : IDisposable
         {
             if (_disposed) return;
             _disposed = true;
+            foreach (var entry in _catalogCache.Values) entry.Dispose();
             _catalogCache.Clear();
 
         }
@@ -625,19 +674,89 @@ public sealed partial class ResourceCatalogAdapter : IDisposable
         DirectoryStamp RootDirectory,
         DirectoryStamp E5Directory,
         DirectoryStamp MapDirectory,
-        IReadOnlyList<FileStamp> Files)
+        IReadOnlyList<FileStamp> Files) : IDisposable
     {
         public Dictionary<string, IReadOnlyList<LogicalImageAsset>> Assets { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public long LastCheck { get; set; } = Stopwatch.GetTimestamp();
+        private readonly List<FileSystemWatcher> _watchers = [];
+        private int _dirty, _disposed;
+        public bool IsDirty => Volatile.Read(ref _dirty) != 0;
+        public bool CanCoalesce => _watchers.Count != 0;
+
+        public void MarkDirty(Action invalidateGeneration)
+        { if (Volatile.Read(ref _disposed) == 0 && Interlocked.Exchange(ref _dirty, 1) == 0) invalidateGeneration(); }
+
+        public void StartWatching(Action invalidateGeneration)
+        {
+            try
+            {
+                var known = Files.Select(file => file.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var palettes = PaletteDependencyPaths(Profile);
+                var map = Path.GetFullPath(Profile.TryGetResource("MapDirectory") ?? Path.Combine(Profile.RootPath, "Map")) + Path.DirectorySeparatorChar;
+                bool Relevant(string path)
+                {
+                    if (known.Contains(path) || path.StartsWith(map, StringComparison.OrdinalIgnoreCase)) return true;
+                    // Recursive watchers may first report creation/rename of
+                    // Assets or Palettes before the new tsb itself is visible.
+                    var prefix = path.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+                    if (palettes.Any(palette => palette.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))) return true;
+                    var parent = Path.GetDirectoryName(path);
+                    if (!string.Equals(parent, Profile.RootPath, StringComparison.OrdinalIgnoreCase) &&
+                        !string.Equals(parent, Path.Combine(Profile.RootPath, "E5"), StringComparison.OrdinalIgnoreCase)) return false;
+                    var extension = Path.GetExtension(path);
+                    return extension.Equals(".e5", StringComparison.OrdinalIgnoreCase) || extension.Equals(".dll", StringComparison.OrdinalIgnoreCase) ||
+                        extension.Equals(".ini", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(Path.GetFileName(path), "E5", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(Path.GetFileName(path), "Map", StringComparison.OrdinalIgnoreCase);
+                }
+                void Dirty()
+                    => MarkDirty(invalidateGeneration);
+                void Watch(string directory)
+                {
+                    var watcher = new FileSystemWatcher(directory)
+                    {
+                        IncludeSubdirectories = true,
+                        NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite | NotifyFilters.Size
+                    };
+                    _watchers.Add(watcher);
+                    watcher.Changed += (_, args) => { if (Relevant(args.FullPath)) Dirty(); };
+                    watcher.Created += (_, args) => { if (Relevant(args.FullPath)) Dirty(); };
+                    watcher.Deleted += (_, args) => { if (Relevant(args.FullPath)) Dirty(); };
+                    watcher.Renamed += (_, args) => { if (Relevant(args.FullPath) || Relevant(args.OldFullPath)) Dirty(); };
+                    watcher.Error += (_, _) => Dirty();
+                    watcher.EnableRaisingEvents = true;
+                }
+                Watch(Profile.RootPath);
+                // The installed fallback lies outside most game projects.
+                // One extra watcher covers that path, including first creation.
+                var rootPrefix = Profile.RootPath.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+                var applicationDirectory = Path.GetFullPath(AppContext.BaseDirectory);
+                if (!applicationDirectory.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase) &&
+                    !applicationDirectory.TrimEnd(Path.DirectorySeparatorChar).Equals(Profile.RootPath.TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase))
+                    Watch(applicationDirectory);
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or PlatformNotSupportedException)
+            { foreach (var watcher in _watchers) watcher.Dispose(); _watchers.Clear(); }
+        }
+
+        public void Dispose()
+        {
+            Interlocked.Exchange(ref _disposed, 1);
+            foreach (var watcher in _watchers) watcher.Dispose();
+            _watchers.Clear();
+        }
     }
 
     private readonly record struct DirectoryStamp(bool Exists, DateTime LastWriteUtc);
-    private readonly record struct FileStamp(string Path, long Length, DateTime LastWriteUtc);
+    private readonly record struct FileStamp(string Path, bool Exists, long Length, DateTime LastWriteUtc);
 
     private static ImageMutationService CreateMutationService(ProjectProfile profile)
     {
         return new ImageMutationService(ProjectImageHistory.Create(profile));
     }
 }
+
+public sealed record ResourceCatalogCacheStatistics(long CacheHits, long FreshnessChecks, long FileProbes);
 
 public sealed record ResourceCatalogSnapshot(
     string RootPath,

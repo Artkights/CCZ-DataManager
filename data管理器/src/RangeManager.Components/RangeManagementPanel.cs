@@ -7,15 +7,28 @@ public sealed class RangeManagementPanel : UserControl, IEditorViewLifecycle
 {
     private readonly LayoutScheduler _layouts;
     private readonly Panel _body = new() { Dock = DockStyle.Fill };
+    // LayoutScheduler starts active; keep the parent lifecycle independent
+    // from which child currently owns the visible editor.
+    private bool _viewActive = true;
+    private IEditorViewLifecycle? _activeEditor;
     public void ActivateView()
     {
-        _layouts.Activate();
-        SelectedEditor.ActivateView();
+        if (!_viewActive)
+        {
+            _viewActive = true;
+            _layouts.Activate();
+        }
+        if (ReferenceEquals(_activeEditor, SelectedEditor)) return;
+        _activeEditor = SelectedEditor;
+        _activeEditor.ActivateView();
     }
     public void DeactivateView()
     {
+        if (!_viewActive) return;
+        _viewActive = false;
         _layouts.Deactivate();
         AttackEditor.DeactivateView(); PierceEditor.DeactivateView(); ExtensionEditor.DeactivateView();
+        _activeEditor = null;
     }
     public void RequestViewLayout() { _layouts.Request(); SelectedEditor.RequestViewLayout(); }
     private IEditorViewLifecycle SelectedEditor => Tabs.SelectedIndex switch
@@ -39,11 +52,13 @@ public sealed class RangeManagementPanel : UserControl, IEditorViewLifecycle
         Controls.Add(_body); Controls.Add(header);
         void FitHeader()
         {
+            var changed = false;
             var itemHeight = Math.Max(28 * DeviceDpi / 96, Font.Height + 10);
-            if (Tabs.ItemSize.Height != itemHeight) Tabs.ItemSize = new Size(Tabs.ItemSize.Width, itemHeight);
+            if (Tabs.ItemSize.Height != itemHeight)
+            { Tabs.ItemSize = new Size(Tabs.ItemSize.Width, itemHeight); changed = true; }
             var height = Math.Max(34 * DeviceDpi / 96, itemHeight + 8 * DeviceDpi / 96);
-            if (header.Height != height) header.Height = height;
-            SelectedEditor.RequestViewLayout();
+            if (header.Height != height) { header.Height = height; changed = true; }
+            if (changed) SelectedEditor.RequestViewLayout();
         }
         _layouts = new LayoutScheduler(this, FitHeader);
         VisibleChanged += (_, _) => { if (Visible) ActivateView(); else DeactivateView(); };
@@ -54,15 +69,15 @@ public sealed class RangeManagementPanel : UserControl, IEditorViewLifecycle
         _body.SuspendLayout();
         try
         {
-            AttackEditor.DeactivateView(); PierceEditor.DeactivateView(); ExtensionEditor.DeactivateView();
+            _activeEditor?.DeactivateView();
+            _activeEditor = null;
             AttackEditor.Visible = Tabs.SelectedIndex == 0;
             PierceEditor.Visible = Tabs.SelectedIndex == 1;
             ExtensionEditor.Visible = Tabs.SelectedIndex == 2;
             (Tabs.SelectedIndex switch { 1 => (Control)PierceEditor, 2 => ExtensionEditor, _ => AttackEditor }).BringToFront();
         }
         finally { _body.ResumeLayout(true); }
-        if (Visible) SelectedEditor.ActivateView();
-        _layouts?.Request();
+        if (Visible) ActivateView();
     }
 
     public void Bind(RangeEditSession? session)

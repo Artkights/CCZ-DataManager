@@ -52,13 +52,15 @@ public static class ExtendedItemLayoutProbe
         long CallTarget(int offset) => (long)pe.ToVa(offset) + 5 + BinaryPrimitives.ReadInt32LittleEndian(executable.AsSpan(offset + 1, 4));
     }
 
-    internal static IReadOnlyList<TableDefinition> Apply(string root, IReadOnlyList<TableDefinition> tables, byte[] executable)
+    internal static IReadOnlyList<TableDefinition> Apply(string root, IReadOnlyList<TableDefinition> tables, byte[] executable,
+        SourceFileReadSession? sourceSession = null)
     {
         var probe = Inspect(executable);
         if (!probe.StarItems) return tables;
         var source = tables.Single(table => table.Key == "items-high");
-        var starPath = ProjectFileLocator.Resolve(root, "Star.e5");
-        var starBytes = File.Exists(starPath) ? File.ReadAllBytes(starPath) : [];
+        var starPath = sourceSession?.Resolve(root, "Star.e5") ?? ProjectFileLocator.Resolve(root, "Star.e5");
+        var starBytes = (sourceSession?.GetMetadata(starPath).Exists ?? File.Exists(starPath))
+            ? sourceSession?.Read(starPath).Bytes ?? File.ReadAllBytes(starPath) : [];
         var complete = starBytes.Length >= 10200;
         var nameSize = source.Fields.Single(field => field.Name == "名称").Size;
         var lastName = starBytes.Length >= 3800 ? EncodingService.DecodeFixedStringPreservingInvalidBytes(starBytes.AsSpan(3775, nameSize)).Trim() : string.Empty;

@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using DataManager.Core.Domain;
 
 namespace DataManager.App;
@@ -8,6 +7,8 @@ public sealed partial class BusinessEditorPanel
     private string? _stableBindingVersion;
     private long _resourceBindingRevision = -1;
     private bool _resourceRefreshPending;
+    private string? _bindingDependencySchema;
+    private IReadOnlyList<RecordQueryDependency> _bindingDependencies = [];
     private readonly List<(RangeManager.App.RangeKind Kind, Action<WorkspaceRangeCatalogChangedEventArgs> Refresh)> _rangePickerRefreshers = [];
 
     public void RefreshRangePickers(WorkspaceRangeCatalogChangedEventArgs change)
@@ -19,8 +20,28 @@ public sealed partial class BusinessEditorPanel
                 entry.Refresh(change);
     }
 
-    private string BindingVersion() => string.Join('|', _workspace.Documents.Values.Select(document =>
-        $"{document.Definition.Key}:{RuntimeHelpers.GetHashCode(document)}:{document.Revision}"));
+    private string BindingVersion()
+    {
+        var schema = $"{_kind}:{_workspace.Documents.Count}:" + ReadCache.GetSchemaVersion(
+            _compactTableKeys.Select(key => new RecordQueryDependency(key)));
+        if (_bindingDependencySchema != schema)
+        {
+            var dependencies = new HashSet<RecordQueryDependency>();
+            foreach (var key in _compactTableKeys)
+            {
+                dependencies.Add(new(key));
+                if (!_workspace.Documents.TryGetValue(key, out var document)) continue;
+                foreach (var field in document.Definition.Fields)
+                    dependencies.UnionWith(BusinessFieldDependencies([key], field.Name));
+            }
+            if (_kind is BusinessPageKind.Items or BusinessPageKind.Strategies)
+                dependencies.UnionWith(ReadCache.GetNavigationDependencies(["detailed-jobs"]));
+            dependencies.Add(new("$external"));
+            _bindingDependencies = dependencies.ToArray();
+            _bindingDependencySchema = schema;
+        }
+        return schema + ReadCache.GetVersion(_bindingDependencies);
+    }
 
     private bool CanReuseStableBinding(BusinessPageKind kind, int id)
         => !_binding && !_releaseCompleted && kind != BusinessPageKind.ExtendData &&

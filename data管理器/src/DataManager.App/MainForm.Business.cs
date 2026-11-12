@@ -17,8 +17,8 @@ public sealed partial class MainForm
     internal void SelectModuleForSmokeTest(string key)
     {
         var tab = _moduleTabs.TabPages.Cast<TabPage>().Single(page => Equals(page.Tag, key));
-        _moduleTabs.SelectedTab = tab;
-        SelectModuleTab();
+        if (_moduleTabs.SelectedTab == tab) SelectModuleTab();
+        else _moduleTabs.SelectedTab = tab;
     }
 
     internal ProjectWorkspace WorkspaceForSmokeTest => _workspace;
@@ -70,18 +70,16 @@ public sealed partial class MainForm
 
     private void ShowBusinessView(BusinessPageKind kind)
     {
+        using var timing = RuntimeTiming.Measure("MainForm.ShowBusinessView");
         ActivateBusinessEditor(kind);
         _businessKind = kind;
         _currentDocument = null;
         _historyFilter.Visible = false;
-        _businessEditor.Bind(kind, _businessEditor.CurrentId);
-        if (kind == BusinessPageKind.ExtendData)
-        {
-            _businessEditor.Bind(kind, _businessEditor.ExtendEditor?.CurrentId ?? 0);
-            _grid.Visible = false; _imageEditor.Visible = false; _businessEditor.Visible = true;
-            RefreshExtendEntityList();
-            return;
-        }
+        // Establish the detail schema once, then navigate/bind the selected real ID.
+        var refreshing = _refreshingQuery;
+        _refreshingQuery = true;
+        try { _businessEditor.Bind(kind, _businessEditor.CurrentId); }
+        finally { _refreshingQuery = refreshing; }
         _grid.Visible = false; _imageEditor.Visible = false; _businessEditor.Visible = true;
         RefreshQueryNavigation();
     }
