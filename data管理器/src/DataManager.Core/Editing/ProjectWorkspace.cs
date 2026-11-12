@@ -19,6 +19,10 @@ public sealed class ProjectWorkspace
     private readonly BinaryTableWriter _writer = new();
     private readonly HistoryStore _history = new();
     private readonly CsvService _csv = new();
+    // Successful CSV values retain their import policy through draft undo/redo.
+    // Document identity prevents this provenance from leaking into a reopened
+    // project or another table with the same logical key.
+    private readonly Dictionary<TableDocument, Dictionary<(int Row, string Field), HashSet<string>>> _csvImportedValues = new();
     private readonly Dictionary<string, TableDocument> _documents = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, TableDefinition> _definitions = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ModuleDefinition> _modules = new(StringComparer.OrdinalIgnoreCase);
@@ -72,6 +76,7 @@ public sealed class ProjectWorkspace
         RootPath = ProjectRootLocator.Resolve(rootPath);
         _history.Recover(RootPath);
         _documents.Clear();
+        _csvImportedValues.Clear();
         var detected = _detector.Detect(RootPath);
         cancellationToken.ThrowIfCancellationRequested();
         ProfileMatch = string.IsNullOrWhiteSpace(profileId)
@@ -316,11 +321,10 @@ public sealed class ProjectWorkspace
         ExecuteDraftOperation([document], () =>
         {
             result = _csv.Import(document, path, context: CsvContextFor(document));
-            foreach (var change in document.EnumerateChanges())
-            {
-                ValidateCellValue(document, change.RowIndex, change.Field.Name, change.NewValue);
-            }
+            foreach (var change in result.Changes)
+                CsvImportPolicy.ValidateCell(document, change.RowIndex, change.ColumnName, change.NewValue);
         });
+        RememberCsvValues(document, result!.Changes);
         if (result!.ChangedCells > 0)
         {
             var after = TableSnapshot.Capture(document.Data);
@@ -361,18 +365,15 @@ public sealed class ProjectWorkspace
                 if (!_documents.TryGetValue(key, out var document)) throw new InvalidOperationException($"表未加载：{key}");
                 if (string.IsNullOrWhiteSpace(path)) continue;
                 var result = _csv.Import(document, path, context: CsvContextFor(document));
-                // CsvService validates field ranges and types while parsing,
-                // but the active record codec may impose additional
-                // Variant-specific constraints. Validate the resulting cells
-                // before allowing the bundle to become a draft.
+                // Apply every table before checking the destination record
+                // codecs. CSV compatibility follows physical representation.
                 results[key] = result;
             }
-            // All tables are present before category-dependent references are
-            // checked, regardless of the CSV dictionary's order.
             foreach (var (key, result) in results)
                 foreach (var change in result.Changes)
-                    ValidateCellValue(_documents[key], change.RowIndex, change.ColumnName, change.NewValue);
+                    CsvImportPolicy.ValidateCell(_documents[key], change.RowIndex, change.ColumnName, change.NewValue);
         });
+        foreach (var (key, result) in results) RememberCsvValues(_documents[key], result.Changes);
         var changed = results.Values.Sum(result => result.ChangedCells);
         if (changed == 0) return new CsvBundleImportResult(results, 0);
         var after = documents.ToDictionary(document => document.Definition.Key, document => TableSnapshot.Capture(document.Data), StringComparer.OrdinalIgnoreCase);
@@ -393,6 +394,27 @@ public sealed class ProjectWorkspace
 
     private CsvContext CsvContextFor(TableDocument document)
         => new(ActiveProfile.ProfileId, ActiveProfile.VariantId, document.Definition.Key, ActiveProfile.LayoutRevision);
+
+    private static string CsvValueKey(object? value)
+        => value is null or DBNull ? "N" : "V" + Convert.ToString(value, CultureInfo.InvariantCulture);
+
+    private void RememberCsvValues(TableDocument document, IReadOnlyList<CsvChange> changes)
+    {
+        if (changes.Count == 0) return;
+        if (!_csvImportedValues.TryGetValue(document, out var cells))
+            _csvImportedValues.Add(document, cells = new());
+        foreach (var change in changes)
+        {
+            var key = (change.RowIndex, change.ColumnName);
+            if (!cells.TryGetValue(key, out var values)) cells.Add(key, values = new(StringComparer.Ordinal));
+            values.Add(CsvValueKey(change.NewValue));
+        }
+    }
+
+    private bool IsCsvImportedValue(TableDocument document, TableCellChange change)
+        => _csvImportedValues.TryGetValue(document, out var cells) &&
+           cells.TryGetValue((change.RowIndex, change.Field.Name), out var values) &&
+           values.Contains(CsvValueKey(change.NewValue));
 
     /// <summary>
     /// Applies edits that span multiple physical tables as one draft command.
@@ -525,15 +547,21 @@ public sealed class ProjectWorkspace
                     ExtendDataService.ValidateForgeDraft(document, dirtyRow);
             foreach (var change in document.EnumerateChanges())
             {
-                try { ValidateCellValue(document, change.RowIndex, change.Field.Name, change.NewValue); }
+                var saveChange = change;
+                try
+                {
+                    if (IsCsvImportedValue(document, change))
+                        saveChange = change with { Field = CsvImportPolicy.ValidateCell(document, change.RowIndex, change.Field.Name, change.NewValue) };
+                    else ValidateCellValue(document, change.RowIndex, change.Field.Name, change.NewValue);
+                }
                 catch (Exception ex)
                 {
                     return new SaveResult(false, 0, allChanges.Count + 1, 0, null, [$"保存中止：{document.Definition.DisplayName} ID={change.Id} {change.Field.Name}：{ex.Message}"]);
                 }
-                allChanges.Add(change);
+                allChanges.Add(saveChange);
                 var path = Path.GetFullPath(document.FilePath);
                 if (!changesByFile.TryGetValue(path, out var changes)) changesByFile[path] = changes = [];
-                changes.Add(change);
+                changes.Add(saveChange);
             }
         }
         var extraByFile = new Dictionary<string, List<PreparedBinaryEdit>>(StringComparer.OrdinalIgnoreCase);
@@ -798,9 +826,11 @@ public sealed class ProjectWorkspace
                 : fileChanges.Sum(change => change.Chunks.Sum(chunk => chunk.NewBytes.Where((value, index) => value != chunk.OldBytes[index]).Count()));
             var savedMessage = $"已保存：{fileChanges.Count} 个文件、{allChanges.Count} 个字段、{changedBytes} 字节；候选及磁盘语义复读通过。";
             if (appearanceSync?.Report.HasWarnings == true) savedMessage = "形象已保存，部分存档未同步。 " + savedMessage;
-            return new SaveResult(true, fileChanges.Count, allChanges.Count, changedBytes, history,
+            var savedResult = new SaveResult(true, fileChanges.Count, allChanges.Count, changedBytes, history,
                 appearanceSync == null ? [savedMessage] : [savedMessage + " " + appearanceSync.Report.Summary, .. appearanceSync.Report.Diagnostics])
                 { AppearanceSync = appearanceSync?.Report };
+            _csvImportedValues.Clear();
+            return savedResult;
         }
         catch (Exception ex)
         {
@@ -921,6 +951,7 @@ public sealed class ProjectWorkspace
 
     public void ReloadLoadedDocuments()
     {
+        _csvImportedValues.Clear();
         var keys = _documents.Keys.ToArray();
         var sourceFiles = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
         foreach (var key in keys)
@@ -937,6 +968,7 @@ public sealed class ProjectWorkspace
 
     private void ReloadAllDocuments()
     {
+        _csvImportedValues.Clear();
         _documents.Clear();
         var sourceFiles = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
         foreach (var definition in Definitions)

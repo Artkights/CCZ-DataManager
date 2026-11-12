@@ -94,9 +94,12 @@ internal static class Ccz64CompatibilityTests
         }
         var badCsv = Path.Combine(directory, "protected.csv");
         File.WriteAllText(badCsv, "ID,保留尾部\n0,00 00 00\n");
+        // The current 6.4 schema exposes these bytes as individual fields;
+        // the retired aggregate column is an unknown header, not a read-only one.
         var rejected = false;
-        try { workspace.ImportCsv(workspace.GetDocument("persons"), badCsv); } catch (Exception error) when (error is InvalidDataException or InvalidOperationException) { rejected = true; }
-        TestSupport.Assert(rejected && !workspace.IsDirty, "CSV允许写入6.4保留尾部");
+        try { workspace.ImportCsv(workspace.GetDocument("persons"), badCsv); }
+        catch (InvalidDataException error) { rejected = error.Message.Contains("物理列不存在", StringComparison.Ordinal); }
+        TestSupport.Assert(rejected && !workspace.IsDirty, "CSV没有拒绝6.4已移除的保留尾部列或留下了草稿");
         Console.WriteLine($"CCZ64_EXCHANGE_OK tables={workspace.Documents.Count} CSV and business XLSX");
     }
 
@@ -209,11 +212,20 @@ internal static class Ccz64CompatibilityTests
                     pair.Key == "Ekd5.exe" && i >= rOffset && i < rOffset + 2).All(x => x), "逻辑迁移改写了其他字节：" + pair.Key);
             }
             var csv = Path.Combine(source, "cross.csv"); sourceWorkspace.ExportCsv(sourceWorkspace.GetDocument("persons"), csv);
-            var rejected = false;
-            try { reopened.ImportCsv(reopened.GetDocument("persons"), csv); } catch (InvalidDataException) { rejected = true; }
-            TestSupport.Assert(rejected && !reopened.IsDirty, "跨Profile CSV未经迁移直接导入");
+            var csvMetadata = File.ReadLines(csv).First();
+            var csvPower = (power + 1) % 100;
+            File.WriteAllText(csv, csvMetadata + $"\r\nID,武力\r\n0,{csvPower}\r\n");
+            var beforeCsv = ProfileDetector.CoreFiles.ToDictionary(name => name, name => File.ReadAllBytes(ProjectFileLocator.Resolve(target, name)));
+            TestSupport.Assert(reopened.ImportCsv(reopened.GetDocument("persons"), csv).ChangedCells == 1 &&
+                Convert.ToInt32(reopened.GetDocument("persons").Data.Rows[0]["武力"]) == csvPower &&
+                reopened.ActiveProfile.ProfileId == targetWorkspace.ActiveProfile.ProfileId,
+                "格式兼容的跨 Profile CSV 未按目标布局导入");
+            reopened.Commands.Undo();
+            TestSupport.Assert(!reopened.IsDirty && Convert.ToInt32(reopened.GetDocument("persons").Data.Rows[0]["武力"]) == power &&
+                beforeCsv.All(pair => File.ReadAllBytes(ProjectFileLocator.Resolve(target, pair.Key)).SequenceEqual(pair.Value)),
+                "跨 Profile CSV 撤回没有恢复草稿或导入提前写入了磁盘");
             var xlsx = Path.Combine(source, "cross.xlsx"); new PageWorkbookService(sourceWorkspace).Export(BusinessPageKind.Persons, xlsx);
-            rejected = false;
+            var rejected = false;
             try { new PageWorkbookService(reopened).PreviewImport(BusinessPageKind.Persons, xlsx); } catch (InvalidDataException) { rejected = true; }
             TestSupport.Assert(rejected && !reopened.IsDirty, "跨Profile XLSX未经迁移直接导入");
             foreach (var pair in sourceHashes) TestSupport.Assert(HashService.Sha256(ProjectFileLocator.Resolve(source, pair.Key)) == pair.Value, "迁移改写源项目");

@@ -215,9 +215,13 @@ internal static class StrategyEffectClassTests
                 ExpectFailure(() => workspace.ApplyBatch(document, [0], StrategyEffectClassService.FieldName, "统一赋值", invalid.ToString(CultureInfo.InvariantCulture)),
                     "批量修改绕过了效果类范围。");
                 CsvService.WriteRecords(csv, [new[] { "ID", StrategyEffectClassService.FieldName }, new[] { "0", invalid.ToString(CultureInfo.InvariantCulture) }]);
-                ExpectFailure(() => workspace.ImportCsv(document, csv), "CSV绕过了效果类范围。");
+                TestSupport.Assert(workspace.ImportCsv(document, csv).ChangedCells == 1 &&
+                    Convert.ToInt32(document.Data.Rows[0][StrategyEffectClassService.FieldName]) == invalid,
+                    "物理字节合法的 CSV 仍受已安装效果类范围限制。");
+                workspace.Commands.Undo();
+                TestSupport.Assert(!workspace.IsDirty, "自定义效果类 CSV 撤回留下草稿。");
             }
-            document.Data.Rows[0][StrategyEffectClassService.FieldName] = 0x30;
+            document.Data.Rows[0][StrategyEffectClassService.FieldName] = 0x31;
             TestSupport.Assert(!workspace.Save().Saved && File.ReadAllBytes(path).SequenceEqual(seeded),
                 "直接修改DataTable绕过了保存时效果类校验。");
         }

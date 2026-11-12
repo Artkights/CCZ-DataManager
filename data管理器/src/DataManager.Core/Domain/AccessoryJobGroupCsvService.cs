@@ -17,13 +17,15 @@ public sealed class AccessoryJobGroupCsvService
 
     public void Export(ProjectWorkspace workspace, string path, IReadOnlyList<IReadOnlyList<int>> groups, Encoding? encoding = null)
     {
-        var preview = Validate(workspace, groups);
+        // Export describes the supplied groups and does not write this EXE.
+        // Only the group encoding, not the current target's free space, matters.
+        var encodedGroups = AccessoryJobGroupService.Parse(AccessoryJobGroupService.Serialize(groups));
         var profile = workspace.ActiveProfile;
         var records = new List<IReadOnlyList<string>>
         {
             new[] { Marker, "1", profile.ProfileId, profile.VariantId, TableKey, profile.LayoutRevision }, Columns
         };
-        records.AddRange(preview.Groups.Select(group => (IReadOnlyList<string>)new[]
+        records.AddRange(encodedGroups.Select(group => (IReadOnlyList<string>)new[]
             { group.Index.ToString(CultureInfo.InvariantCulture), string.Join(',', group.JobSeriesIds) }));
         CsvService.WriteRecords(path, records, encoding);
     }
@@ -31,17 +33,13 @@ public sealed class AccessoryJobGroupCsvService
     public IReadOnlyList<IReadOnlyList<int>> ImportDraft(ProjectWorkspace workspace, string path)
     {
         var records = CsvService.ReadRecords(path, Columns.Concat(LegacyColumns)).Where(row => row.Any(value => !string.IsNullOrWhiteSpace(value))).ToArray();
-        var profile = workspace.ActiveProfile;
-        if (records.Length > 0) records[0] = CsvService.NormalizeMetadata(records[0]);
-        if (records.Length < 3 || records[0].Count != 6 || records[0][0] != Marker || records[0][1] != "1")
-            throw new InvalidDataException("辅助分组 CSV 缺少有效 schema 元数据或分组记录。");
-        var metadata = records[0];
-        if (metadata[2] != profile.ProfileId || metadata[3] != profile.VariantId || metadata[4] != TableKey || metadata[5] != profile.LayoutRevision)
-            throw new InvalidDataException("辅助分组 CSV 的 Profile、Variant、TableKey 或布局修订与当前项目不匹配。");
-        if (records[1].Count != 2 || !records[1].Select((column, index) => column == Columns[index] || column.Equals(LegacyColumns[index], StringComparison.OrdinalIgnoreCase)).All(valid => valid))
+        var headerIndex = records.Length > 0 && records[0][0] == Marker ? 1 : 0;
+        if (records.Length < headerIndex + 2)
+            throw new InvalidDataException("辅助分组 CSV 缺少列名或分组记录。");
+        if (records[headerIndex].Count != 2 || !records[headerIndex].Select((column, index) => column == Columns[index] || column.Equals(LegacyColumns[index], StringComparison.OrdinalIgnoreCase)).All(valid => valid))
             throw new InvalidDataException("辅助分组 CSV 列必须为 分组编号,兵种系编号列表（兼容 GroupID,JobSeriesIDs），不能包含重复或未知列。");
         var imported = new SortedDictionary<int, IReadOnlyList<int>>();
-        foreach (var row in records.Skip(2))
+        foreach (var row in records.Skip(headerIndex + 1))
         {
             if (row.Count != 2 || !int.TryParse(row[0], NumberStyles.None, CultureInfo.InvariantCulture, out var id) || id < 0)
                 throw new InvalidDataException("辅助分组 CSV 的 GroupID 或列数无效。");

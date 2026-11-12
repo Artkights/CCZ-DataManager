@@ -109,8 +109,12 @@ internal static class PersonEquipmentTests
 
         var csv = Path.Combine(workspace.RootPath, "错误人物.csv");
         File.WriteAllText(csv, "ID,武力,默认武器\r\n0," + ((power + 1) % 100) + ",4\r\n", new UTF8Encoding(true));
-        Reject(() => workspace.ImportCsv(person, csv), "CSV绕过默认类别");
-        TestSupport.Assert(!workspace.IsDirty, "错误默认装备CSV留下部分草稿");
+        TestSupport.Assert(workspace.ImportCsv(person, csv).ChangedCells == 2 &&
+            Convert.ToInt32(person.Data.Rows[0]["默认武器"]) == 4,
+            "物理格式合法的 CSV 仍受默认装备类别限制");
+        workspace.Commands.Undo();
+        TestSupport.Assert(!workspace.IsDirty && Convert.ToInt32(person.Data.Rows[0]["武力"]) == power,
+            "放宽类别的 CSV 导入不能完整撤回");
         workspace.ExportCsv(person, csv);
         TestSupport.Assert(workspace.ImportCsv(person, csv).ChangedCells == 0, "存量错类值不能原样CSV回导");
 

@@ -324,17 +324,35 @@ internal static class ExtendedItemStorageTests
         var csv = Path.Combine(starCopy, "隔离.csv");
         var star = OpenStar(starCopy);
         star.ExportCsv(star.GetDocument("items-extended"), csv);
+        var metadata = File.ReadLines(csv).First();
+        File.WriteAllText(csv, metadata + "\r\nID,名称\r\n256,布局交换\r\n", new UTF8Encoding(true));
         WithCopy(Path.Combine(bases, "复刻版6.6山贼"), rootCopy =>
         {
             File.WriteAllBytes(Path.Combine(rootCopy, "Item.e5"), new byte[6400]);
             var root = OpenStar(rootCopy);
-            var rejected = false;
-            try { root.ImportCsv(root.GetDocument("items-extended"), csv); }
-            catch (InvalidDataException) { rejected = true; }
-            TestSupport.Assert(rejected && !root.IsDirty, "Star扩展CSV被错误解释为根Item布局");
+            var document = root.GetDocument("items-extended");
+            var before = Snapshot(rootCopy);
+            var itemBefore = File.ReadAllBytes(Path.Combine(rootCopy, "Item.e5"));
+            TestSupport.Assert(root.ImportCsv(document, csv).ChangedCells == 1 && document.Definition.FileName == "Item.e5" &&
+                Name(document, 256) == "布局交换" && before.All(pair => File.ReadAllBytes(Path.Combine(rootCopy, pair.Key)).SequenceEqual(pair.Value)) &&
+                File.ReadAllBytes(Path.Combine(rootCopy, "Item.e5")).SequenceEqual(itemBefore),
+                "格式兼容的 Star 扩展 CSV 未按目标根 Item 布局进入草稿或提前写盘");
+            root.Commands.Undo();
+            TestSupport.Assert(!root.IsDirty && Name(document, 256) == string.Empty,
+                "跨物理来源 CSV 撤回未恢复根 Item 草稿");
+            var rootRevisions = LayoutRevisionCompatibility.GetLegacyRevisions(rootCopy, "ccz-6.6", "66-standard-v1")
+                .Append(root.ActiveProfile.LayoutRevision);
+            TestSupport.Assert(rootRevisions.All(revision => !LayoutRevisionCompatibility.IsCompatible(starCopy,
+                "ccz-6.6", "66-standard-v1", revision, star.ActiveProfile.LayoutRevision)),
+                "Star物理来源仍接受根Item当前或历史布局身份");
         });
-        TestSupport.Assert(LayoutRevisionCompatibility.GetLegacyRevisions(starCopy, "ccz-6.6", "66-standard-v1").Count == 0,
-            "Star物理来源更换后仍接受旧根Item的历史身份");
+        // The immediately preceding strategy release already used the same
+        // Star geometry; adding its independent class table is a valid upgrade.
+        var previousStar = StrategyEffectClassTests.PreviousLayoutRevision(star);
+        var recognizedStar = LayoutRevisionCompatibility.GetLegacyRevisions(starCopy, "ccz-6.6", "66-standard-v1");
+        TestSupport.Assert(recognizedStar.SequenceEqual(new[] { previousStar }) &&
+            LayoutRevisionCompatibility.IsCompatible(starCopy, "ccz-6.6", "66-standard-v1", previousStar, star.ActiveProfile.LayoutRevision),
+            "同源Star前策略布局未被精确识别或混入了其他来源身份");
     }
 
     private static void CheckMigration(string source, string target, bool sourceStar, bool emptyTarget)

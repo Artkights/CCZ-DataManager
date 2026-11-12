@@ -227,7 +227,7 @@ internal static class SaveHistory21RegressionTests
         var old = (string[])metadata.Clone(); old[5] = priorRevision;
         File.WriteAllText(path, string.Join(',', old) + ",,,\r\n" + body, new UTF8Encoding(true));
         TestSupport.Assert(workspace.ImportCsv(person, path).ChangedCells == 0, "本次前版本布局CSV不能安全回导。");
-        foreach (var invalid in new[]
+        foreach (var sourceMetadata in new[]
         {
             string.Join(',', metadata) + ",nonempty,,,",
             string.Join(',', metadata.Take(5)),
@@ -237,11 +237,22 @@ internal static class SaveHistory21RegressionTests
             "#DataManagerCSV,999," + string.Join(',', metadata.Skip(2))
         })
         {
-            File.WriteAllText(path, invalid + "\r\n" + body, new UTF8Encoding(true));
+            File.WriteAllText(path, sourceMetadata + "\r\n" + body, new UTF8Encoding(true));
+            TestSupport.Assert(workspace.ImportCsv(person, path).ChangedCells == 0 && !workspace.IsDirty,
+                "附加、缺省或未知来源元数据阻止了格式兼容的 CSV 无损回导。");
+        }
+        foreach (var invalidBody in new[]
+        {
+            "ID,武力\r\n0,77,extra\r\n",
+            "ID,武力\r\n0,77\r\n0,78\r\n",
+            "ID,不存在的字段\r\n0,77\r\n"
+        })
+        {
+            File.WriteAllText(path, "#DataManagerCSV,999,other-profile,other-variant,persons,other-layout\r\n" + invalidBody, new UTF8Encoding(true));
             var rejected = false;
             try { workspace.ImportCsv(person, path); }
             catch (InvalidDataException) { rejected = true; }
-            TestSupport.Assert(rejected && !workspace.IsDirty, "非空附加列、缺字段或未知身份的CSV元数据未整体拒绝。");
+            TestSupport.Assert(rejected && !workspace.IsDirty, "忽略来源元数据后，错误列数、重复 ID 或未知字段没有整体拒绝。");
         }
     }
 

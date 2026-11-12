@@ -49,8 +49,11 @@ internal static class ExtendDataCompatibilityTests
                 "旧 CSV 导入覆盖了新增经验或回合字段");
             workspace.Commands.Undo();
             File.WriteAllText(path, Metadata("effect-archive", "0000000000000000") + "ID,槽0特效值\r\n0,22\r\n", new UTF8Encoding(true));
-            AssertRejected(() => workspace.ImportCsv(effect, path), "未知修订 CSV 未拒绝");
-            TestSupport.Assert(!workspace.IsDirty, "拒绝未知 CSV 后仍有草稿");
+            TestSupport.Assert(workspace.ImportCsv(effect, path).ChangedCells == 1 && Number(effect, 0, "槽0特效值") == 22 &&
+                Number(effect, 0, "槽0经验") == 77 && Number(effect, 0, "槽0剩余回合") == 9,
+                "格式兼容的未知修订 CSV 未导入或覆盖了未提供字段");
+            workspace.Commands.Undo();
+            TestSupport.Assert(!workspace.IsDirty, "未知修订 CSV 导入后不能完整撤回");
 
             var growth = workspace.GetDocument("effect-messages");
             TestSupport.Assert(CsvDisplayNameRegistry.ResolveTableKey("拓展特效说明.csv", workspace.Definitions) == "effect-messages",
@@ -63,7 +66,11 @@ internal static class ExtendDataCompatibilityTests
             TestSupport.Assert(File.ReadAllText(path).Contains("吃书初始效果值", StringComparison.Ordinal) && workspace.ImportCsv(growth, path).ChangedCells == 0,
                 "新成长 CSV 语义表头或保留行回导失败");
             File.WriteAllText(path, "ID,Param7\r\n255,98\r\n", new UTF8Encoding(true));
-            AssertRejected(() => workspace.ImportCsv(growth, path), "ID255 成长保留槽允许写入");
+            TestSupport.Assert(workspace.ImportCsv(growth, path).ChangedCells == 1 && Number(growth, 255, "Param7") == 98,
+                "物理格式合法的 ID255 成长 CSV 未导入");
+            workspace.Commands.Undo();
+            TestSupport.Assert(!workspace.IsDirty && Number(growth, 255, "Param7") == 99,
+                "ID255 成长 CSV 撤回没有恢复原字节");
 
             var recipe = workspace.GetDocument("forge");
             workspace.ExportCsv(recipe, path);
@@ -79,7 +86,10 @@ internal static class ExtendDataCompatibilityTests
             TestSupport.Assert(workspace.ImportCsv(recipe, path).ChangedCells == 0, "未保存 Forge 草稿导出后无法无损回导");
             workspace.Commands.Undo();
             File.WriteAllText(path, "ID,保留58\r\n0,01\r\n", new UTF8Encoding(true));
-            AssertRejected(() => workspace.ImportCsv(recipe, path), "只读原始别名单独篡改没有拒绝");
+            var ignoredAlias = workspace.ImportCsv(recipe, path);
+            TestSupport.Assert(ignoredAlias.ChangedCells == 0 && ignoredAlias.SkippedReadOnlyCells == 1 &&
+                Number(recipe, 0, "材料项数") == 9 && !workspace.IsDirty,
+                "只读原始别名差异没有跳过或改变了语义字段");
 
             // Build a real byte history through the current writer, then freeze
             // its layout identity to the exact v1 revision used by older releases.

@@ -3,7 +3,6 @@ using System.Globalization;
 using System.Text;
 using DataManager.Core.Binary;
 using DataManager.Core.Models;
-using DataManager.Core.Profiles;
 
 namespace DataManager.Core.Csv;
 
@@ -23,7 +22,7 @@ public sealed class CsvService
     private const string SchemaVersion = "1";
     private readonly RecordCodecRegistry _codecs = new();
 
-    /// <summary>Reads the stable table identity even when a CSV file has been renamed.</summary>
+    /// <summary>Reads an optional source-table hint even when a CSV file has been renamed.</summary>
     public static CsvContext? ReadContext(string path)
     {
         var first = Parse(ReadText(path, new DataTable()), maxRecords: 1).FirstOrDefault();
@@ -73,7 +72,8 @@ public sealed class CsvService
         var hasMetadata = records[0].Count > 0 && records[0][0].Equals(MetadataMarker, StringComparison.Ordinal);
         if (hasMetadata)
         {
-            ValidateMetadata(records[0], document, context);
+            // Older exports carry source identity here. It is informational:
+            // the destination's actual columns and values determine compatibility.
             records.RemoveAt(0);
             if (records.Count == 0) throw new InvalidDataException("CSV 缺少物理表列名。");
         }
@@ -94,15 +94,17 @@ public sealed class CsvService
 
         if (headers.Count(CsvDisplayNameRegistry.IsIdHeader) > 1) throw new InvalidDataException("CSV 编号列重复映射：不能同时提供 ID 和编号。");
         var useId = matchById && headers.Any(CsvDisplayNameRegistry.IsIdHeader);
-        if (hasMetadata && !useId) throw new InvalidDataException("带元数据的 CSV 必须提供稳定主键 ID 列。");
         var idIndex = headers.FindIndex(CsvDisplayNameRegistry.IsIdHeader);
         var idLookup = document.Data.Rows.Cast<DataRow>().ToDictionary(row => Convert.ToInt32(row["ID"], CultureInfo.InvariantCulture));
         var changes = new List<CsvChange>();
         var usedIds = new HashSet<int>();
         var skipped = 0;
         var imported = 0;
-        foreach (var values in records.Skip(1).Where(record => record.Any(value => !string.IsNullOrWhiteSpace(value))))
+        foreach (var values in records.Skip(1))
         {
+            // Without IDs even an empty text record has a destination row.
+            // Dropping it would shift every following record to the wrong ID.
+            if (useId && values.All(string.IsNullOrWhiteSpace)) continue;
             if (values.Count != headers.Count) throw new InvalidDataException($"CSV 第 {imported + 2} 行列数不一致。");
             DataRow row;
             if (useId)
@@ -121,10 +123,16 @@ public sealed class CsvService
             }
 
             var rowChanges = new List<CsvChange>();
-            var aliases = new List<(TableFieldDefinition Field, object? OldValue, object? NewValue)>();
             foreach (var (field, index) in columnMap)
             {
                 var column = document.Data.Columns.Contains(field.Name) ? document.Data.Columns[field.Name] : null;
+                if (field.Policy != FieldPolicy.Editable || column == null || column.ReadOnly || document.Definition.Capability != TableCapability.Editable)
+                {
+                    // Ignored source columns need not match this project's raw
+                    // layout or value constraints, and are never decoded/applied.
+                    skipped++;
+                    continue;
+                }
                 var targetType = column?.DataType ?? field.Kind switch
                 {
                     FieldKind.UInt32 => typeof(long),
@@ -141,33 +149,8 @@ public sealed class CsvService
                 {
                     throw new InvalidDataException($"CSV {document.Definition.DisplayName} 第 {imported + (hasMetadata ? 3 : 2)} 条记录 ID={row["ID"]} 字段“{field.ExportName}”：{ex.Message}", ex);
                 }
-                if (field.Policy != FieldPolicy.Editable || column == null || column.ReadOnly || document.Definition.Capability != TableCapability.Editable)
-                {
-                    if (IsDocumentedForgeAlias(document, field))
-                    {
-                        aliases.Add((field, oldValue, converted));
-                        skipped++;
-                        continue;
-                    }
-                    if (!ValuesEqual(oldValue, converted))
-                        throw new InvalidDataException($"CSV 只读/保留列不允许修改：ID={row["ID"]}，{field.ExportName}。");
-                    skipped++;
-                    continue;
-                }
                 if (ValuesEqual(oldValue, converted)) continue;
                 rowChanges.Add(new CsvChange(document.Data.Rows.IndexOf(row), field.Name, oldValue, converted));
-            }
-            foreach (var (field, oldValue, newValue) in aliases)
-            {
-                // Legacy raw columns remain read-only. They may describe either
-                // the original bytes or the new semantic value in the same CSV;
-                // only the semantic column is ever applied to the document.
-                var projected = GetProjectedForgeAlias(document, document.Data.Rows.IndexOf(row), field, rowChanges);
-                var originalOffset = checked((int)(document.Definition.DataOffset + (long)document.Data.Rows.IndexOf(row) * document.Definition.RowSize));
-                var original = _codecs.Get(document.Definition.RecordCodecKey).Decode(
-                    document.OriginalFileBytes.AsSpan(originalOffset, document.Definition.RowSize), field);
-                if (!ValuesEqual(oldValue, newValue) && !ValuesEqual(projected, newValue) && !ValuesEqual(original, newValue))
-                    throw new InvalidDataException($"CSV 只读/保留列不允许修改：ID={row["ID"]}，{field.ExportName}。");
             }
             changes.AddRange(rowChanges);
             imported++;
@@ -190,18 +173,20 @@ public sealed class CsvService
         if (string.IsNullOrWhiteSpace(value)) return DBNull.Value;
         if (field != null && field.Kind == FieldKind.UInt32)
         {
-            return BinaryValueCodec.ParseInteger64(value, field.Minimum, field.Maximum, field.Name);
+            var physical = CsvImportPolicy.WithPhysicalBounds(field);
+            return BinaryValueCodec.ParseInteger64(value, physical.Minimum, physical.Maximum, field.Name);
         }
         if (field != null && field.Kind is FieldKind.UInt8 or FieldKind.UInt16)
         {
-            return BinaryValueCodec.ParseInteger(value, field.Minimum, field.Maximum, field.Name);
+            var physical = CsvImportPolicy.WithPhysicalBounds(field);
+            return BinaryValueCodec.ParseInteger(value, physical.Minimum, physical.Maximum, field.Name);
         }
         return Convert.ChangeType(value, targetType, CultureInfo.InvariantCulture);
     }
 
     private object? GetFieldValue(TableDocument document, int rowIndex, TableFieldDefinition field)
     {
-        if (IsDocumentedForgeAlias(document, field)) return GetProjectedForgeAlias(document, rowIndex, field, []);
+        if (IsDocumentedForgeAlias(document, field)) return GetProjectedForgeAlias(document, rowIndex, field);
         if (document.Data.Columns.Contains(field.Name))
         {
             var value = document.Data.Rows[rowIndex][field.Name];
@@ -217,8 +202,7 @@ public sealed class CsvService
            field.Policy != FieldPolicy.Editable && (field.Name, field.Offset) is
                ("保留58", 58) or ("保留59", 59) or ("保留61", 61);
 
-    private object GetProjectedForgeAlias(TableDocument document, int rowIndex, TableFieldDefinition alias,
-        IReadOnlyList<CsvChange> changes)
+    private object GetProjectedForgeAlias(TableDocument document, int rowIndex, TableFieldDefinition alias)
     {
         var offset = checked((int)(document.Definition.DataOffset + (long)rowIndex * document.Definition.RowSize));
         var raw = document.OriginalFileBytes.AsSpan(offset, document.Definition.RowSize).ToArray();
@@ -227,8 +211,7 @@ public sealed class CsvService
             field.Offset == alias.Offset && field.Size == 1 && field.Policy == FieldPolicy.Editable);
         if (owner != null && document.Data.Columns.Contains(owner.Name))
         {
-            var pending = changes.FirstOrDefault(change => change.ColumnName == owner.Name);
-            var value = pending != null ? pending.NewValue : document.Data.Rows[rowIndex][owner.Name];
+            var value = document.Data.Rows[rowIndex][owner.Name];
             var original = _codecs.Get(document.Definition.RecordCodecKey).Decode(raw, owner);
             if (value != null && value != DBNull.Value && !ValuesEqual(original, value))
                 foreach (var patch in _codecs.Get(document.Definition.RecordCodecKey).EncodeChangedField(raw, owner, value))
@@ -240,31 +223,10 @@ public sealed class CsvService
     private static bool ValuesEqual(object? left, object? right)
         => string.Equals(Convert.ToString(left, CultureInfo.InvariantCulture), Convert.ToString(right, CultureInfo.InvariantCulture), StringComparison.Ordinal);
 
-    private static void ValidateMetadata(IReadOnlyList<string> metadata, TableDocument document, CsvContext? expected)
+    private static CsvContext? ParseContext(IReadOnlyList<string> metadata)
     {
-        var actual = ParseContext(metadata);
-        if (!actual.TableKey.Equals(document.Definition.Key, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidDataException($"CSV TableKey 不匹配：文件为 {actual.TableKey}，当前物理表为 {document.Definition.Key}。");
-        if (expected == null) return;
-        if (!actual.ProfileId.Equals(expected.ProfileId, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidDataException($"CSV Profile 不匹配：文件为 {actual.ProfileId}，当前项目为 {expected.ProfileId}。");
-        if (!actual.VariantId.Equals(expected.VariantId, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidDataException($"CSV Variant 不匹配：文件为 {actual.VariantId}，当前项目为 {expected.VariantId}。");
-        var directory = Path.GetDirectoryName(document.FilePath)!;
-        var roots = Path.GetFileName(directory).Equals("E5", StringComparison.OrdinalIgnoreCase)
-            ? new[] { directory, Directory.GetParent(directory)?.FullName ?? directory } : new[] { directory };
-        if (!actual.LayoutRevision.Equals(expected.LayoutRevision, StringComparison.Ordinal) &&
-            !roots.Any(root => LayoutRevisionCompatibility.IsCompatible(root, expected.ProfileId, expected.VariantId, actual.LayoutRevision, expected.LayoutRevision)))
-            throw new InvalidDataException($"CSV 布局修订不匹配：文件为 {actual.LayoutRevision}，当前项目为 {expected.LayoutRevision}。");
-    }
-
-    private static CsvContext ParseContext(IReadOnlyList<string> metadata)
-    {
-        metadata = NormalizeMetadata(metadata);
-        if (metadata.Count != 6) throw new InvalidDataException("CSV 元数据格式错误，应包含 schema、Profile、Variant、TableKey 和布局修订。");
-        if (!metadata[1].Equals(SchemaVersion, StringComparison.Ordinal)) throw new InvalidDataException($"CSV schema 版本不支持：{metadata[1]}");
-        if (metadata.Skip(2).Any(string.IsNullOrWhiteSpace)) throw new InvalidDataException("CSV 元数据的 Profile、Variant、TableKey 和布局修订不能为空。");
-        return new CsvContext(metadata[2], metadata[3], metadata[4], metadata[5]);
+        if (metadata.Count < 5 || string.IsNullOrWhiteSpace(metadata[4])) return null;
+        return new CsvContext(metadata[2], metadata[3], metadata[4], metadata.ElementAtOrDefault(5) ?? string.Empty);
     }
 
     /// <summary>Excel pads a short metadata record to the width of the data table when saving CSV.</summary>
@@ -309,6 +271,7 @@ public sealed class CsvService
         var row = new List<string>();
         var value = new StringBuilder();
         var quoted = false;
+        var recordStarted = false;
         for (var i = 0; i < text.Length; i++)
         {
             var ch = text[i];
@@ -318,18 +281,18 @@ public sealed class CsvService
                 else if (ch == '"') quoted = false;
                 else value.Append(ch);
             }
-            else if (ch == '"') quoted = true;
-            else if (ch == ',') { row.Add(value.ToString()); value.Clear(); }
+            else if (ch == '"') { quoted = true; recordStarted = true; }
+            else if (ch == ',') { row.Add(value.ToString()); value.Clear(); recordStarted = true; }
             else if (ch is '\r' or '\n')
             {
                 if (ch == '\r' && i + 1 < text.Length && text[i + 1] == '\n') i++;
-                row.Add(value.ToString()); value.Clear(); rows.Add(row); row = [];
+                row.Add(value.ToString()); value.Clear(); rows.Add(row); row = []; recordStarted = false;
                 if (rows.Count >= maxRecords) return rows;
             }
-            else value.Append(ch);
+            else { value.Append(ch); recordStarted = true; }
         }
         if (quoted) throw new InvalidDataException("CSV 引号未闭合。");
-        if (value.Length > 0 || row.Count > 0) { row.Add(value.ToString()); rows.Add(row); }
+        if (recordStarted || value.Length > 0 || row.Count > 0) { row.Add(value.ToString()); rows.Add(row); }
         return rows;
     }
 

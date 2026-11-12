@@ -18,6 +18,11 @@ internal static class Program
         using var historyScope = DataManager.Core.History.ProjectHistoryPaths.UseBaseDirectory(testHistoryRoot);
         try
         {
+            if (args.FirstOrDefault() == "--csv-format-only" && args.Length >= 2)
+            {
+                CsvFormatOnlyImportTests.Run(Path.GetFullPath(args[1]));
+                return 0;
+            }
             if (args.FirstOrDefault() == "--growth-integration-ui" && args.Length >= 3)
             {
                 GrowthIntegrationUiTests.Run(Path.GetFullPath(args[1]), Path.GetFullPath(args[2]));

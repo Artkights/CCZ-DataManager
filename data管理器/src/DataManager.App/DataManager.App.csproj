@@ -9,8 +9,8 @@
     <AssemblyName>data管理器</AssemblyName>
     <RootNamespace>DataManager.App</RootNamespace>
     <ApplicationIcon>Assets\About\Doro-white.ico</ApplicationIcon>
-    <Version>1.2026.1112.1</Version>
-    <InformationalVersion>1.2026.1112.1</InformationalVersion>
+    <Version>1.2026.1112.2</Version>
+    <InformationalVersion>1.2026.1112.2</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
   <ItemGroup>

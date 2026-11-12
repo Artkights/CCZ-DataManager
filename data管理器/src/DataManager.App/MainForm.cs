@@ -1587,25 +1587,25 @@ public sealed partial class MainForm : Form
                 var files = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var path in Directory.EnumerateFiles(folder.SelectedPath, "*.csv"))
                 {
-                    var context = CsvService.ReadContext(path);
                     string key;
-                    if (context != null)
+                    try
                     {
-                        key = context.TableKey;
-                        if (!allowed.Contains(key)) continue;
+                        // The destination filename takes precedence over optional
+                        // source metadata, which may describe another project.
+                        key = CsvDisplayNameRegistry.ResolveTableKey(Path.GetFileName(path), definitions);
                     }
-                    else
+                    catch (InvalidDataException)
                     {
-                        try { key = CsvDisplayNameRegistry.ResolveTableKey(Path.GetFileName(path), definitions); }
-                        catch (InvalidDataException) { continue; }
+                        var context = CsvService.ReadContext(path);
+                        if (context == null || !allowed.Contains(context.TableKey)) continue;
+                        key = context.TableKey;
                     }
                     if (!files.TryAdd(key, path)) throw new InvalidDataException($"目录包含重复的物理表 CSV：{key}。");
                 }
                 if (files.Count == 0) throw new InvalidDataException("所选目录没有当前页对应的 CSV 文件。");
-                if (!ConfirmStrategyCsvImport(files)) return;
                 var result = business.ImportPageCsvAtomic(kind, files);
                 RefreshBusinessSelection(); RefreshQueryNavigation(); RefreshDirtyState();
-                SetStatus($"已原子导入 {result.Tables.Count} 张物理表，{result.ChangedCells} 个字段进入草稿。");
+                SetStatus($"已原子导入 {result.Tables.Count} 张物理表，{result.ChangedCells} 个字段进入草稿；跳过 {result.SkippedReadOnlyCells} 个只读/保留单元格。");
             }
             catch (Exception ex) { MessageBox.Show(this, ex.Message, "业务页 CSV 导入失败", MessageBoxButtons.OK, MessageBoxIcon.Error); }
             return;
@@ -1615,7 +1615,6 @@ public sealed partial class MainForm : Form
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
         try
         {
-            if (!ConfirmStrategyCsvImport(new Dictionary<string, string> { [_currentDocument.Definition.Key] = dialog.FileName })) return;
             _suppressGridEvents = true;
             CsvImportResult result;
             try { result = _workspace.ImportCsv(_currentDocument, dialog.FileName); }
@@ -1623,7 +1622,7 @@ public sealed partial class MainForm : Form
             _grid.Refresh();
             RefreshQueryNavigation();
             RefreshDirtyState();
-            SetStatus($"CSV 导入完成：{result.ImportedRows} 行，{result.ChangedCells} 个单元格已修改。");
+            SetStatus($"CSV 导入完成：{result.ImportedRows} 行，{result.ChangedCells} 个单元格已修改；跳过 {result.SkippedReadOnlyCells} 个只读/保留单元格。");
         }
         catch (Exception ex) { MessageBox.Show(this, ex.Message, "CSV 导入失败", MessageBoxButtons.OK, MessageBoxIcon.Error); }
     }

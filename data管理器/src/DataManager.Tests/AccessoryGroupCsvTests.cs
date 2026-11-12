@@ -79,7 +79,18 @@ internal static class AccessoryGroupCsvTests
                     "非法分组 CSV 没有无副作用地拒绝：" + expectedMessage);
             }
             var headers = new[] { "GroupID", "JobSeriesIDs" };
-            Reject([Metadata("66-standard-v1"), headers, new[] { "0", "0,1" }], "不匹配");
+            foreach (var sourceHint in new IReadOnlyList<string>[]
+            {
+                Metadata("66-standard-v1"),
+                new[] { "#DataManagerCSV", "999", "other-profile", "other-variant", "other-table", "other-layout" },
+                new[] { "#DataManagerCSV" }
+            })
+            {
+                CsvService.WriteRecords(path, [sourceHint, headers, new[] { "0", "0,1" }]);
+                TestSupport.Assert(Equal([[0, 1]], csv.ImportDraft(workspace, path)), "辅助分组来源 metadata 不应限制格式兼容的回导");
+            }
+            CsvService.WriteRecords(path, [headers, new[] { "0", "0,1" }]);
+            TestSupport.Assert(Equal([[0, 1]], csv.ImportDraft(workspace, path)), "辅助分组 CSV 应允许无 metadata 的标准表头和记录");
             Reject([Metadata(), new[] { "GroupID", "Unknown" }, new[] { "0", "0,1" }], "列必须");
             Reject([Metadata(), headers, new[] { "0", "" }], "不能为空");
             Reject([Metadata(), headers, new[] { "0", "1,1" }], "重复兵种系");
@@ -89,6 +100,9 @@ internal static class AccessoryGroupCsvTests
             var oversized = new List<IReadOnlyList<string>> { Metadata(), headers };
             oversized.AddRange(Enumerable.Range(0, 8).Select(index => (IReadOnlyList<string>)new[] { index.ToString(), string.Join(',', Enumerable.Range(0, 40)) }));
             Reject(oversized, "超过安全区");
+            csv.Export(workspace, path, Enumerable.Range(0, 8).Select(_ => (IReadOnlyList<int>)Enumerable.Range(0, 40).ToArray()).ToArray());
+            TestSupport.Assert(CsvService.ReadRecords(path, headers).Count == 10,
+                "辅助分组 CSV 导出不应受当前 EXE 的目标写入容量限制");
 
             csv.Export(workspace, path, [[0, 1], [2, 3]]);
             var draft = csv.ImportDraft(workspace, path);
