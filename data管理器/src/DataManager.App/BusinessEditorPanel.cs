@@ -368,7 +368,7 @@ public sealed partial class BusinessEditorPanel : UserControl, IEditorViewLifecy
             if (kind == BusinessPageKind.Persons) AddQuoteTab(id);
             if (kind == BusinessPageKind.DetailedJobs) AddJobLearningTab(id);
             if (kind == BusinessPageKind.Items) AddItemEquipmentTab();
-            if (kind == BusinessPageKind.Strategies) AddTerrainTab();
+            if (kind == BusinessPageKind.Strategies) { AddTerrainTab(); AddStrategyJobModifierTab(); }
             if (kind is BusinessPageKind.Persons or BusinessPageKind.DetailedJobs or BusinessPageKind.Items or BusinessPageKind.Strategies) AddPreviewTab();
             if (_tabs.TabPages.Count == 0) AddNoticeTab("数据", "当前实体没有可读取的数据。请查看扫描诊断中的表能力与文件状态。");
         }

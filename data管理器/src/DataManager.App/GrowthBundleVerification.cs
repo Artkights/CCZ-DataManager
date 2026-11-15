@@ -30,8 +30,10 @@ internal static class GrowthBundleVerification
                 form.Size = size;
                 form.SelectModuleForSmokeTest("__engine"); form.EngineSubTabsForSmokeTest.SelectedIndex = 3; Pump();
                 var transform = form.TransformForSmokeTest;
-                if (!transform.Visible || transform.RulesForSmokeTest.Columns.Count != 2 || form.EntityListForSmokeTest.Items.Count != draft.Slots.Count)
-                    throw new InvalidDataException("发布程序的质变规则和引用列表没有绑定。");
+                if (!transform.Visible || transform.RulesForSmokeTest.Columns.Count != 2 ||
+                    transform.PreviewForSmokeTest.Columns.Count != 2 ||
+                    form.EntityListForSmokeTest.Items.Count != draft.Slots.Count)
+                    throw new InvalidDataException("发布程序的质变规则、效果预览和引用列表没有绑定。");
                 Capture("质变", transform, size);
                 form.SelectModuleForSmokeTest("兵种"); Pump();
                 var tier = form.BusinessEditorForSmokeTest.TierEditorForSmokeTest;

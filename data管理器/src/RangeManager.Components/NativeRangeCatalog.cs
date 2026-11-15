@@ -132,6 +132,32 @@ public static class NativeRangeCatalog
         throw new InvalidDataException($"0x{pointer:X8} 在 512 个生成元内没有 FFFF 终止符");
     }
 
+    /// <summary>
+    /// Preview-only definition. A managed block may have saved an empty group
+    /// for a shared native segment (for example pierce 2/10); recover the
+    /// generators from NativePointer without changing execution data.
+    /// </summary>
+    public static RangeBinding EnsurePreviewDefinition(RangeBinding binding, GameBase game)
+    {
+        if (binding.Definition.Groups.Any(group => group.Generators.Count != 0)) return binding;
+        if (binding.NativePointer == 0) return binding;
+        try
+        {
+            var generators = ReadSegment(game.Exe, binding.NativePointer);
+            if (generators.Count == 0) return binding;
+            var definition = new RangeDefinition
+            {
+                Identity = binding.Definition.Identity,
+                Groups = [new RangeGroup { Generators = generators }]
+            };
+            return binding.Clone(definition);
+        }
+        catch
+        {
+            return binding;
+        }
+    }
+
     private static void Read66(GameBase game, RangeBinding binding, Dictionary<string, RangeDefinition> definitions)
     {
         int id = binding.Key.Id;
@@ -291,9 +317,9 @@ public static class NativeRangeCatalog
         // Placement center and facing reference are independent. A self
         // centered Pierce still points from attacker to target for directional
         // and side-pair groups; using placementCenter here would collapse its
-        // heading to (0,0).
-        var orientation = new RangePreviewContext(new(
-            context.Target.Dx - context.Self.Dx, context.Target.Dy - context.Self.Dy));
+        // heading to (0,0). The editor can pass an explicit Facing while the
+        // native callers keep Target as their direction basis.
+        var orientation = new RangePreviewContext(context.Heading);
         var result = new List<CellOffset>();
         IEnumerable<CellOffset> locals = binding.Key.Kind == RangeKind.Attack &&
             group.Geometry == RangeGeometryKind.Mirror && group.EmissionOrder == RangeEmissionOrder.Geometric
@@ -419,8 +445,7 @@ public static class NativeRangeCatalog
         if (x == 0 && y == 0) return null;
         if (group.Geometry == RangeGeometryKind.Mirror)
             return x == 0 || y == 0 ? new(0, Math.Max(Math.Abs(x), Math.Abs(y))) : new(Math.Abs(x), Math.Abs(y));
-        var orientation = new RangePreviewContext(new(
-            context.Target.Dx - context.Self.Dx, context.Target.Dy - context.Self.Dy));
+        var orientation = new RangePreviewContext(context.Heading);
         var heading = group.Geometry == RangeGeometryKind.SidePair ? SideHeading(orientation) : Heading(orientation);
         int denominator = heading.Dx * heading.Dx + heading.Dy * heading.Dy;
         if (denominator == 0) return null;

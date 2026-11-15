@@ -59,7 +59,8 @@ public static class RangeBitmapRenderer
     private const int GridSize = 64;
 
     public static Bitmap RenderIconFromTiles(RangeKind kind, IReadOnlyCollection<CellOffset> cells,
-        CellOffset? target, RangePixelTiles tiles, int width = 64, int height = 64)
+        CellOffset? target, RangePixelTiles tiles, int width = 64, int height = 64,
+        bool showOwnCell = true)
     {
         if (width <= 0 || height <= 0 || width != height)
             throw new InvalidDataException("范围 E5 输出必须为正方形");
@@ -84,13 +85,13 @@ public static class RangeBitmapRenderer
             foreach (int x in Enumerable.Range(-3, 7))
             {
                 var world = new CellOffset(x, y);
-                Bitmap tile = SelectTile(world, attackSet, pierceSet, target, tiles);
+                Bitmap tile = SelectTile(world, attackSet, pierceSet, target, tiles, showOwnCell);
                 CopyTilePixels(tile, framed, 1 + (x + 3) * 9, 1 + (y + 3) * 9);
             }
             return framed;
         }
 
-        return ComposeGrid(side, side, width, height, attackSet, pierceSet, target, tiles);
+        return ComposeGrid(side, side, width, height, attackSet, pierceSet, target, tiles, showOwnCell);
     }
 
     /// <summary>
@@ -100,7 +101,7 @@ public static class RangeBitmapRenderer
     /// </summary>
     private static Bitmap ComposeGrid(int columns, int rows, int width, int height,
         IReadOnlySet<CellOffset> attack, IReadOnlySet<CellOffset> pierce,
-        CellOffset? target, RangePixelTiles tiles)
+        CellOffset? target, RangePixelTiles tiles, bool showOwnCell)
     {
         if (columns > width || rows > height)
             throw new InvalidDataException($"{width}×{height} 图片无法完整表达 {columns}×{rows} 格");
@@ -129,7 +130,7 @@ public static class RangeBitmapRenderer
                 continue;
             }
             var world = new CellOffset(column - columns / 2, row - rows / 2);
-            var tile = SelectTile(world, attack, pierce, target, tiles);
+            var tile = SelectTile(world, attack, pierce, target, tiles, showOwnCell);
             int inset = lines ? 1 : 0;
             int tx = Math.Clamp((x - left - inset) * tile.Width / Math.Max(1, right - left - inset), 0, tile.Width - 1);
             int ty = Math.Clamp((y - top - inset) * tile.Height / Math.Max(1, bottom - top - inset), 0, tile.Height - 1);
@@ -159,7 +160,8 @@ public static class RangeBitmapRenderer
 
     public static void Draw(Graphics graphics, RangeGridLayout layout,
         IReadOnlyCollection<CellOffset> attack, IReadOnlyCollection<CellOffset> pierce,
-        CellOffset? target = null, bool showGrid = true, RangePixelTiles? tiles = null)
+        CellOffset? target = null, bool showGrid = true, RangePixelTiles? tiles = null,
+        bool showOwnCell = true)
     {
         graphics.SmoothingMode = SmoothingMode.None;
         graphics.PixelOffsetMode = PixelOffsetMode.None;
@@ -182,7 +184,7 @@ public static class RangeBitmapRenderer
             var rect = layout.CellRectangle(world);
             if (tiles != null)
             {
-                Bitmap tile = SelectTile(world, attackSet, pierceSet, target, tiles);
+                Bitmap tile = SelectTile(world, attackSet, pierceSet, target, tiles, showOwnCell);
                 var oldInterpolation = graphics.InterpolationMode;
                 var oldPixelOffset = graphics.PixelOffsetMode;
                 graphics.InterpolationMode = InterpolationMode.NearestNeighbor;
@@ -193,17 +195,13 @@ public static class RangeBitmapRenderer
             }
             else
             {
-                Brush? fill = world is { Dx: 0, Dy: 0 } ? blue : pierceSet.Contains(world) ? green : attackSet.Contains(world) ? red : null;
+                Brush? fill = showOwnCell && world is { Dx: 0, Dy: 0 } ? blue
+                    : target == world ? red
+                    : pierceSet.Contains(world) ? green
+                    : attackSet.Contains(world) ? red : null;
                 if (showGrid && layout.CellSize >= 3) graphics.DrawRectangle(lines, rect.X, rect.Y, rect.Width - 1, rect.Height - 1);
                 if (fill != null) graphics.FillRectangle(fill, Rectangle.Inflate(rect, -inset, -inset));
             }
-        }
-        if (target != null && target is not { Dx: 0, Dy: 0 } && layout.CellSize >= 4)
-        {
-            var marker = layout.CellRectangle(target);
-            using var markerPen = new Pen(Color.Red, layout.CellSize >= 12 ? 2 : 1);
-            marker = Rectangle.Inflate(marker, -Math.Max(1, layout.CellSize / 5), -Math.Max(1, layout.CellSize / 5));
-            graphics.DrawRectangle(markerPen, marker);
         }
     }
 
@@ -228,10 +226,11 @@ public static class RangeBitmapRenderer
     }
 
     private static Bitmap SelectTile(CellOffset world, IReadOnlySet<CellOffset> attack,
-        IReadOnlySet<CellOffset> pierce, CellOffset? target, RangePixelTiles tiles)
+        IReadOnlySet<CellOffset> pierce, CellOffset? target, RangePixelTiles tiles,
+        bool showOwnCell = true)
     {
-        if (world is { Dx: 0, Dy: 0 }) return tiles.Own;
-        if (target == world && world is not { Dx: 0, Dy: 0 }) return tiles.Attack;
+        if (showOwnCell && world is { Dx: 0, Dy: 0 }) return tiles.Own;
+        if (target == world) return tiles.Attack;
         return pierce.Contains(world) ? tiles.Pierce :
             attack.Contains(world) ? tiles.Attack : tiles.Background;
     }

@@ -10,7 +10,10 @@ internal static class Program
         if (args.Length > 0 &&
             (args[0].Equals("--self-test", StringComparison.OrdinalIgnoreCase) ||
              args[0].Equals("--self-test-all", StringComparison.OrdinalIgnoreCase) ||
-             args[0].Equals("--launch-smoke", StringComparison.OrdinalIgnoreCase)))
+             args[0].Equals("--launch-smoke", StringComparison.OrdinalIgnoreCase) ||
+             args[0].Equals("--pierce-preview-smoke", StringComparison.OrdinalIgnoreCase) ||
+             args[0].Equals("--rebuild-runtime", StringComparison.OrdinalIgnoreCase) ||
+             args[0].Equals("--trace-pierce-preview", StringComparison.OrdinalIgnoreCase)))
         {
             return SelfTest.Run(args);
         }

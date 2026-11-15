@@ -43,6 +43,10 @@ static class Check
         Assert(SameRules(loaded, id, stages) && loadedTier.Labels[0] == "中", "首次同时安装回读失败");
         var preview = loaded.Preview(id, stages, loaded.Find(id)!.Coverage, ExtraMode.Auto);
         Assert(preview[3].Source != "规则" && preview[4].Value == 50 && preview[7].Value == 50 && preview[8].Value == 90, "规则区间门槛语义错误");
+        var previewBase = source.Find(id)!.Refs.First().EffectValue;
+        var withBase = loaded.Preview(id, [], loaded.Find(id)!.Coverage, ExtraMode.Auto, 20, previewBase);
+        Assert(withBase.Count == 20 && withBase[0].Value == (previewBase & 0xFF) && withBase[0].Source != "规则",
+            "预览基准值重载错误");
         var twelve = Enumerable.Range(0,12).Select(i => new TierEntry { Threshold = i == 0 ? null : (byte)(i * 10), Label = "S" }).ToArray();
         var expanded = GrowthPatchCoordinator.Prepare(root, both.AfterBytes, source.Catalog, null, twelve);
         Assert(TierScanner.LoadFromBytes(path, expanded.AfterBytes, root).TierCount == 12, "12档写入/回读失败");

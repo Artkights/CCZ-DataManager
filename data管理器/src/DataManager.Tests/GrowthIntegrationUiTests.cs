@@ -30,10 +30,34 @@ internal static class GrowthIntegrationUiTests
                 .SequenceEqual(new[] { "特效管理", "宝物特效", "兵种特效", "质变设定", "常量" }), "引擎子页顺序错误。");
             var transform = form.TransformForSmokeTest;
             TestSupport.Assert(transform.Visible && form.EntityListForSmokeTest.Items.Count == draft.Slots.Count, "质变左侧列表未绑定特效号。");
+            var preview = transform.PreviewForSmokeTest;
+            TestSupport.Assert(preview.Columns.Count == 2 && preview.ReadOnly, "效果预览必须只有等级和特效值两列。");
+            TestSupport.Assert(draft.Slots.Any(slot => draft.NativeDefaultStages(slot.Id).Count > 0), "标准基底没有可显示的原版默认门槛。");
+            var boundSlot = draft.Slots.First();
+            var expectedNative = draft.NativeDefaultStages(boundSlot.Id);
+            var grayRows = transform.RulesForSmokeTest.Rows.Cast<DataGridViewRow>()
+                .Where(row => row.DefaultCellStyle.ForeColor == Color.Gray).ToArray();
+            TestSupport.Assert(grayRows.Length == expectedNative.Count && grayRows.All(row => row.ReadOnly),
+                "等级规则没有以灰色只读行显示原版默认门槛。");
+            TestSupport.Assert(preview.Rows.Count == 20 &&
+                preview.Rows.Cast<DataGridViewRow>().Select(row => Convert.ToInt32(row.Cells[0].Value)).SequenceEqual(Enumerable.Range(1, 20)),
+                "效果预览没有按 1–20 级显示。");
+            TestSupport.Assert(preview.Rows.Cast<DataGridViewRow>().Select(row => Convert.ToInt32(row.Cells[1].Value))
+                    .SequenceEqual(draft.Preview(boundSlot.Id).Select(row => row.Value)),
+                "效果预览与草稿真实值不一致。");
             var selected = draft.Slots.First();
             var beforeRules = selected.Stages.ToList();
             transform.AddForSmokeTest.PerformClick(); Pump();
             TestSupport.Assert(draft.HasRuleChanges && workspace.Commands.CanUndo, "质变新增没有进入可撤销草稿。");
+            TestSupport.Assert(draft.Slots.First(slot => slot.Id == selected.Id).Stages.Count == 1,
+                "原版默认行被当成自定义规则写入草稿。");
+            draft.SetRules(selected.Id, []); Pump();
+            TestSupport.Assert(transform.NativeRuleCountForSmokeTest == expectedNative.Count,
+                "清除自定义规则后原版默认行没有恢复。");
+            draft.SetRules(selected.Id, [new RuleStage(5, 17)]); Pump();
+            TestSupport.Assert(transform.PreviewForSmokeTest.Rows.Cast<DataGridViewRow>()
+                    .Single(row => Convert.ToInt32(row.Cells[0].Value) == 5).Cells[1].Value?.ToString() == "17",
+                "效果预览没有随草稿规则更新。");
             draft.SetRules(selected.Id, [new RuleStage(5, 17), new RuleStage(9, 23)]); Pump();
             workspace.Commands.Undo(); workspace.Commands.Redo();
             TestSupport.Assert(draft.Slots.First(slot => slot.Id == selected.Id).Stages.Count == 2, "规则撤销重做未恢复模型。");

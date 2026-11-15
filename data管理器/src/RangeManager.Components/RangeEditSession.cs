@@ -446,11 +446,13 @@ public sealed class RangeEditSession : IDisposable
                         throw new InvalidDataException($"{binding.Key} 共 {cells.Count} 个额外坐标；当前原生缓冲仅允许最多 24 个额外坐标（另预留主目标）");
                 }
                 using var tiles = _previewImages.CreateFixedPixelTiles();
-                CellOffset? targetMarker = binding.Key.Kind == RangeKind.Pierce && binding.Center == RangeCenterMode.Target
-                    ? RangePreviewContext.Default.Target : null;
+                var iconContext = RangePreviewContext.Canonical;
+                bool targetCentered = binding.Key.Kind == RangeKind.Pierce &&
+                    binding.Center == RangeCenterMode.Target;
+                CellOffset? targetMarker = targetCentered ? iconContext.Target : null;
                 using var icon = RangeBitmapRenderer.RenderIconFromTiles(binding.Key.Kind,
-                    NativeRangeCatalog.Expand(binding, RangePreviewContext.Default).ToArray(),
-                    targetMarker, tiles);
+                    NativeRangeCatalog.Expand(binding, iconContext).ToArray(),
+                    targetMarker, tiles, showOwnCell: !targetCentered);
             }
             catch (Exception ex) when (ex is InvalidDataException or FormatException or OverflowException or ArgumentException)
             {
@@ -469,6 +471,21 @@ public sealed class RangeEditSession : IDisposable
         AcceptSaved();
     }
 
+    /// <summary>
+    /// Rebuilds the managed runtime block even when the user changed nothing.
+    /// This migrates legacy CCZRNG02 handlers (missing HandlerContract) to the
+    /// current cursor/dedup contract and installs/refreshes the pierce hook.
+    /// Returns false when the block is already current and the draft is clean.
+    /// </summary>
+    public bool RebuildRuntimeBlock(bool force = false)
+    {
+        if (!force && !ManagedRangeRuntime.NeedsHandlerRebuild(Game) && !IsDirty) return false;
+        var candidate = PrepareSaveCandidate();
+        RangeSaveTransaction.Commit(Game.RootPath, candidate.Files, candidate.ExpectedHashes);
+        ReloadFromDisk();
+        return true;
+    }
+
     public void VerifyBaselineFiles()
     {
         foreach (string name in new[] { "Hitarea.e5", "Effarea.e5", "Spalet.e5" })
@@ -484,7 +501,7 @@ public sealed class RangeEditSession : IDisposable
            _diskHashes.All(pair => RangeSaveTransaction.Hash(pair.Key) == pair.Value);
 
     /// <summary>Builds owned candidates only; the workspace owns the eventual multi-file transaction.</summary>
-    public RangeSaveCandidate PrepareSaveCandidate()
+    public RangeSaveCandidate PrepareSaveCandidate(bool trace = false)
     {
         Validate();
         VerifyBaselineFiles();
@@ -495,7 +512,7 @@ public sealed class RangeEditSession : IDisposable
         byte[] Build(byte[] input)
         {
             using var game = new GameBase(root, input);
-            return ManagedRangeRuntime.Build(game, bindings, extension?.Clone());
+            return ManagedRangeRuntime.Build(game, bindings, extension?.Clone(), trace);
         }
         // The runtime builder owns both the range definitions and the
         // CCZRNG03 mapping transaction. Passing the dirty mapping here keeps
@@ -508,11 +525,13 @@ public sealed class RangeEditSession : IDisposable
         foreach (var binding in _bindings.Where(b => b.IsModified))
         {
             using var tiles = images.CreateFixedPixelTiles();
-            CellOffset? targetMarker = binding.Key.Kind == RangeKind.Pierce && binding.Center == RangeCenterMode.Target
-                ? RangePreviewContext.Default.Target : null;
+            var iconContext = RangePreviewContext.Canonical;
+            bool targetCentered = binding.Key.Kind == RangeKind.Pierce &&
+                binding.Center == RangeCenterMode.Target;
+            CellOffset? targetMarker = targetCentered ? iconContext.Target : null;
             using var icon = RangeBitmapRenderer.RenderIconFromTiles(binding.Key.Kind,
-                NativeRangeCatalog.Expand(binding, RangePreviewContext.Default).ToArray(),
-                targetMarker, tiles);
+                NativeRangeCatalog.Expand(binding, iconContext).ToArray(),
+                targetMarker, tiles, showOwnCell: !targetCentered);
             images.SetIcon(binding.Key.Kind == RangeKind.Attack, binding.Key.Id, icon);
         }
         foreach (var (path, bytes) in images.BuildPendingFiles()) files.Add(path, bytes);
@@ -588,6 +607,39 @@ public sealed class RangeEditSession : IDisposable
                     text.AppendLine($"新增{(kind == RangeKind.Attack ? "攻击" : "穿透")}范围：不可用；{addError}");
             foreach (var binding in _bindings.Where(b => !b.Editable && b.ReadOnlyReason.Length != 0))
                 text.AppendLine($"{binding.Key}：{binding.ReadOnlyReason}");
+            if (ManagedRangeRuntime.NeedsHandlerRebuild(Game))
+                text.AppendLine("当前 EXE 含旧版穿透处理器或预览契约；保存任意范围修改会自动重建为全编号受管预览。");
+            if (_bindings.Any(b => b.Key.Kind == RangeKind.Pierce && (b.IsManaged || b.IsModified)))
+                text.AppendLine("受管穿透由运行时 Hook 接管；目标中心范围会随鼠标显示绿色预览，命中仍只作用于有单位的格子。");
+            if (_bindings.Any(b => b.Key.Kind == RangeKind.Pierce && b.Editable))
+                text.AppendLine("原生穿透也会进入受管鼠标跟随预览；执行仍按原生命中/修改后的定义。");
+            var runtimeState = ManagedRangeRuntime.ReadState(Game);
+            if (Game.Version is EngineVersion.V64 or EngineVersion.V65)
+            {
+                if (runtimeState?.UnitCaptureContract == ManagedRangeRuntime.PreviewUnitCaptureContract)
+                    text.AppendLine("6.4/6.5 预览：镜像/方向/自身中心均受管（单位指针已捕获）。");
+                else if (runtimeState?.UnitCaptureContract == ManagedRangeRuntime.PreviewUnitCaptureUnavailable)
+                    text.AppendLine("6.4/6.5 预览：单位指针捕获入口被占用，方向/自身中心保留原生；镜像目标中心仍受管。");
+                else
+                    text.AppendLine("6.4/6.5 预览：镜像目标中心；方向/自身中心将在保存或重建后自动升级。");
+            }
+            else if (Game.Version == EngineVersion.V66)
+            {
+                text.AppendLine("6.6 预览：镜像/方向/自身中心均受管。");
+            }
+            if (runtimeState != null &&
+                runtimeState.Bindings.Any(b => b.Key.Kind == RangeKind.Pierce && b.IsManaged))
+            {
+                if (runtimeState.PreviewContract == ManagedRangeRuntime.PreviewHandlerContract)
+                    text.AppendLine(Game.Version == EngineVersion.V66 ||
+                        runtimeState.UnitCaptureContract == ManagedRangeRuntime.PreviewUnitCaptureContract
+                        ? "预览契约：全编号受管（含原生穿透，已安装）。"
+                        : "预览契约：镜像目标中心（已安装）。");
+                else if (runtimeState.PreviewContract == ManagedRangeRuntime.PreviewUnavailableContract)
+                    text.AppendLine("预览契约：基底预览入口已被其他补丁占用，保留原生预览。");
+                else
+                    text.AppendLine("预览契约：检测到旧版预览契约，保存或“重建运行时”会自动升级。");
+            }
             text.AppendLine("预览由 EXE 几何生成；E5 仅为同步输出。穿透额外坐标预算为 24，主目标另预留 1。");
             return text.ToString();
         }

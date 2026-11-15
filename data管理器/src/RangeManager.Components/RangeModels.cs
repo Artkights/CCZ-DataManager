@@ -59,10 +59,24 @@ public sealed class RangeBinding
     public override string ToString() => $"{Key.Id:D2}  (0x{Key.Id:X2})  {Name}{(IsModified ? " *" : "")}";
 }
 
-public readonly record struct RangePreviewContext(CellOffset Target)
+public readonly record struct RangePreviewContext(CellOffset Target, CellOffset? Facing = null)
 {
     public static RangePreviewContext Default => new(new CellOffset(1, 0));
+
+    /// <summary>
+    /// Canonical editor/icon view: the active origin (own or target) sits at
+    /// (0,0) and generators use the default +X facing. E5 icons are rendered
+    /// with this context so they match the default range-page preview.
+    /// </summary>
+    public static RangePreviewContext Canonical => new(new CellOffset(0, 0), new CellOffset(1, 0));
     public CellOffset Self => new(0, 0);
+
+    /// <summary>
+    /// Direction basis for directional and side-pair groups. The editor may
+    /// supply an explicit facing while keeping the placement origin at (0,0);
+    /// native callers leave it null and keep using Target as before.
+    /// </summary>
+    public CellOffset Heading => Facing ?? Target;
 }
 
 public static class RangeModelCopies

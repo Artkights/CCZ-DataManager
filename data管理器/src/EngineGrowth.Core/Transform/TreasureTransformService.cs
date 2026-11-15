@@ -67,6 +67,16 @@ public sealed class TreasureTransformService
     {
         var slot = Find(effectId);
         int baseValue = slot?.Refs.FirstOrDefault()?.EffectValue ?? 0;
+        return Preview(effectId, stages, coverage, extraMode, maxLevel, baseValue);
+    }
+
+    /// <summary>
+    /// 使用调用方提供的初始特效值预览；主工作区用它读取未保存的宝物修改，
+    /// 避免 <see cref="Find"/> 返回加载时的旧引用。
+    /// </summary>
+    public IReadOnlyList<PreviewRow> Preview(int effectId, IReadOnlyList<RuleStage> stages,
+        byte coverage, ExtraMode extraMode, int maxLevel, int baseValue)
+    {
         var rows = new List<PreviewRow>();
         for (int level = 1; level <= maxLevel; level++)
         {

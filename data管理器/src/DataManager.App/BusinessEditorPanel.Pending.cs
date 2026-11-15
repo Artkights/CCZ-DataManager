@@ -74,7 +74,9 @@ public sealed partial class BusinessEditorPanel
     public void AcceptSavedChanges()
     {
         if (_accessoryGroupDraft != null) _accessoryGroupDraft.Reset(new AccessoryJobGroupService().Read(_workspace));
-        _accessoryDraftRefresh?.Invoke(); NotifyPendingChanges();
+        _accessoryDraftRefresh?.Invoke();
+        AcceptStrategyJobModifierSaved();
+        NotifyPendingChanges();
     }
 
     public void DiscardPendingChanges()
@@ -85,6 +87,7 @@ public sealed partial class BusinessEditorPanel
             _extendEditor?.DiscardPendingChanges();
             _extendEditor?.ResetProject();
             _accessoryGroupDraft = null; _accessoryDraftRefresh = null;
+            DiscardStrategyJobModifierDraft();
             _flushers.Clear(); _pendingChecks.Clear(); _entityRebinders.Clear(); _resourcePickerRefreshers.Clear();
             _compactLayoutSignature = null; _refreshItemPermissions = null;
             _errors.Clear(); _status.Visible = false;

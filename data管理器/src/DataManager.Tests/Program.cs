@@ -79,6 +79,16 @@ internal static class Program
                 StrategyEffectUiTests.Run(Path.GetFullPath(args[1]));
                 return 0;
             }
+            if (args.FirstOrDefault() == "--strategy-job-modifier-core" && args.Length >= 2)
+            {
+                StrategyJobModifierTests.Run(Path.GetFullPath(args[1]));
+                return 0;
+            }
+            if (args.FirstOrDefault() == "--strategy-job-modifier-ui" && args.Length >= 2)
+            {
+                StrategyJobModifierUiTests.Run(Path.GetFullPath(args[1]));
+                return 0;
+            }
             if (args.FirstOrDefault() == "--strategy-workbooks" && args.Length >= 2)
             {
                 StrategyWorkbookTests.Run(Path.GetFullPath(args[1]));

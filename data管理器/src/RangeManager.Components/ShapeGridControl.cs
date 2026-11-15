@@ -25,7 +25,24 @@ public sealed class ShapeGridControl : Control
     private int _columns = 9, _rows = 9, _cellSize = 20;
     private readonly ToolTip _tip = new();
     private CellOffset? _hover;
+    private bool _showOwnCell = true;
     public CellOffset? TargetMarker { get; set; }
+
+    /// <summary>
+    /// Target-centred Pierce previews use the target as their reference point,
+    /// so the blue origin cell would misleadingly depict the attacker. The
+    /// editor hides it there while icon output keeps the native blue cell.
+    /// </summary>
+    public bool ShowOwnCell
+    {
+        get => _showOwnCell;
+        set
+        {
+            if (_showOwnCell == value) return;
+            _showOwnCell = value;
+            Invalidate();
+        }
+    }
 
     public bool Editable { get; set; }
     public bool ShowingImage => false;
@@ -109,7 +126,8 @@ public sealed class ShapeGridControl : Control
         e.Graphics.PixelOffsetMode = PixelOffsetMode.None;
         var layout = GridLayout;
         var bounds = layout.Bounds;
-        RangeBitmapRenderer.Draw(e.Graphics, layout, _attack, _pierce, TargetMarker, tiles: _tiles);
+        RangeBitmapRenderer.Draw(e.Graphics, layout, _attack, _pierce, TargetMarker, tiles: _tiles,
+            showOwnCell: _showOwnCell);
         using var hoverPen = new Pen(Color.White) { DashStyle = DashStyle.Dot };
         foreach (var cell in _hoverCells)
         {

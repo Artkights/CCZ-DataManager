@@ -103,7 +103,7 @@
     },
     {
       "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-character-adaptation-table.json",
-      "sha256": "6345527EB87A9B236A8AE107455F6471AAB25ACD6C1D355866A461858F0363DF"
+      "sha256": "2EB321DDDD3C565F5551EC0C5C63B7AE5722BB9148E65C304D0E4572F9804190"
     },
     {
       "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-color-palette.json",
@@ -231,7 +231,7 @@
     },
     {
       "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-job-attribute-matrix.json",
-      "sha256": "DE86C7B02C1A552AF51F49A983A5E08F732FAAE82D2C6F3BDCC15D67828B60EF"
+      "sha256": "744C06305F0FB23B4F7A3A81D1986A20483D75797684783021CB7B64C8BA219B"
     },
     {
       "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-job-penetration.json",
@@ -263,7 +263,7 @@
     },
     {
       "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-money-global.json",
-      "sha256": "A26E86C0C4D7C7DEB6BB1FA9D71C81A48770B8F4CB993F923FC9BDB1EDFDBCA1"
+      "sha256": "B53D858F709074DAAEFB10BD633320C6D1C1BAE9111D7913FCA4A67432CE8B79"
     },
     {
       "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-movement-terrain.json",
@@ -275,7 +275,7 @@
     },
     {
       "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-payment-chain.json",
-      "sha256": "625C07A0ED3B7DCAEED377A6EE4D8CE2D81AB25BAF053C379977C311F2B337A7"
+      "sha256": "B8B046750DACDEE5E8F21C61BE1794ECA8B1C0B91B0A12DB9768C5D054D5D97F"
     },
     {
       "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-personal-exp-cross-base.json",
@@ -363,7 +363,7 @@
     },
     {
       "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-strategy-direction-weather.json",
-      "sha256": "FD7A7B51C8A4F6313A493EA4E507865DB7F344CC378870BAC086D8FF81CECB3B"
+      "sha256": "24335AEEC7540C7D7BB72C670CF31749E0398B34E07A8FDC252399D76FD47907"
     },
     {
       "path": "Knowledge-base-for-CCZ-mod/6.5/data/mechanisms/engine-table-506800.json",

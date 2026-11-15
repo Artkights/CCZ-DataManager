@@ -128,11 +128,13 @@ public sealed class WorkspaceRangeCatalog : IDisposable
                 {
                     workerToken.ThrowIfCancellationRequested();
                     using var tiles = FixedRangePixelTemplate.Create();
-                    var context = RangePreviewContext.Default;
-                    CellOffset? target = binding.Key.Kind == RangeKind.Pierce && binding.Center == RangeCenterMode.Target
-                        ? context.Target : null;
+                    var context = RangePreviewContext.Canonical;
+                    bool targetCentered = binding.Key.Kind == RangeKind.Pierce &&
+                        binding.Center == RangeCenterMode.Target;
+                    CellOffset? target = targetCentered ? context.Target : null;
                     return RangeBitmapRenderer.RenderIconFromTiles(binding.Key.Kind,
-                        NativeRangeCatalog.Expand(binding, context).ToArray(), target, tiles);
+                        NativeRangeCatalog.Expand(binding, context).ToArray(), target, tiles,
+                        showOwnCell: !targetCentered);
                 }, result => result.Dispose(), token).ConfigureAwait(false);
             }
             else

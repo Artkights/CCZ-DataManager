@@ -35,10 +35,11 @@ public sealed class RangeEditorPanel : UserControl, IEditorViewLifecycle
     private readonly NumericUpDown _columns = Number(7, 511, 9);
     private readonly NumericUpDown _rows = Number(7, 511, 9);
     private readonly NumericUpDown _pixels = Number(16, 64, 20);
-    private readonly NumericUpDown _targetX = Number(-31, 31, 1);
+    private readonly NumericUpDown _targetX = Number(-31, 31, 0);
     private readonly NumericUpDown _targetY = Number(-31, 31, 0);
     private readonly Button _apply = ManagerUiStyle.CreateButton("应用生成元");
     private readonly Button _restore = ManagerUiStyle.CreateButton("恢复本项");
+    private readonly Button _rebuild = ManagerUiStyle.CreateButton("重建运行时");
     private readonly Button _add = ManagerUiStyle.CreateButton("新增");
     private readonly Button _delete = ManagerUiStyle.CreateButton("删除");
     private readonly Button _edit = ManagerUiStyle.CreateButton("修改");
@@ -87,7 +88,18 @@ public sealed class RangeEditorPanel : UserControl, IEditorViewLifecycle
     public Label CenterHintForTest => _centerHint;
     public Label CenterFixedLabelForTest => _centerFixed;
     private int GroupIndex => Math.Max(0, _groups.SelectedIndex);
-    private RangePreviewContext Context => new(new CellOffset((int)_targetX.Value, (int)_targetY.Value));
+    private RangePreviewContext Context
+    {
+        get
+        {
+            var facing = new CellOffset((int)_targetX.Value, (int)_targetY.Value);
+            // The preview always anchors the active origin (own or target) at
+            // (0,0); X/Y only select the generator facing. A coincident origin
+            // keeps the historical +X basis so generators read literally.
+            if (facing is { Dx: 0, Dy: 0 }) facing = new CellOffset(1, 0);
+            return new RangePreviewContext(new CellOffset(0, 0), facing);
+        }
+    }
 
     private static NumericUpDown Number(int min, int max, int value) => new()
     {
@@ -131,7 +143,7 @@ public sealed class RangeEditorPanel : UserControl, IEditorViewLifecycle
         {
             _center.Items.AddRange([CenterName(RangeCenterMode.Target), CenterName(RangeCenterMode.Self)]);
             AddField(options, "展开中心", _center);
-            AddField(options, "预览目标 X", _targetX);
+            AddField(options, "生成元朝向 X", _targetX);
             AddField(options, "Y", _targetY);
         }
         else
@@ -147,7 +159,7 @@ public sealed class RangeEditorPanel : UserControl, IEditorViewLifecycle
         editor.Controls.Add(new Label { Text = "生成元（dx,dy; …）", AutoSize = true, Padding = new Padding(0, 3, 0, 0) });
         editor.Controls.Add(_text);
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, WrapContents = true, Padding = new Padding(0, 4, 0, 0) };
-        buttons.Controls.AddRange([_apply, _restore]);
+        buttons.Controls.AddRange([_apply, _restore, _rebuild]);
         editor.Controls.Add(buttons);
         editor.Controls.Add(_aliases);
         editor.Controls.Add(_error);
@@ -315,14 +327,28 @@ public sealed class RangeEditorPanel : UserControl, IEditorViewLifecycle
             });
         };
         _restore.Click += (_, _) => Run(() => { if (_selected != null) _session?.Restore(_selected.Value); });
+        _rebuild.Click += (_, _) => Run(() =>
+        {
+            if (_session == null) return;
+            if (MessageBox.Show(
+                    "将重建当前基底的穿透运行时钩子并写入 EXE，是否继续？",
+                    "重建运行时", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+                return;
+            bool rebuilt = _session.RebuildRuntimeBlock();
+            RefreshSelection();
+            RefreshBindings();
+            _hint.Text = rebuilt
+                ? "运行时钩子已重建；请重启游戏后验证穿透预览。"
+                : "当前运行时钩子已是最新，无需重建。";
+        });
         _delete.Click += (_, _) => Run(() => { if (_selected != null) _session?.Delete(_selected.Value); });
         _edit.Click += (_, _) => { _text.Focus(); _text.SelectAll(); };
         if (_kind == RangeKind.Pierce)
         {
-            AddPierceMenuItem("目标中心 · 镜像", RangeGeometryKind.Mirror, RangeCenterMode.Target);
-            AddPierceMenuItem("目标中心 · 方向", RangeGeometryKind.Directional, RangeCenterMode.Target);
-            AddPierceMenuItem("自身中心 · 镜像", RangeGeometryKind.Mirror, RangeCenterMode.Self);
-            AddPierceMenuItem("自身中心 · 方向", RangeGeometryKind.Directional, RangeCenterMode.Self);
+            AddPierceMenuItem("目标中心 · 镜像（8向对称）", RangeGeometryKind.Mirror, RangeCenterMode.Target);
+            AddPierceMenuItem("目标中心 · 方向（非对称）", RangeGeometryKind.Directional, RangeCenterMode.Target);
+            AddPierceMenuItem("自身中心 · 镜像（8向对称）", RangeGeometryKind.Mirror, RangeCenterMode.Self);
+            AddPierceMenuItem("自身中心 · 方向（非对称）", RangeGeometryKind.Directional, RangeCenterMode.Self);
         }
         _add.Click += (_, _) =>
         {
@@ -460,8 +486,16 @@ public sealed class RangeEditorPanel : UserControl, IEditorViewLifecycle
             string baseAddHint = addError.Length == 0 ? "" : "当前基底不能新增此类范围：" + addError;
             _hint.Text = binding == null ? baseAddHint : !binding.Editable ? binding.ReadOnlyReason + (baseAddHint.Length == 0 ? "" : " " + baseAddHint) :
                 !hasGroup ? "此编号为引擎保留语义，没有可编辑的几何生成元。" :
-                $"左键选中，右键取消；{(binding.Center == RangeCenterMode.Self ? "以自身展开" : "以主目标展开")}。" +
+                $"左键选中，右键取消；{(binding.Center == RangeCenterMode.Self ? "以自身蓝格为 0,0" : "以目标红格为 0,0")}，" +
+                "X/Y 为生成元朝向（0,0 按 +X）。" +
                 (string.IsNullOrWhiteSpace(binding.Special) ? "" : " " + binding.Special) +
+                (binding.Key.Kind == RangeKind.Pierce
+                    ? (binding.Definition.Groups.Any(g => g.Geometry == RangeGeometryKind.Mirror)
+                        ? " 镜像生成元会扩展为8向对称。" : "") +
+                      (binding.Definition.Groups.Any(g => g.Geometry == RangeGeometryKind.Directional)
+                        ? " 方向生成元为非对称，按单位→光标方向旋转。" : "") +
+                      " 受管穿透的游戏内预览会随鼠标重绘。"
+                    : "") +
                 (baseAddHint.Length == 0 ? "" : " " + baseAddHint);
             _preview.Editable = binding?.Editable == true && hasGroup && string.IsNullOrEmpty(_error.Text);
             _preview.SetHoverCells([]);
@@ -495,6 +529,7 @@ public sealed class RangeEditorPanel : UserControl, IEditorViewLifecycle
     {
         if (_session == null || _selected == null)
         {
+            _preview.ShowOwnCell = true;
             _preview.SetLayers([], []);
             _preview.SetGrid(9, 9);
             FitCanvas();
@@ -531,6 +566,10 @@ public sealed class RangeEditorPanel : UserControl, IEditorViewLifecycle
                 _preview.SetGrid(side, side, (int)_pixels.Value);
             }
             finally { _binding = false; }
+            // The target-centred Pierce grid is anchored on the target; the
+            // origin cell would show the attacker in the wrong place. Keep the
+            // blue origin only for self-centred ranges and attack previews.
+            _preview.ShowOwnCell = !(_kind == RangeKind.Pierce && binding.Center == RangeCenterMode.Target);
             _preview.SetLayers(_kind == RangeKind.Attack ? cells : [], _kind == RangeKind.Pierce ? cells : [], tiles: _tiles);
             FitCanvas();
         }

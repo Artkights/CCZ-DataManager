@@ -40,6 +40,7 @@ public sealed partial class MainForm
         panel.Edited += (_, _) => { RefreshDirtyState(); QueueQueryRefresh(); };
         panel.PendingChangesChanged += (_, _) => RefreshDirtyState();
         panel.SaveRequested += (_, _) => SaveProject();
+        panel.StrategyJobModifierApply = StageStrategyJobModifier;
         panel.SImageLocationRequested += LocatePersonSImage;
         panel.PersonImageLocationRequested += LocatePersonImage;
         // Category changes already emit QueryScopeChanged after the detail render.

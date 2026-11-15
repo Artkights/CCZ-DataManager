@@ -9,8 +9,8 @@
     <AssemblyName>攻击穿透范围管理器</AssemblyName>
     <RootNamespace>RangeManager.App</RootNamespace>
     <ApplicationIcon>..\DataManager.App\Assets\About\Doro-white.ico</ApplicationIcon>
-    <Version>1.2026.1111.1</Version>
-    <InformationalVersion>1.2026.1111.1</InformationalVersion>
+    <Version>1.2026.1114.10</Version>
+    <InformationalVersion>1.2026.1114.10</InformationalVersion>
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="..\DataManager.App\Assets\About\Doro-white.ico" LogicalName="RangeManager.App.Doro-white.ico" />

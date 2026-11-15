@@ -1067,6 +1067,7 @@ public sealed partial class BusinessEditorPanel
             learningColumns.Controls.Add(EntityMatrix($"兵种 {column * 20}–{column * 20 + 19}（0 为不学习）", learningFields.Skip(column * 20).Take(20)), column, 0);
         FitLearningPage(learning, learningColumns);
         BuildTerrainPage();
+        AddStrategyJobModifierTab();
     }
 
     private void BuildTerrainPage()

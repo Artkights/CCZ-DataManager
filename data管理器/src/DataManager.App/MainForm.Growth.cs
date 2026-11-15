@@ -11,6 +11,9 @@ public sealed partial class MainForm : IWorkspaceDraftParticipant
     private readonly EngineTransformPanel _transformPanel = new() { Visible = false };
     private EngineGrowthDraftService? _growthDraft;
     private readonly Dictionary<string, EngineConstantEdit> _constantDraft = new(StringComparer.Ordinal);
+    private WorkspaceBinaryCandidate? _strategyJobModifierCandidate;
+    private StrategyJobModifierApplyRequest? _strategyJobModifierRequest;
+    private string? _strategyJobModifierSourceHash;
     private string? _constantDraftSourceHash;
     private int? _selectedTransform;
     private bool _populatingTransform;
@@ -124,6 +127,45 @@ public sealed partial class MainForm : IWorkspaceDraftParticipant
         }
     }
 
+    private bool StageStrategyJobModifier(StrategyJobModifierApplyRequest request)
+    {
+        try
+        {
+            var candidate = new DataManager.Core.Scanner.StrategyJobModifierService()
+                .BuildCandidate(_workspace, request.Rules, request.InstallHook, request.BuiltIn);
+            var sourceHash = HashService.Sha256(candidate.BeforeBytes);
+            if (_strategyJobModifierSourceHash != null && _strategyJobModifierSourceHash != sourceHash)
+                throw new IOException("Ekd5.exe 在策略专项编辑后被外部修改，请重新读取项目。");
+            _strategyJobModifierSourceHash = sourceHash;
+            _strategyJobModifierCandidate = candidate;
+            _strategyJobModifierRequest = request;
+            _workspace.Commands.Push(new DelegateEditCommand("编辑策略专项规则",
+                () =>
+                {
+                    _strategyJobModifierCandidate = null;
+                    _strategyJobModifierRequest = null;
+                    _strategyJobModifierSourceHash = null;
+                    RefreshDirtyState();
+                },
+                () =>
+                {
+                    _strategyJobModifierCandidate = candidate;
+                    _strategyJobModifierRequest = request;
+                    _strategyJobModifierSourceHash = sourceHash;
+                    RefreshDirtyState();
+                }));
+            _workspace.RegisterDraftParticipant(this);
+            RefreshDirtyState();
+            SetStatus("策略专项规则已加入草稿；顶部保存统一提交。");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            SetStatus(ex.Message, true);
+            return false;
+        }
+    }
+
     private bool StageConstant(EngineConstantEdit edit)
     {
         var before = _constantDraft.GetValueOrDefault(edit.Id);
@@ -145,7 +187,8 @@ public sealed partial class MainForm : IWorkspaceDraftParticipant
         catch (Exception ex) { SetStatus(ex.Message, true); return false; }
     }
 
-    bool IWorkspaceDraftParticipant.HasPendingChanges => HasAnyEngineChanges || _constantDraft.Count > 0 || _battleFormulaPanel.HasPendingChanges;
+    bool IWorkspaceDraftParticipant.HasPendingChanges => HasAnyEngineChanges || _constantDraft.Count > 0
+        || _battleFormulaPanel.HasPendingChanges || _strategyJobModifierCandidate != null;
 
     private IReadOnlyList<WorkspaceBinaryCandidate> BuildIntegratedCandidates()
     {
@@ -171,6 +214,8 @@ public sealed partial class MainForm : IWorkspaceDraftParticipant
                 throw new IOException("Ekd5.exe 在常量编辑后被外部修改，请重新读取项目。");
             candidates.Add(constantCandidate);
         }
+        if (_strategyJobModifierCandidate != null)
+            candidates.Add(_strategyJobModifierCandidate);
         if (candidates.Count > 0 && EngineEffectWriteService.IsGameRunning(_workspace))
             throw new IOException("游戏正在运行，请先退出游戏再保存引擎修改。");
         return EngineEffectTransactionService.MergeCandidates(candidates);
@@ -207,6 +252,9 @@ public sealed partial class MainForm : IWorkspaceDraftParticipant
     {
         _constantDraft.Clear();
         _constantDraftSourceHash = null;
+        _strategyJobModifierCandidate = null;
+        _strategyJobModifierRequest = null;
+        _strategyJobModifierSourceHash = null;
         _constantPanel.SetPendingEdits(_constantDraft);
         _engineDetail.DiscardPendingChanges(); DiscardEngineAssignmentChanges();
         _battleFormulaPanel.DiscardPendingChanges();
@@ -224,10 +272,16 @@ public sealed partial class MainForm : IWorkspaceDraftParticipant
         var jobTargets = assignments?.JobTargets.Select(pair => new KeyValuePair<string, EngineEffectJobSlot[]>(pair.Key, pair.Value.ToArray())).ToArray();
         var values = assignments?.ItemValues.ToArray(); var selectors = assignments?.ItemSelectorTargets.ToArray();
         var specials = assignments?.SpecialItemIds.ToArray(); var prepared = _enginePreparedAssignments.ToArray();
+        var strategyCandidate = _strategyJobModifierCandidate;
+        var strategyRequest = _strategyJobModifierRequest;
+        var strategyHash = _strategyJobModifierSourceHash;
         return () =>
         {
             _constantDraft.Clear(); foreach (var pair in constants) _constantDraft.Add(pair.Key, pair.Value);
             _constantDraftSourceHash = constantHash; _constantPanel.SetPendingEdits(_constantDraft);
+            _strategyJobModifierCandidate = strategyCandidate;
+            _strategyJobModifierRequest = strategyRequest;
+            _strategyJobModifierSourceHash = strategyHash;
             detail(); formula(); _engineAssignmentDraft = assignments;
             if (assignments != null)
             {
@@ -243,6 +297,8 @@ public sealed partial class MainForm : IWorkspaceDraftParticipant
         };
     }
 
+    internal bool StageStrategyJobModifierForSmokeTest(StrategyJobModifierApplyRequest request)
+        => StageStrategyJobModifier(request);
     internal EngineTransformPanel TransformForSmokeTest => _transformPanel;
     internal EngineGrowthDraftService GrowthForSmokeTest => EnsureGrowthDraft();
     internal bool CommitIntegratedForSmokeTest() => CommitPendingEdits().Saved;

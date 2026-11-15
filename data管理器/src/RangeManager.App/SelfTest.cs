@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -35,6 +36,15 @@ public static class SelfTest
         string mode = args[0].ToLowerInvariant();
         if (mode == "--launch-smoke" && args.Length >= 2)
             return LaunchSmoke(args[1]);
+        if (mode == "--pierce-preview-smoke" && args.Length >= 2)
+            return PiercePreviewSmoke(args[1]);
+        if (mode == "--rebuild-runtime" && args.Length >= 2)
+            return RebuildRuntime(args[1],
+                args.Length >= 3 && args[2].Equals("force", StringComparison.OrdinalIgnoreCase));
+        if (mode == "--trace-pierce-preview" && args.Length >= 2)
+            return TracePiercePreview(args[1],
+                args.Length >= 3 && int.TryParse(args[2], out int wait) ? wait : 120,
+                args.Length >= 4 && args[3].Equals("keep", StringComparison.OrdinalIgnoreCase));
         var roots = new List<string>();
         if (mode == "--self-test-all")
         {
@@ -431,6 +441,313 @@ public static class SelfTest
         File.AppendAllText(Path.Combine(output, "launch-smoke.log"),
             $"== {root} @ {DateTime.Now:yyyy-MM-dd HH:mm:ss} ==\n{log}\n", new UTF8Encoding(false));
         return pass ? 0 : 1;
+    }
+
+    /// <summary>
+    /// Rebuilds the managed runtime block in place (legacy handler migration
+    /// or explicit hook refresh) and reports whether anything changed.
+    /// </summary>
+    private static int RebuildRuntime(string root, bool force)
+    {
+        try
+        {
+            using var session = new RangeEditSession(root);
+            bool rebuilt = session.RebuildRuntimeBlock(force);
+            Console.WriteLine(rebuilt ? "REBUILD_RUNTIME_OK" : "REBUILD_RUNTIME_CURRENT");
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("REBUILD_RUNTIME_FAILED " + ex);
+            return 1;
+        }
+    }
+
+    /// <summary>
+    /// Builds a trace-enabled copy, launches the game, waits for the tester to
+    /// perform a physical and a strategy pierce preview, then reads the
+    /// handler ring buffer from the live process and writes a JSON report.
+    /// </summary>
+    private static int TracePiercePreview(string root, int waitSeconds, bool keepTemp)
+    {
+        string temp = Path.Combine(Path.GetTempPath(), "ccz-pierce-trace-" + Guid.NewGuid().ToString("N"));
+        var report = new StringBuilder();
+        try
+        {
+            Directory.CreateDirectory(temp);
+            foreach (var file in Directory.GetFiles(root, "*", SearchOption.AllDirectories))
+            {
+                var relative = Path.GetRelativePath(root, file);
+                var target = Path.Combine(temp, relative);
+                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                if (Path.GetFileName(file).Equals("Ekd5.exe", StringComparison.OrdinalIgnoreCase) ||
+                    !CreateHardLink(target, file, IntPtr.Zero))
+                    File.Copy(file, target, overwrite: true);
+            }
+
+            using (var session = new RangeEditSession(temp))
+            {
+                // Prefer the custom 0x0D binding used by the current report;
+                // fall back to 05 on bases without it.
+                var preferred = new RangeKey(RangeKind.Pierce, 13);
+                var key = session.Bindings.Any(binding => binding.Key == preferred && binding.Editable)
+                    ? preferred : new RangeKey(RangeKind.Pierce, 5);
+                var binding = session.Get(key);
+                if (!binding.IsManaged && !binding.IsModified)
+                {
+                    string text = binding.Definition.Groups.Count > 0
+                        ? binding.Definition.Groups[0].Text : "1,0";
+                    if (!session.UpdateText(key, 0, text + "; 6,0", out string error))
+                        throw new InvalidDataException(error);
+                }
+                var candidate = session.PrepareSaveCandidate(trace: true);
+                RangeSaveTransaction.Commit(temp, candidate.Files, candidate.ExpectedHashes);
+            }
+
+            uint traceVa;
+            int capacity;
+            using (var game = new GameBase(temp))
+            {
+                var state = ManagedRangeRuntime.ReadState(game)
+                    ?? throw new InvalidDataException("未找到范围扩展区");
+                traceVa = state.TraceBufferVa;
+                capacity = state.TraceCapacity;
+            }
+            if (traceVa == 0)
+                throw new InvalidDataException("未生成 trace 缓冲区（没有受管穿透记录）");
+
+            var info = new System.Diagnostics.ProcessStartInfo(Path.Combine(temp, "Ekd5.exe"))
+            {
+                WorkingDirectory = temp,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            using var process = System.Diagnostics.Process.Start(info)
+                ?? throw new InvalidOperationException("无法启动 Ekd5.exe");
+            Console.WriteLine($"TRACE_READY buffer=0x{traceVa:X8} capacity={capacity}");
+            Console.WriteLine($"请在 {waitSeconds} 秒内完成：一次物理穿透攻击预览、一次带自定义穿透（如 13）的策略预览。");
+            Thread.Sleep(Math.Max(10, waitSeconds) * 1000);
+
+            // Some builds relaunch Ekd5.exe (launcher exits, real game keeps
+            // running). Never trust the Process.Start handle alone.
+            Process? live = null;
+            string expectedPath = Path.Combine(temp, "Ekd5.exe");
+            for (int attempt = 0; attempt < 20 && live == null; attempt++)
+            {
+                foreach (var candidate in Process.GetProcessesByName("Ekd5"))
+                {
+                    try
+                    {
+                        if (candidate.MainModule?.FileName.Equals(expectedPath, StringComparison.OrdinalIgnoreCase) == true)
+                        {
+                            live = candidate;
+                            break;
+                        }
+                    }
+                    catch { }
+                }
+                if (live == null) Thread.Sleep(500);
+            }
+
+            uint magic = 0;
+            int count = 0;
+            bool readOk = false;
+            int readError = 0;
+            string moduleBaseText = "";
+            int livePid = 0;
+            var records = new List<object>();
+            if (live != null)
+            {
+                live.Refresh();
+                livePid = live.Id;
+                if (!live.HasExited && live.MainModule != null)
+                {
+                    IntPtr baseAddress = live.MainModule.BaseAddress;
+                    moduleBaseText = $"0x{baseAddress.ToInt64():X8}";
+                    IntPtr handle = OpenProcess(0x0010, false, live.Id);
+                    if (handle != IntPtr.Zero)
+                    {
+                        try
+                        {
+                            IntPtr readBase = IntPtr.Add(baseAddress,
+                                checked((int)(traceVa - 0x00400000)));
+                            byte[] header = new byte[16];
+                            readOk = ReadProcessMemory(handle, readBase, header, header.Length, out _);
+                            if (readOk)
+                            {
+                                magic = BitConverter.ToUInt32(header, 0);
+                                count = BitConverter.ToInt32(header, 4);
+                                capacity = BitConverter.ToInt32(header, 8);
+                            }
+                            else
+                            {
+                                readError = System.Runtime.InteropServices.Marshal.GetLastWin32Error();
+                            }
+                            int readCount = Math.Clamp(count, 0, capacity);
+                            if (readOk && readCount > 0)
+                            {
+                                byte[] data = new byte[checked(readCount * 32)];
+                                IntPtr recordBase = IntPtr.Add(readBase, 16);
+                                if (ReadProcessMemory(handle, recordBase, data, data.Length, out _))
+                                {
+                                    for (int i = 0; i < readCount; i++)
+                                    {
+                                        int offset = i * 32;
+                                        records.Add(new
+                                        {
+                                            caller = $"0x{BitConverter.ToUInt32(data, offset):X8}",
+                                            code = data[offset + 4],
+                                            cursor = BitConverter.ToUInt32(data, offset + 8),
+                                            center = $"0x{BitConverter.ToUInt32(data, offset + 12):X8}",
+                                            owner = $"0x{BitConverter.ToUInt32(data, offset + 16):X8}",
+                                            filter = BitConverter.ToUInt32(data, offset + 20),
+                                            points = BitConverter.ToUInt32(data, offset + 24),
+                                            appended = BitConverter.ToInt32(data, offset + 28)
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                        finally { CloseHandle(handle); }
+                    }
+                }
+            }
+            try { live?.Kill(entireProcessTree: true); live?.WaitForExit(3000); } catch { }
+            try { process.Kill(entireProcessTree: true); process.WaitForExit(3000); } catch { }
+
+            var payload = new
+            {
+                buffer = $"0x{traceVa:X8}",
+                livePid,
+                moduleBase = moduleBaseText,
+                readOk,
+                readError,
+                magic = $"0x{magic:X8}",
+                count,
+                capacity,
+                waitSeconds,
+                records
+            };
+            string outputRoot = Path.Combine(FindBaseDirectory() is { } bases
+                ? Directory.GetParent(bases)!.FullName : AppContext.BaseDirectory,
+                "data管理器", "验证", "2026-11-14-穿透预览物理策略");
+            Directory.CreateDirectory(outputRoot);
+            string output = Path.Combine(outputRoot, "trace.json");
+            File.WriteAllText(output,
+                JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true }),
+                new UTF8Encoding(false));
+            report.AppendLine($"PIERCE_TRACE_OK buffer=0x{traceVa:X8} count={count} -> {output}");
+            if (keepTemp) report.AppendLine("TRACE_TEMP=" + temp);
+            Console.WriteLine(report.ToString());
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            report.AppendLine("PIERCE_TRACE_FAILED " + ex);
+            Console.WriteLine(report.ToString());
+            return 1;
+        }
+        finally
+        {
+            if (!keepTemp) try { Directory.Delete(temp, recursive: true); } catch { }
+        }
+    }
+
+    /// <summary>
+    /// Saves a real Pierce edit to a private copy, verifies the generated
+    /// dispatcher no longer rejects the engine's cursor 0/1/2 seeds, then
+    /// starts Ekd5.exe to prove the patched PE is loadable.
+    /// </summary>
+    private static int PiercePreviewSmoke(string root)
+    {
+        string? baseDir = FindBaseDirectory();
+        string tempRoot = baseDir != null
+            ? Path.Combine(Directory.GetParent(baseDir)!.FullName, "data管理器", ".tmp")
+            : Path.GetTempPath();
+        Directory.CreateDirectory(tempRoot);
+        string temp = Path.Combine(tempRoot, "range-pierce-preview-" + Guid.NewGuid().ToString("N"));
+        var log = new StringBuilder();
+        bool pass = false;
+        try
+        {
+            Directory.CreateDirectory(temp);
+            foreach (var file in Directory.GetFiles(root, "*", SearchOption.AllDirectories))
+            {
+                var relative = Path.GetRelativePath(root, file);
+                var target = Path.Combine(temp, relative);
+                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                if (Path.GetFileName(file).Equals("Ekd5.exe", StringComparison.OrdinalIgnoreCase) ||
+                    !CreateHardLink(target, file, IntPtr.Zero))
+                    File.Copy(file, target, overwrite: true);
+            }
+
+            RangeKey key;
+            using (var session = new RangeEditSession(temp))
+            {
+                key = session.Bindings.First(binding =>
+                    binding.Key.Kind == RangeKind.Pierce && binding.Editable).Key;
+                if (!session.UpdateText(key, 0, "1,0; 2,0", out string error))
+                    throw new InvalidDataException(error);
+                session.Save();
+            }
+
+            using (var game = new GameBase(temp))
+            {
+                if (ManagedRangeRuntime.NeedsHandlerRebuild(game))
+                    throw new InvalidDataException("保存后的 EXE 仍是旧穿透钩子契约");
+                var exe = game.Exe;
+                if (exe.ReadByte(0x00435CE9) != 0xE9)
+                    throw new InvalidDataException("穿透入口钩子未安装");
+                byte[] cursorCheck = [0x0F, 0xB6, 0x15, 0x7C, 0x0E, 0x50, 0x00, 0x83, 0xFA, 0x32, 0x0F, 0x87];
+                int at = FindBytes(exe.Bytes, cursorCheck, exe.VaToOffset(0x00435CE9) + 6);
+                if (at < 0) throw new InvalidDataException("未找到穿透处理器游标检查");
+                if (FindBytes(exe.Bytes, [0xF6, 0xC2, 0x01], at, at + 16) >= 0)
+                    throw new InvalidDataException("穿透处理器仍包含偶数游标限制");
+            }
+
+            var info = new System.Diagnostics.ProcessStartInfo(Path.Combine(temp, "Ekd5.exe"))
+            {
+                WorkingDirectory = temp,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            using var process = System.Diagnostics.Process.Start(info)
+                ?? throw new InvalidOperationException("无法启动 Ekd5.exe");
+            Thread.Sleep(3000);
+            process.Refresh();
+            if (process.HasExited) throw new InvalidDataException("Ekd5.exe 启动后退出");
+            log.AppendLine($"PASS  穿透 {key} 已保存为新钩子契约，Ekd5.exe 保持运行");
+            try { process.Kill(entireProcessTree: true); process.WaitForExit(3000); } catch { }
+            pass = true;
+        }
+        catch (Exception ex) { log.AppendLine("FAIL  " + ex); }
+        finally
+        {
+            try { Directory.Delete(temp, recursive: true); } catch { }
+        }
+        log.AppendLine(pass ? "PIERCE_PREVIEW_SMOKE_OK" : "PIERCE_PREVIEW_SMOKE_FAILED");
+        Console.WriteLine(log.ToString());
+        string output = baseDir != null
+            ? Path.Combine(Directory.GetParent(baseDir)!.FullName, "data管理器", "验证",
+                "2026-11-13-范围穿透预览修复")
+            : Path.Combine(AppContext.BaseDirectory, "验证", "2026-11-13-范围穿透预览修复");
+        Directory.CreateDirectory(output);
+        File.AppendAllText(Path.Combine(output, "pierce-preview-smoke.log"),
+            $"== {root} @ {DateTime.Now:yyyy-MM-dd HH:mm:ss} ==\n{log}\n", new UTF8Encoding(false));
+        return pass ? 0 : 1;
+    }
+
+    private static int FindBytes(byte[] data, byte[] pattern, int start, int? end = null)
+    {
+        int limit = Math.Min(end ?? data.Length, data.Length) - pattern.Length;
+        for (int i = Math.Max(0, start); i <= limit; i++)
+        {
+            bool match = true;
+            for (int j = 0; j < pattern.Length; j++)
+                if (data[i + j] != pattern[j]) { match = false; break; }
+            if (match) return i;
+        }
+        return -1;
     }
 
     private static bool ReadSegmentOk(PeFile exe, uint va)

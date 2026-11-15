@@ -138,6 +138,42 @@ public sealed class EngineGrowthDraftService : IWorkspaceDraftParticipant
         _catalog = ReadCatalog(); RebuildSlots(); Changed?.Invoke(this, EventArgs.Empty);
     }
 
+    public const int PreviewMaxLevel = 20;
+
+    /// <summary>当前草稿（含未保存规则）在 1–20 级的真实特效值。</summary>
+    public IReadOnlyList<PreviewRow> Preview(int effectId)
+    {
+        if (_transform == null) return [];
+        var slot = _slots.FirstOrDefault(slot => slot.Id == effectId);
+        if (slot == null) return [];
+        var stages = _rules.TryGetValue(effectId, out var rules) ? rules : [];
+        int baseValue = slot.Refs.FirstOrDefault()?.EffectValue ?? 0;
+        return _transform.Preview(effectId, stages, slot.Coverage, ExtraMode.Auto, PreviewMaxLevel, baseValue);
+    }
+
+    /// <summary>原版在原生变化段上仍然生效的默认门槛；被自定义规则遮蔽的段不返回。</summary>
+    public IReadOnlyList<RuleStage> NativeDefaultStages(int effectId)
+    {
+        if (_transform == null) return [];
+        var slot = _slots.FirstOrDefault(slot => slot.Id == effectId);
+        if (slot == null) return [];
+        int baseValue = slot.Refs.FirstOrDefault()?.EffectValue ?? 0;
+        var native = _transform.Preview(effectId, [], slot.Coverage, ExtraMode.Auto, PreviewMaxLevel, baseValue);
+        int? firstCustomLevel = _rules.TryGetValue(effectId, out var rules) && rules.Count > 0
+            ? rules.Min(stage => stage.Level) : null;
+        var result = new List<RuleStage>();
+        foreach (int level in _transform.Base.NativeStages
+                     .Where(level => level is >= 1 and <= PreviewMaxLevel).Distinct().OrderBy(level => level))
+        {
+            if (firstCustomLevel is { } first && level >= first) continue;
+            var current = native.FirstOrDefault(row => row.Level == level);
+            var previous = native.FirstOrDefault(row => row.Level == level - 1);
+            if (current == null || (previous != null && previous.Value == current.Value)) continue;
+            result.Add(new RuleStage(level, current.Value));
+        }
+        return result;
+    }
+
     private ItemCatalog ReadCatalog()
     {
         var refs = new List<ItemRef>();
